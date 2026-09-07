@@ -8,25 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { AvailabilityService } from '../availability/availability.service';
-
-const TEHRAN_OFFSET_MS = 3.5 * 60 * 60 * 1000;
-
-/** Format instant as HH:MM in Asia/Tehran. */
-function tehranHHMM(d: Date): string {
-  const local = new Date(d.getTime() + TEHRAN_OFFSET_MS);
-  const h = local.getUTCHours();
-  const m = local.getUTCMinutes();
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-/** YYYY-MM-DD in Tehran for an instant. */
-function tehranDateStr(d: Date): string {
-  const local = new Date(d.getTime() + TEHRAN_OFFSET_MS);
-  const y = local.getUTCFullYear();
-  const mo = String(local.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(local.getUTCDate()).padStart(2, '0');
-  return `${y}-${mo}-${day}`;
-}
+import { tehranDateStr, tehranHHMM } from '../common/timezone';
 
 @Injectable()
 export class BookingsService {

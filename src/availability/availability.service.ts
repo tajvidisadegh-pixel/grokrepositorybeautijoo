@@ -1,9 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DayOfWeek } from '@prisma/client';
-
-/** Iran Standard Time — fixed UTC+3:30 (no DST as of 2026). */
-const TEHRAN_OFFSET_MS = 3.5 * 60 * 60 * 1000;
+import {
+  tehranDayBounds,
+  minutesSinceTehranMidnight,
+  tehranLocalToUtc,
+  TEHRAN_TZ,
+} from '../common/timezone';
 
 const DAY_MAP: Record<number, DayOfWeek> = {
   0: DayOfWeek.sunday,
@@ -26,30 +29,6 @@ function formatTime(mins: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-/** YYYY-MM-DD as a calendar day in Tehran → UTC bounds for that local day. */
-function tehranDayBounds(dateStr: string): { dayStart: Date; dayEnd: Date; dayOfWeek: DayOfWeek } {
-  const parts = dateStr.split('-').map(Number);
-  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
-    throw new BadRequestException('تاریخ نامعتبر');
-  }
-  const [y, mo, d] = parts;
-  // Local Tehran midnight = that UTC calendar midnight minus offset
-  const dayStartMs = Date.UTC(y, mo - 1, d, 0, 0, 0, 0) - TEHRAN_OFFSET_MS;
-  const dayEndMs = dayStartMs + 24 * 60 * 60 * 1000 - 1;
-  const noonMs = dayStartMs + 12 * 60 * 60 * 1000;
-  const dayOfWeek = DAY_MAP[new Date(noonMs).getUTCDay()];
-  return {
-    dayStart: new Date(dayStartMs),
-    dayEnd: new Date(dayEndMs),
-    dayOfWeek,
-  };
-}
-
-/** Minutes since Tehran midnight for a timestamptz instant on that day. */
-function minutesSinceTehranMidnight(instant: Date, dayStart: Date): number {
-  return (instant.getTime() - dayStart.getTime()) / 60_000;
-}
-
 @Injectable()
 export class AvailabilityService {
   constructor(private readonly prisma: PrismaService) {}
@@ -59,13 +38,14 @@ export class AvailabilityService {
     const pro = await this.prisma.professional.findUnique({ where: { id: professionalId } });
     if (!pro || pro.status !== 'approved') throw new NotFoundException('زیباگر یافت نشد');
 
-    let bounds: { dayStart: Date; dayEnd: Date; dayOfWeek: DayOfWeek };
+    let bounds: { dayStart: Date; dayEnd: Date; dayOfWeek: number };
     try {
       bounds = tehranDayBounds(dateStr);
     } catch {
       throw new BadRequestException('تاریخ نامعتبر');
     }
-    const { dayStart, dayEnd, dayOfWeek } = bounds;
+    const { dayStart, dayEnd, dayOfWeek: dow } = bounds;
+    const dayOfWeek = DAY_MAP[dow];
 
     const hours = await this.prisma.workingHour.findMany({
       where: { professionalId, dayOfWeek, isActive: true },
@@ -140,16 +120,13 @@ export class AvailabilityService {
       }
     }
 
-    return { date: dateStr, professionalId, durationMin, slots, timezone: 'Asia/Tehran' };
+    return { date: dateStr, professionalId, durationMin, slots, timezone: TEHRAN_TZ };
   }
 
   /**
    * Build a UTC Date for local Tehran wall-clock time on dateStr (YYYY-MM-DD) + HH:MM.
    */
   static tehranLocalToUtc(dateStr: string, hhmm: string): Date {
-    const [y, mo, d] = dateStr.split('-').map(Number);
-    const [h, mi] = hhmm.split(':').map(Number);
-    const localAsUtcMs = Date.UTC(y, mo - 1, d, h, mi, 0, 0);
-    return new Date(localAsUtcMs - TEHRAN_OFFSET_MS);
+    return tehranLocalToUtc(dateStr, hhmm);
   }
 }
