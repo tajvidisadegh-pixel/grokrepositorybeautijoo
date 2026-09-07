@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentProvider, PaymentInitResult } from './payment.provider';
+import { PaymentProvider, PaymentInitResult, PaymentVerifyResult } from './payment.provider';
 
 /**
  * Zarinpal payment gateway (API v4).
@@ -13,6 +13,7 @@ import { PaymentProvider, PaymentInitResult } from './payment.provider';
  */
 @Injectable()
 export class ZarinpalPaymentProvider implements PaymentProvider {
+  readonly name = 'zarinpal';
   private readonly logger = new Logger(ZarinpalPaymentProvider.name);
   private readonly merchantId: string;
   private readonly sandbox: boolean;
@@ -117,12 +118,11 @@ export class ZarinpalPaymentProvider implements PaymentProvider {
     };
   }
 
-  async verify(providerRef: string, amountToman?: number) {
+  async verify(providerRef: string, amountToman?: number): Promise<PaymentVerifyResult> {
     if (!this.merchantId) {
       return { success: false };
     }
 
-    // amount is required by Zarinpal verify; service should pass payment.amount
     const amountRials = this.toRials(amountToman ?? 0);
     if (!amountRials) {
       this.logger.error('[ZARINPAL VERIFY] amount missing');
@@ -174,18 +174,13 @@ export class ZarinpalPaymentProvider implements PaymentProvider {
     amount: number;
     reason?: string;
   }) {
-    // Zarinpal refund API requires OAuth access token from merchant panel.
     if (!this.accessToken) {
       this.logger.warn(
-        '[ZARINPAL REFUND] ZARINPAL_ACCESS_TOKEN not set — marking local refund only not available',
+        '[ZARINPAL REFUND] ZARINPAL_ACCESS_TOKEN not set — gateway refund unavailable',
       );
-      return {
-        success: false,
-        refundRef: undefined,
-      };
+      return { success: false, refundRef: undefined };
     }
 
-    // Official refund endpoint (requires access token)
     const body = {
       merchant_id: this.merchantId,
       authority: params.providerRef,
