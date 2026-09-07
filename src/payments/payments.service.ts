@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_PROVIDER, PaymentProvider } from './payment.provider';
 import { randomUUID } from 'crypto';
@@ -16,6 +23,10 @@ export class PaymentsService {
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
+  private providerName(): string {
+    return this.provider.name || 'mock';
+  }
+
   async initiate(userId: string, bookingId: string, callbackUrl: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
@@ -26,6 +37,7 @@ export class PaymentsService {
     if (booking.payment?.status === 'paid') throw new ConflictException('قبلاً پرداخت شده');
 
     const idempotencyKey = booking.payment?.idempotencyKey || randomUUID();
+    const providerKey = this.providerName();
 
     if (!booking.payment) {
       await this.prisma.payment.create({
@@ -33,7 +45,7 @@ export class PaymentsService {
           bookingId,
           amount: booking.totalPrice,
           status: 'pending',
-          provider: 'mock',
+          provider: providerKey,
           idempotencyKey,
         },
       });
@@ -48,19 +60,45 @@ export class PaymentsService {
 
     await this.prisma.payment.update({
       where: { bookingId },
-      data: { providerRef: result.providerRef, status: 'processing' },
+      data: {
+        providerRef: result.providerRef,
+        status: 'processing',
+        provider: providerKey,
+      },
     });
 
     return result;
   }
 
-  async callback(providerRef: string) {
-    const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
-    if (!payment) throw new NotFoundException();
-    // Idempotency check: If already paid, return early without recomputing commission or modifying snapshot
-    if (payment.status === 'paid') return { status: 'paid', bookingId: payment.bookingId };
+  /**
+   * Gateway callback.
+   * - Mock: ?ref=mock_xxx&status=ok
+   * - Zarinpal: ?Authority=Axxx&Status=OK|NOK  (also accepts ref= for compatibility)
+   */
+  async callback(providerRef: string, gatewayStatus?: string) {
+    if (!providerRef) throw new BadRequestException('شناسه تراکنش درگاه ارسال نشده');
 
-    const verified = await this.provider.verify(providerRef);
+    // Zarinpal user-cancel
+    if (gatewayStatus && gatewayStatus.toUpperCase() === 'NOK') {
+      const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
+      if (payment && payment.status !== 'paid') {
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: 'cancelled' },
+        });
+      }
+      return { status: 'cancelled', bookingId: payment?.bookingId ?? null };
+    }
+
+    const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
+    if (!payment) throw new NotFoundException('تراکنش یافت نشد');
+
+    // Idempotency: already paid → do not recompute commission snapshot
+    if (payment.status === 'paid') {
+      return { status: 'paid', bookingId: payment.bookingId };
+    }
+
+    const verified = await this.provider.verify(providerRef, payment.amount);
     if (!verified.success) {
       await this.prisma.payment.update({
         where: { id: payment.id },
@@ -69,18 +107,18 @@ export class PaymentsService {
       return { status: 'failed', bookingId: payment.bookingId };
     }
 
-    // Retrieve active commission rate from PlatformSetting, or fallback to DEFAULT_PLATFORM_COMMISSION_RATE (10%)
     let rate = DEFAULT_PLATFORM_COMMISSION_RATE;
     try {
       const setting = await this.prisma.platformSetting.findUnique({
         where: { key: PLATFORM_COMMISSION_RATE_KEY },
       });
       if (setting && setting.value !== null && setting.value !== undefined) {
-        const val = typeof setting.value === 'number' 
-          ? setting.value 
-          : (typeof setting.value === 'object' && 'rate' in (setting.value as any))
-            ? Number((setting.value as any).rate)
-            : Number(setting.value);
+        const val =
+          typeof setting.value === 'number'
+            ? setting.value
+            : typeof setting.value === 'object' && 'rate' in (setting.value as any)
+              ? Number((setting.value as any).rate)
+              : Number(setting.value);
         if (!isNaN(val) && val >= 0 && val <= 100) {
           rate = val;
         }
@@ -102,15 +140,17 @@ export class PaymentsService {
         platformCommissionRate: commissionRate,
         platformCommissionAmount: commissionAmount,
         professionalNetAmount: professionalNetAmount,
+        metadata: {
+          ...(typeof payment.metadata === 'object' && payment.metadata !== null
+            ? (payment.metadata as object)
+            : {}),
+          gatewayRefId: verified.refId ?? null,
+        },
       },
     });
-    return { status: 'paid', bookingId: payment.bookingId };
+    return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };
   }
 
-  /**
-   * Refund a paid payment (admin-initiated for mock / real gateway).
-   * Marks payment as refunded and stores refund metadata.
-   */
   async refund(paymentId: string, reason?: string, adminUserId?: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
@@ -133,7 +173,9 @@ export class PaymentsService {
     });
 
     if (!result.success) {
-      throw new BadRequestException('استرداد توسط درگاه پرداخت ناموفق بود');
+      throw new BadRequestException(
+        'استرداد توسط درگاه پرداخت ناموفق بود (برای زرین‌پال ZARINPAL_ACCESS_TOKEN لازم است)',
+      );
     }
 
     const updated = await this.prisma.payment.update({
@@ -154,7 +196,6 @@ export class PaymentsService {
       },
     });
 
-    // Optional: also cancel related booking if still active
     if (
       payment.booking &&
       ['pending', 'confirmed'].includes(payment.booking.status)

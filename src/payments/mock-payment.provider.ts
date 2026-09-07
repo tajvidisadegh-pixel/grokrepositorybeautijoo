@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PaymentProvider, PaymentInitResult } from './payment.provider';
+import { PaymentProvider, PaymentInitResult, PaymentVerifyResult } from './payment.provider';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class MockPaymentProvider implements PaymentProvider {
+  readonly name = 'mock';
   private readonly logger = new Logger(MockPaymentProvider.name);
 
   async initiate(params: {
@@ -21,9 +22,9 @@ export class MockPaymentProvider implements PaymentProvider {
     };
   }
 
-  async verify(providerRef: string) {
+  async verify(providerRef: string, _amountToman?: number): Promise<PaymentVerifyResult> {
     this.logger.log(`[MOCK PAY VERIFY] ref=${providerRef}`);
-    return { success: true };
+    return { success: true, refId: `mock_ref_${providerRef.slice(0, 8)}` };
   }
 
   async refund(params: {

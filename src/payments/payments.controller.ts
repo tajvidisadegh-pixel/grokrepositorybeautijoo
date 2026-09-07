@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUUID } from 'class-validator';
 import { PaymentsService } from './payments.service';
@@ -25,14 +25,36 @@ export class PaymentsController {
   @ApiBearerAuth()
   @Roles('customer', 'admin')
   @Post('initiate')
+  @ApiOperation({ summary: 'شروع پرداخت (Mock یا زرین‌پال بر اساس PAYMENT_PROVIDER)' })
   initiate(@CurrentUser('id') userId: string, @Body() dto: InitiateDto) {
     return this.service.initiate(userId, dto.bookingId, dto.callbackUrl);
   }
 
+  /**
+   * Callback from gateway.
+   * Mock:   POST/GET ?ref=mock_xxx&status=ok
+   * Zarinpal: GET ?Authority=Axxx&Status=OK|NOK  (also accepts ref=)
+   */
   @Public()
   @Post('callback')
-  callback(@Query('ref') ref: string) {
-    return this.service.callback(ref);
+  @ApiOperation({ summary: 'کالبک درگاه (POST)' })
+  callbackPost(
+    @Query('ref') ref?: string,
+    @Query('Authority') authority?: string,
+    @Query('Status') status?: string,
+  ) {
+    return this.service.callback(authority || ref || '', status);
+  }
+
+  @Public()
+  @Get('callback')
+  @ApiOperation({ summary: 'کالبک درگاه (GET — زرین‌پال با GET برمی‌گرداند)' })
+  callbackGet(
+    @Query('ref') ref?: string,
+    @Query('Authority') authority?: string,
+    @Query('Status') status?: string,
+  ) {
+    return this.service.callback(authority || ref || '', status);
   }
 
   @ApiBearerAuth()
