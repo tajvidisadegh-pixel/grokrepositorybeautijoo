@@ -19,36 +19,28 @@ export default function AdminServiceCategoriesPage() {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    try {
-      const [cats, svcs, reqs] = await Promise.all([
-        apiClient.get<Category[]>('/admin/service-categories'),
-        apiClient.get<Service[]>('/services'),
-        apiClient.get<Request[]>('/admin/service-category-requests?status=pending'),
-      ]);
-      setCategories(cats || []);
-      setServices(svcs || []);
-      setRequests(reqs || []);
-    } catch {
-      setCategories([
-        { id: 'cat-1', name: 'مو و کوتاهی', slug: 'hair-cut', isActive: true },
-        { id: 'cat-2', name: 'رنگ و مش و هایلایت', slug: 'hair-color', isActive: true },
-        { id: 'cat-3', name: 'پوست و فیشیال', slug: 'skincare', isActive: true },
-        { id: 'cat-4', name: 'ناخن و پدیکور', slug: 'nails', isActive: true },
-        { id: 'cat-5', name: 'میکاپ و گریم عروس', slug: 'makeup', isActive: true },
-      ]);
-      setServices([
-        { id: 'svc-1', name: 'کوپ ژورنالی تخصصی', slug: 'haircut-journal' },
-        { id: 'svc-2', name: 'رنگ مو و بالیاژ', slug: 'balayage' },
-        { id: 'svc-3', name: 'فیشیال VIP پوست', slug: 'facial-vip' },
-        { id: 'svc-4', name: 'کاشت و ژلیش ناخن', slug: 'gel-nails' },
-      ]);
-      setRequests([]);
-    }
+    setError(null);
+    const [cats, svcs, reqs] = await Promise.all([
+      apiClient.get<Category[]>('/admin/service-categories'),
+      apiClient.get<Service[]>('/services'),
+      apiClient.get<Request[]>('/admin/service-category-requests?status=pending'),
+    ]);
+    setCategories(cats || []);
+    setServices(svcs || []);
+    setRequests(reqs || []);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load().catch((e) => {
+      setError(e instanceof Error ? e.message : 'بارگذاری ناموفق بود');
+      setCategories([]);
+      setServices([]);
+      setRequests([]);
+    });
+  }, []);
 
   const filteredServices = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -58,7 +50,7 @@ export default function AdminServiceCategoriesPage() {
 
   async function createCategory() {
     if (!name.trim()) return;
-    setBusy(true); setMessage(null);
+    setBusy(true); setMessage(null); setError(null);
     try {
       await apiClient.post('/admin/service-categories', { name: name.trim(), parentId: parentId || null });
       setName(''); setParentId(''); setMessage('دسته‌بندی ایجاد شد'); await load();
@@ -79,6 +71,7 @@ export default function AdminServiceCategoriesPage() {
   async function setCategoryActive(id: string, isActive: boolean) {
     setBusy(true);
     try { await apiClient.patch(`/admin/service-categories/${id}`, { isActive }); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'خطا'); }
     finally { setBusy(false); }
   }
 
@@ -98,6 +91,7 @@ export default function AdminServiceCategoriesPage() {
         <h1 className="text-xl font-bold text-[#0B2C4A]">دسته‌بندی تخصص‌ها</h1>
         <p className="mt-1 text-sm text-gray-500">دسته‌بندی‌ها را ادمین می‌سازد و برای هر تخصص مشخص می‌کند کدام گزینه‌ها مجاز هستند.</p>
       </div>
+      {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       {message && <div className="rounded-xl bg-[#E7F1FF] px-3 py-2 text-sm text-[#2D6CDF]">{message}</div>}
 
       <section className="grid gap-4 lg:grid-cols-2">

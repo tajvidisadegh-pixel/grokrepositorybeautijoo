@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 
 function LoginForm() {
-  const { loginWithPassword, loginAsSuperAdmin, isAuthenticated, user, hasRole } = useAuth();
+  const { loginWithPassword, isAuthenticated, hasRole } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
   const nextParam = search?.get('next');
@@ -19,29 +19,14 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [adminLoggingIn, setAdminLoggingIn] = useState(false);
 
   if (isAuthenticated) {
     let dest = nextParam || '/panel';
-    if (hasRole('SUPER_ADMIN') || hasRole('admin')) dest = '/admin';
+    if (hasRole('SUPER_ADMIN')) dest = '/admin';
     else if (hasRole('professional') && !hasRole('customer')) dest = '/zibagar';
     else dest = nextParam || '/panel';
-    // Prevent professional-only users from landing on customer panel via next=
     if (dest.startsWith('/panel') && hasRole('professional') && !hasRole('customer')) dest = '/zibagar';
     router.replace(dest);
-  }
-
-  async function handleSuperAdminClick() {
-    setError(null);
-    setAdminLoggingIn(true);
-    try {
-      await loginAsSuperAdmin();
-      router.replace('/admin');
-    } catch {
-      setError('خطا در ورود به پنل ادمین. دوباره تلاش کنید.');
-    } finally {
-      setAdminLoggingIn(false);
-    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -49,12 +34,6 @@ function LoginForm() {
     setError(null);
     setLoading(true);
     try {
-      if (phone.trim() === '09120000000') {
-        await loginAsSuperAdmin();
-        router.replace('/admin');
-        return;
-      }
-
       await loginWithPassword(phone.trim(), password);
       let dest = nextParam || '/panel';
       const roles: string[] = [];
@@ -67,8 +46,10 @@ function LoginForm() {
           const r = me.roles || [];
           roles.push(...r);
         }
-      } catch { /* ignore */ }
-      if (roles.includes('SUPER_ADMIN') || roles.includes('admin')) dest = '/admin';
+      } catch {
+        /* ignore */
+      }
+      if (roles.includes('SUPER_ADMIN')) dest = '/admin';
       else if (roles.includes('professional') && !roles.includes('customer')) dest = '/zibagar';
       else dest = nextParam || '/panel';
       if (dest.startsWith('/panel') && roles.includes('professional') && !roles.includes('customer')) {
@@ -97,29 +78,7 @@ function LoginForm() {
             ب
           </div>
           <h1 className="text-xl font-bold text-foreground sm:text-2xl">ورود به Beautijoo</h1>
-          <p className="mt-2 text-sm text-gray">ورود به حساب کاربری یا پنل سوپر ادمین</p>
-        </div>
-
-        {/* کارت ویژه دسترسی با یک کلیک سوپر ادمین */}
-        <div className="rounded-2xl border-2 border-dashed border-blue/60 bg-blue-soft/60 p-4 sm:p-5 shadow-sm">
-          <div className="flex items-center gap-2.5 mb-2">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-blue text-white text-base shadow-sm">👑</span>
-            <div>
-              <h2 className="font-bold text-blue text-sm sm:text-base">ورود مستقیم به پنل سوپر ادمین</h2>
-              <p className="text-xs text-gray">مدیریت کل سیستم، امور مالی و نظارت بر تراکنش‌ها</p>
-            </div>
-          </div>
-          <p className="mt-2 mb-3 text-xs text-foreground/80 leading-relaxed">
-            اگر قصد بررسی پنل سوپر ادمین و اعلان تراکنش‌ها را دارید، نیازی به پر کردن فرم نیست؛ تنها کافیست روی دکمه زیر کلیک کنید:
-          </p>
-          <Button
-            type="button"
-            className="w-full bg-blue text-white hover:bg-blue-dark font-bold text-sm shadow-sm py-2.5 h-auto transition-all"
-            loading={adminLoggingIn}
-            onClick={handleSuperAdminClick}
-          >
-            ورود فوری با ۱ کلیک به عنوان سوپر ادمین
-          </Button>
+          <p className="mt-2 text-sm text-gray">ورود به حساب کاربری با شماره موبایل و رمز عبور</p>
         </div>
 
         <Card>
@@ -137,9 +96,6 @@ function LoginForm() {
                 className="text-left"
                 autoComplete="tel"
               />
-              <span className="mt-1 block text-[11px] text-gray">
-                (شماره تستی سوپر ادمین: 09120000000)
-              </span>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">رمز عبور</label>
@@ -152,9 +108,6 @@ function LoginForm() {
                 autoComplete="current-password"
                 placeholder="••••••••"
               />
-              <span className="mt-1 block text-[11px] text-gray">
-                (رمز تستی سوپر ادمین: Admin@12345)
-              </span>
             </div>
             {error && (
               <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">

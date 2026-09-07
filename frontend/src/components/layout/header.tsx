@@ -57,7 +57,7 @@ export function Header() {
 
           {!loading && isAuthenticated ? (
             <div className="hidden items-center gap-2 sm:flex">
-              {(hasRole('SUPER_ADMIN') || hasRole('admin')) && (
+              {hasRole('SUPER_ADMIN') && (
                 <Link
                   href="/admin"
                   className="flex items-center gap-1.5 rounded-xl bg-blue-soft border border-blue/40 px-3 py-1.5 text-xs sm:text-sm font-bold text-blue hover:bg-blue hover:text-white transition-all shadow-sm"
@@ -93,7 +93,7 @@ export function Header() {
               {hasRole('customer') && !hasRole('professional') && !hasRole('SUPER_ADMIN') && (
                 <span className="hidden text-sm text-gray sm:inline">{displayName}</span>
               )}
-              {(hasRole('SUPER_ADMIN') || hasRole('admin')) && (
+              {hasRole('SUPER_ADMIN') && (
                 <span className="hidden text-xs font-medium text-gray sm:inline">مدیر کل سیستم</span>
               )}
               <Button variant="ghost" size="sm" onClick={() => logout()}>
@@ -104,24 +104,13 @@ export function Header() {
             !loading && (
               <div className="hidden items-center gap-2 sm:flex">
                 <Link
-                  href="/login?next=/admin"
-                  className="inline-flex items-center gap-1 rounded-xl border border-blue/30 bg-blue-soft/50 px-3 py-1.5 text-xs font-bold text-blue transition-all hover:bg-blue hover:text-white"
-                  title="ورود مستقیم به عنوان مدیر کل سیستم"
-                >
-                  <span>👑</span>
-                  <span>ورود سوپر ادمین</span>
-                </Link>
-                <Link
                   href="/login"
                   className="inline-flex h-9 items-center rounded-xl px-3 text-sm font-medium text-foreground transition-colors hover:bg-gray-light"
                 >
                   ورود
                 </Link>
-                <Link
-                  href="/register"
-                  className="inline-flex h-9 items-center rounded-xl bg-coral px-3.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark"
-                >
-                  ثبت‌نام
+                <Link href="/register">
+                  <Button size="sm">ثبت‌نام</Button>
                 </Link>
               </div>
             )
@@ -140,40 +129,39 @@ export function Header() {
       </div>
 
       {open && (
-        <div className="border-t border-border bg-white px-4 py-4 md:hidden">
-          <nav className="flex flex-col gap-1 text-sm font-medium">
+        <div className="border-t border-border bg-white md:hidden">
+          <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3 text-sm font-medium">
             <Link
               href="/professionals"
               onClick={() => setOpen(false)}
-              className="rounded-xl px-3 py-3 text-foreground transition-colors hover:bg-blue-soft hover:text-blue"
+              className="rounded-xl px-3 py-3 text-foreground hover:bg-gray-light"
             >
               زیباگران
             </Link>
             <Link
               href="/search"
               onClick={() => setOpen(false)}
-              className="rounded-xl px-3 py-3 text-foreground transition-colors hover:bg-blue-soft hover:text-blue"
+              className="rounded-xl px-3 py-3 text-foreground hover:bg-gray-light"
             >
               جستجو
             </Link>
             <Link
               href="/services"
               onClick={() => setOpen(false)}
-              className="rounded-xl px-3 py-3 text-foreground transition-colors hover:bg-blue-soft hover:text-blue"
+              className="rounded-xl px-3 py-3 text-foreground hover:bg-gray-light"
             >
               خدمات
             </Link>
-            <div className="my-2 h-px bg-border" />
             {isAuthenticated ? (
               <>
                 {hasRole('customer') && (
-                <Link
-                  href="/panel"
-                  onClick={() => setOpen(false)}
-                  className="rounded-xl px-3 py-3 text-foreground hover:bg-gray-light"
-                >
+                  <Link
+                    href="/panel"
+                    onClick={() => setOpen(false)}
+                    className="rounded-xl px-3 py-3 text-foreground hover:bg-gray-light"
+                  >
                     پنل مشتری
-                </Link>
+                  </Link>
                 )}
                 {hasRole('professional') && (
                   <Link
@@ -184,7 +172,7 @@ export function Header() {
                     پنل زیباگر
                   </Link>
                 )}
-                {(hasRole('SUPER_ADMIN') || hasRole('admin')) && (
+                {hasRole('SUPER_ADMIN') && (
                   <Link
                     href="/admin"
                     onClick={() => setOpen(false)}
@@ -207,14 +195,6 @@ export function Header() {
               </>
             ) : (
               <>
-                <Link
-                  href="/login?next=/admin"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center gap-2 rounded-xl bg-blue-soft border border-blue/40 px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
-                >
-                  <span>👑</span>
-                  <span>ورود به پنل سوپر ادمین</span>
-                </Link>
                 <Link
                   href="/login"
                   onClick={() => setOpen(false)}

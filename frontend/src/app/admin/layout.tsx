@@ -1,6 +1,7 @@
 'use client';
 import type { ReactNode } from 'react';
 import { PanelShell } from '@/components/panel/panel-shell';
+
 const ITEMS = [
   { href: '/admin', label: 'داشبورد' },
   { href: '/admin/finance', label: 'مدیریت مالی' },
@@ -15,6 +16,12 @@ const ITEMS = [
   { href: '/admin/settings', label: 'تنظیمات', disabled: true },
   { href: '/admin/audit', label: 'لاگ فعالیت‌ها' },
 ];
+
+/** Only SUPER_ADMIN — matches backend AdminController @Roles('SUPER_ADMIN'). */
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <PanelShell title="پنل سوپر ادمین" items={ITEMS} roles={['SUPER_ADMIN', 'admin']}>{children}</PanelShell>;
+  return (
+    <PanelShell title="پنل سوپر ادمین" items={ITEMS} roles={['SUPER_ADMIN']}>
+      {children}
+    </PanelShell>
+  );
 }

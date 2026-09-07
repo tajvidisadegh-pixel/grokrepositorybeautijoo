@@ -15,10 +15,7 @@ import {
   getAccessToken,
   getRefreshToken,
   setTokens,
-  isSuperAdminSession,
-  setSuperAdminSession,
 } from '@/lib/auth-storage';
-import { SUPER_ADMIN_USER } from '@/lib/admin-mock-data';
 import type { AuthMeResponse } from '@/types/auth';
 
 type AuthContextValue = {
@@ -27,7 +24,6 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   hasRole: (role: string | string[]) => boolean;
   loginWithPassword: (phone: string, password: string) => Promise<void>;
-  loginAsSuperAdmin: () => Promise<void>;
   register: (
     phone: string,
     password: string,
@@ -47,12 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    if (isSuperAdminSession()) {
-      setUser(SUPER_ADMIN_USER);
-      setLoading(false);
-      return;
-    }
-
     const token = getAccessToken();
     if (!token) {
       setUser(null);
@@ -88,25 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     reload();
   }, [reload]);
 
-  const loginAsSuperAdmin = useCallback(async () => {
-    setSuperAdminSession();
-    setUser(SUPER_ADMIN_USER);
-    setLoading(false);
+  const loginWithPassword = useCallback(async (phone: string, password: string) => {
+    const res = await authApi.login({ phone, password });
+    setTokens(res.accessToken, res.refreshToken);
+    const me = await authApi.me(res.accessToken);
+    setUser(me);
   }, []);
-
-  const loginWithPassword = useCallback(
-    async (phone: string, password: string) => {
-      if (phone.trim() === '09120000000') {
-        await loginAsSuperAdmin();
-        return;
-      }
-      const res = await authApi.login({ phone, password });
-      setTokens(res.accessToken, res.refreshToken);
-      const me = await authApi.me(res.accessToken);
-      setUser(me);
-    },
-    [loginAsSuperAdmin],
-  );
 
   const register = useCallback(
     async (
@@ -154,7 +131,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasRole = useCallback(
     (role: string | string[]) => {
-      if (isSuperAdminSession() || user?.roles?.includes('SUPER_ADMIN')) return true;
       if (!user?.roles?.length) return false;
       const need = Array.isArray(role) ? role : [role];
       return need.some((r) => user.roles.includes(r));
@@ -169,7 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       hasRole,
       loginWithPassword,
-      loginAsSuperAdmin,
       register,
       requestOtp,
       verifyOtp,
@@ -181,7 +156,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       hasRole,
       loginWithPassword,
-      loginAsSuperAdmin,
       register,
       requestOtp,
       verifyOtp,
