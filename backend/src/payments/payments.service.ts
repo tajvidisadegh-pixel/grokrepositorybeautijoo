@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_PROVIDER, PaymentProvider } from './payment.provider';
 import { randomUUID } from 'crypto';
@@ -7,6 +7,7 @@ import {
   DEFAULT_PLATFORM_COMMISSION_RATE,
   PLATFORM_COMMISSION_RATE_KEY,
 } from './financial.util';
+import { PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class PaymentsService {
@@ -104,5 +105,76 @@ export class PaymentsService {
       },
     });
     return { status: 'paid', bookingId: payment.bookingId };
+  }
+
+  /**
+   * Refund a paid payment (admin-initiated for mock / real gateway).
+   * Marks payment as refunded and stores refund metadata.
+   */
+  async refund(paymentId: string, reason?: string, adminUserId?: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { booking: true },
+    });
+    if (!payment) throw new NotFoundException('تراکنش یافت نشد');
+    if (payment.status !== PaymentStatus.paid) {
+      throw new BadRequestException(
+        `فقط تراکنش‌های پرداخت‌شده قابل استرداد هستند (وضعیت فعلی: ${payment.status})`,
+      );
+    }
+    if (!payment.providerRef) {
+      throw new BadRequestException('شناسه ارائه‌دهنده پرداخت موجود نیست');
+    }
+
+    const result = await this.provider.refund({
+      providerRef: payment.providerRef,
+      amount: payment.amount,
+      reason,
+    });
+
+    if (!result.success) {
+      throw new BadRequestException('استرداد توسط درگاه پرداخت ناموفق بود');
+    }
+
+    const updated = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: PaymentStatus.refunded,
+        metadata: {
+          ...(typeof payment.metadata === 'object' && payment.metadata !== null
+            ? (payment.metadata as object)
+            : {}),
+          refund: {
+            refundRef: result.refundRef,
+            reason: reason ?? null,
+            refundedAt: new Date().toISOString(),
+            refundedBy: adminUserId ?? null,
+          },
+        },
+      },
+    });
+
+    // Optional: also cancel related booking if still active
+    if (
+      payment.booking &&
+      ['pending', 'confirmed'].includes(payment.booking.status)
+    ) {
+      await this.prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: {
+          status: 'cancelled',
+          cancelReason: reason ?? 'استرداد پرداخت',
+          cancelledAt: new Date(),
+        },
+      });
+    }
+
+    return {
+      id: updated.id,
+      status: updated.status,
+      amount: updated.amount,
+      refundRef: result.refundRef,
+      reason: reason ?? null,
+    };
   }
 }
