@@ -25,4 +25,18 @@ export class MockPaymentProvider implements PaymentProvider {
     this.logger.log(`[MOCK PAY VERIFY] ref=${providerRef}`);
     return { success: true };
   }
+
+  async refund(params: {
+    providerRef: string;
+    amount: number;
+    reason?: string;
+  }) {
+    this.logger.log(
+      `[MOCK PAY REFUND] ref=${params.providerRef} amount=${params.amount} reason=${params.reason ?? '-'}`,
+    );
+    return {
+      success: true,
+      refundRef: `mock_refund_${randomUUID()}`,
+    };
+  }
 }

@@ -14,4 +14,13 @@ export interface PaymentProvider {
     callbackUrl: string;
   }): Promise<PaymentInitResult>;
   verify(providerRef: string): Promise<{ success: boolean; amount?: number }>;
+  /**
+   * Request a refund for a previously successful payment.
+   * Mock provider always succeeds; real providers should call the gateway.
+   */
+  refund(params: {
+    providerRef: string;
+    amount: number;
+    reason?: string;
+  }): Promise<{ success: boolean; refundRef?: string }>;
 }
