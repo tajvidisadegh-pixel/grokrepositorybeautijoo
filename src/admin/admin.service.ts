@@ -577,3 +577,39 @@ export class AdminService {
     )
       throw new BadRequestException('نرخ کارمزد باید عددی بین ۰ تا ۱۰۰ باشد.');
     const roundedRate = Math.round(newRate * 100) / 100;
+    const updated = await this.prisma.platformSetting.upsert({
+      where: { key: PLATFORM_COMMISSION_RATE_KEY },
+      update: { value: { rate: roundedRate } },
+      create: {
+        key: PLATFORM_COMMISSION_RATE_KEY,
+        value: { rate: roundedRate },
+      },
+    });
+    return {
+      key: PLATFORM_COMMISSION_RATE_KEY,
+      rate: roundedRate,
+      defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE,
+      updatedAt: updated.updatedAt,
+      notice:
+        'تغییر نرخ کارمزد فقط بر تراکنش‌های آینده اعمال شده و Snapshot تراکنش‌های گذشته بدون تغییر باقی می‌ماند.',
+    };
+  }
+
+  // --- Roles & Permissions ---
+  async listRoles() {
+    return this.prisma.role.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: {
+        rolePermissions: { include: { permission: true } },
+        _count: { select: { userRoles: true } },
+      },
+    });
+  }
+
+  async listPermissions() {
+    return this.prisma.permission.findMany({
+      orderBy: { code: 'asc' },
+      include: { _count: { select: { rolePermissions: true } } },
+    });
+  }
+}
