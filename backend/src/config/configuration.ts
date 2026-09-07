@@ -33,7 +33,11 @@ export default () => {
       .map((s) => s.trim())
       .filter(Boolean),
     smsProvider: process.env.SMS_PROVIDER || 'mock',
+    /** Payment gateway: "mock" | "zarinpal" */
     paymentProvider: process.env.PAYMENT_PROVIDER || 'mock',
+    zarinpalMerchantId: process.env.ZARINPAL_MERCHANT_ID || '',
+    zarinpalSandbox: process.env.ZARINPAL_SANDBOX || 'false',
+    zarinpalAccessToken: process.env.ZARINPAL_ACCESS_TOKEN || '',
     // Storage: "local" | "s3" | "object" | "liara"
     storageProvider: process.env.STORAGE_PROVIDER || 'local',
     storageLocalPath: process.env.STORAGE_LOCAL_PATH || './uploads',
