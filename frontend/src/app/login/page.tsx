@@ -22,10 +22,9 @@ function LoginForm() {
 
   if (isAuthenticated) {
     let dest = nextParam || '/panel';
-    if (hasRole('SUPER_ADMIN') || hasRole('admin')) dest = '/admin';
+    if (hasRole('SUPER_ADMIN')) dest = '/admin';
     else if (hasRole('professional') && !hasRole('customer')) dest = '/zibagar';
     else dest = nextParam || '/panel';
-    // Prevent professional-only users from landing on customer panel via next=
     if (dest.startsWith('/panel') && hasRole('professional') && !hasRole('customer')) dest = '/zibagar';
     router.replace(dest);
   }
@@ -50,7 +49,7 @@ function LoginForm() {
       } catch {
         /* ignore */
       }
-      if (roles.includes('SUPER_ADMIN') || roles.includes('admin')) dest = '/admin';
+      if (roles.includes('SUPER_ADMIN')) dest = '/admin';
       else if (roles.includes('professional') && !roles.includes('customer')) dest = '/zibagar';
       else dest = nextParam || '/panel';
       if (dest.startsWith('/panel') && roles.includes('professional') && !roles.includes('customer')) {

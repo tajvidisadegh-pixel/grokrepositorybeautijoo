@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, notFound } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 
 type Props = {
@@ -10,16 +10,28 @@ type Props = {
   roles?: string[];
   /** Where to send unauthenticated users */
   loginHref?: string;
+  /**
+   * When true (default), missing role looks like a missing page
+   * instead of revealing that a protected area exists.
+   */
+  hideWhenForbidden?: boolean;
 };
 
 export function RequireAuth({
   children,
   roles,
   loginHref = '/login',
+  hideWhenForbidden = true,
 }: Props) {
   const { user, loading, isAuthenticated } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  const hasRequiredRole = (() => {
+    if (!roles?.length) return true;
+    const userRoles = user?.roles || [];
+    return roles.some((r) => userRoles.includes(r));
+  })();
 
   useEffect(() => {
     if (loading) return;
@@ -28,13 +40,10 @@ export function RequireAuth({
       router.replace(`${loginHref}?next=${next}`);
       return;
     }
-    if (roles?.length) {
-      const ok = user?.roles?.includes('SUPER_ADMIN') || roles.some((r) => user?.roles?.includes(r));
-      if (!ok) {
-        router.replace('/');
-      }
+    if (roles?.length && !hasRequiredRole && !hideWhenForbidden) {
+      router.replace('/');
     }
-  }, [loading, isAuthenticated, user, roles, router, pathname, loginHref]);
+  }, [loading, isAuthenticated, hasRequiredRole, roles, router, pathname, loginHref, hideWhenForbidden]);
 
   if (loading) {
     return (
@@ -45,7 +54,11 @@ export function RequireAuth({
   }
 
   if (!isAuthenticated) return null;
-  if (roles?.length && !user?.roles?.includes('SUPER_ADMIN') && !roles.some((r) => user?.roles?.includes(r))) {
+
+  if (roles?.length && !hasRequiredRole) {
+    if (hideWhenForbidden) {
+      notFound();
+    }
     return null;
   }
 
