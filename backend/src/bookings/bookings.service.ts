@@ -156,6 +156,7 @@ export class BookingsService {
     }
     const endAt = new Date(startAt.getTime() + totalDuration * 60_000);
 
+    // Optimistic availability check (fast fail for UX). Authoritative check runs inside the transaction under lock.
     const dateStr = tehranDateStr(startAt);
     const startHHMM = tehranHHMM(startAt);
     const avail = await this.availability.getSlots(
@@ -169,53 +170,105 @@ export class BookingsService {
     }
 
     try {
-      const booking = await this.prisma.$transaction(async (tx) => {
-        const b = await tx.booking.create({
-          data: {
-            customerId,
-            professionalId: data.professionalId,
-            locationId: data.locationId,
-            status: BookingStatus.pending,
-            startAt,
-            endAt,
-            totalPrice,
-            notes: data.notes,
-            items: {
-              create: lines.map((line, i) => ({
-                serviceId: line.serviceId,
-                professionalServiceId: line.professionalServiceId,
-                durationMin: line.durationMin,
-                price: line.price,
-                addOnsSnapshot: line.addOnsSnapshot as unknown as Prisma.InputJsonValue,
-                priceRuleId: line.priceRuleId,
-                durationRuleId: line.durationRuleId,
-                sortOrder: i,
-              })),
+      const booking = await this.prisma.$transaction(
+        async (tx) => {
+          // Serialize concurrent booking attempts for the same professional.
+          await tx.$queryRaw`SELECT id FROM professionals WHERE id = ${data.professionalId}::uuid FOR UPDATE`;
+
+          // Authoritative overlap check under lock (bookings + time-offs + manual reservations).
+          const overlappingBookings = await tx.booking.count({
+            where: {
+              professionalId: data.professionalId,
+              status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+              startAt: { lt: endAt },
+              endAt: { gt: startAt },
             },
-          },
-          include: { items: true },
-        });
-        await tx.auditLog.create({
-          data: {
-            actorId: customerId,
-            action: 'booking.create',
-            entityType: 'booking',
-            entityId: b.id,
-            after: {
-              status: b.status,
-              totalPrice: b.totalPrice,
-              addOnIds: requestedAddOnIds,
-              priceRuleId,
-              durationRuleId,
-            } as Prisma.InputJsonValue,
-          },
-        });
-        return b;
-      });
+          });
+          if (overlappingBookings > 0) {
+            throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+          }
+
+          const overlappingTimeOff = await tx.timeOff.count({
+            where: {
+              professionalId: data.professionalId,
+              startAt: { lt: endAt },
+              endAt: { gt: startAt },
+            },
+          });
+          if (overlappingTimeOff > 0) {
+            throw new ConflictException('این بازه زمانی در دسترس نیست');
+          }
+
+          const overlappingManual = await tx.manualReservation.count({
+            where: {
+              professionalId: data.professionalId,
+              startAt: { lt: endAt },
+              endAt: { gt: startAt },
+            },
+          });
+          if (overlappingManual > 0) {
+            throw new ConflictException('این بازه زمانی در دسترس نیست');
+          }
+
+          const b = await tx.booking.create({
+            data: {
+              customerId,
+              professionalId: data.professionalId,
+              locationId: data.locationId,
+              status: BookingStatus.pending,
+              startAt,
+              endAt,
+              totalPrice,
+              notes: data.notes,
+              items: {
+                create: lines.map((line, i) => ({
+                  serviceId: line.serviceId,
+                  professionalServiceId: line.professionalServiceId,
+                  durationMin: line.durationMin,
+                  price: line.price,
+                  addOnsSnapshot: line.addOnsSnapshot as unknown as Prisma.InputJsonValue,
+                  priceRuleId: line.priceRuleId,
+                  durationRuleId: line.durationRuleId,
+                  sortOrder: i,
+                })),
+              },
+            },
+            include: { items: true },
+          });
+          await tx.auditLog.create({
+            data: {
+              actorId: customerId,
+              action: 'booking.create',
+              entityType: 'booking',
+              entityId: b.id,
+              after: {
+                status: b.status,
+                totalPrice: b.totalPrice,
+                addOnIds: requestedAddOnIds,
+                priceRuleId,
+                durationRuleId,
+              } as Prisma.InputJsonValue,
+            },
+          });
+          return b;
+        },
+        {
+          // Isolation level that supports row locks reliably
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+          maxWait: 5_000,
+          timeout: 15_000,
+        },
+      );
       return booking;
     } catch (e: unknown) {
+      if (e instanceof ConflictException) throw e;
       const err = e as { code?: string; message?: string };
-      if (err.code === 'P2004' || err.message?.includes('bookings_no_overlap')) {
+      // Prisma maps exclusion-constraint violations; also match constraint name substring.
+      if (
+        err.code === 'P2004' ||
+        err.message?.includes('bookings_no_overlap') ||
+        err.message?.includes('23P01') // exclusion_violation
+      ) {
         throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
       }
       throw e;
