@@ -15,19 +15,19 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    const isProd = config.get<string>('nodeEnv') === 'production';
     const accessSecret = config.get<string>('jwt.accessSecret');
 
-    if (isProd && (!accessSecret || accessSecret === 'dev-access-secret-change-in-prod-32' || accessSecret.length < 32)) {
+    if (!accessSecret || accessSecret.length < 32) {
       throw new Error(
-        'FATAL: JWT_ACCESS_SECRET must be set to a secure string (min 32 characters) in production. Fallback secret is strictly prohibited.',
+        'FATAL: jwt.accessSecret is missing or too short. ' +
+          'Set JWT_ACCESS_SECRET (min 32 chars). See configuration.ts.',
       );
     }
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: accessSecret || (isProd ? '' : 'dev-access-secret-change-in-prod-32'),
+      secretOrKey: accessSecret,
     });
   }
 
