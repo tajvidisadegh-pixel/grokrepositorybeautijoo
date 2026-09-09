@@ -13,24 +13,38 @@ import { authApi } from '@/lib/auth-api';
 import {
   clearTokens,
   getAccessToken,
+  getRefreshToken,
   setTokens,
 } from '@/lib/auth-storage';
-import type { AuthMeResponse } from '@/types/auth';
+import type { AccountType, AuthMeResponse } from '@/types/auth';
 
 type AuthContextValue = {
   user: AuthMeResponse | null;
   loading: boolean;
   isAuthenticated: boolean;
   hasRole: (role: string | string[]) => boolean;
-  loginWithPassword: (phone: string, password: string) => Promise<void>;
+  loginWithPassword: (
+    phone: string,
+    password: string,
+    accountType: AccountType,
+  ) => Promise<void>;
   register: (
     phone: string,
     password: string,
     displayName?: string,
-    role?: 'customer' | 'professional',
+    role?: AccountType,
   ) => Promise<AuthMeResponse>;
-  requestOtp: (phone: string, purpose?: string) => Promise<{ expiresIn: number }>;
-  verifyOtp: (phone: string, code: string, purpose?: string) => Promise<void>;
+  requestOtp: (
+    phone: string,
+    purpose?: string,
+    accountType?: AccountType,
+  ) => Promise<{ expiresIn: number }>;
+  verifyOtp: (
+    phone: string,
+    code: string,
+    purpose?: string,
+    accountType?: AccountType,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
 };
@@ -42,22 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    let token = getAccessToken();
-    // Silent session restore via httpOnly refresh cookie when memory is empty (e.g. page reload)
-    if (!token) {
-      try {
-        const tokens = await authApi.refresh();
-        if (tokens?.accessToken) {
-          setTokens(tokens.accessToken);
-          token = tokens.accessToken;
-        }
-      } catch {
-        clearTokens();
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-    }
+    const token = getAccessToken();
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -67,9 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await authApi.me(token);
       setUser(me);
     } catch {
+      const refresh = getRefreshToken();
+      if (!refresh) {
+        clearTokens();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       try {
-        const tokens = await authApi.refresh();
-        setTokens(tokens.accessToken);
+        const tokens = await authApi.refresh(refresh);
+        setTokens(tokens.accessToken, tokens.refreshToken);
         const me = await authApi.me(tokens.accessToken);
         setUser(me);
       } catch {
@@ -85,22 +91,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     reload();
   }, [reload]);
 
-  const loginWithPassword = useCallback(async (phone: string, password: string) => {
-    const res = await authApi.login({ phone, password });
-    setTokens(res.accessToken);
-    const me = await authApi.me(res.accessToken);
-    setUser(me);
-  }, []);
+  const loginWithPassword = useCallback(
+    async (phone: string, password: string, accountType: AccountType) => {
+      const res = await authApi.login({ phone, password, accountType });
+      setTokens(res.accessToken, res.refreshToken);
+      const me = await authApi.me(res.accessToken);
+      setUser(me);
+    },
+    [],
+  );
 
   const register = useCallback(
     async (
       phone: string,
       password: string,
       displayName?: string,
-      role?: 'customer' | 'professional',
+      role?: AccountType,
     ) => {
       const res = await authApi.register({ phone, password, displayName, role });
-      setTokens(res.accessToken);
+      setTokens(res.accessToken, res.refreshToken);
       const me = await authApi.me(res.accessToken);
       setUser(me);
       return me;
@@ -108,15 +117,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const requestOtp = useCallback(async (phone: string, purpose = 'login') => {
-    const res = await authApi.requestOtp({ phone, purpose });
-    return { expiresIn: res.expiresIn };
-  }, []);
+  const requestOtp = useCallback(
+    async (phone: string, purpose = 'login', accountType: AccountType = 'customer') => {
+      const res = await authApi.requestOtp({ phone, purpose, accountType });
+      return { expiresIn: res.expiresIn };
+    },
+    [],
+  );
 
   const verifyOtp = useCallback(
-    async (phone: string, code: string, purpose = 'login') => {
-      const res = await authApi.verifyOtp({ phone, code, purpose });
-      setTokens(res.accessToken);
+    async (
+      phone: string,
+      code: string,
+      purpose = 'login',
+      accountType: AccountType = 'customer',
+    ) => {
+      const res = await authApi.verifyOtp({ phone, code, purpose, accountType });
+      setTokens(res.accessToken, res.refreshToken);
       const me = await authApi.me(res.accessToken);
       setUser(me);
     },
@@ -124,10 +141,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    try {
-      await authApi.logout();
-    } catch {
-      /* ignore network errors on logout */
+    const refresh = getRefreshToken();
+    if (refresh) {
+      try {
+        await authApi.logout(refresh);
+      } catch {
+        /* ignore network errors on logout */
+      }
     }
     clearTokens();
     setUser(null);
