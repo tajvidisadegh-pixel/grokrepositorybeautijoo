@@ -1,23 +1,28 @@
-const ACCESS_KEY = 'bj_access';
-const REFRESH_KEY = 'bj_refresh';
+/**
+ * Access token lives in memory only (XSS cannot exfiltrate from localStorage).
+ * Refresh token is an httpOnly Secure cookie set by the backend — never touch it from JS.
+ */
+
+let accessTokenMemory: string | null = null;
 
 export function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(ACCESS_KEY);
+  return accessTokenMemory;
 }
 
+/** @deprecated Refresh is cookie-only; always returns null. Kept for call-site compatibility. */
 export function getRefreshToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFRESH_KEY);
+  return null;
 }
 
-export function setTokens(accessToken: string, refreshToken: string): void {
-  localStorage.setItem(ACCESS_KEY, accessToken);
-  localStorage.setItem(REFRESH_KEY, refreshToken);
+export function setAccessToken(accessToken: string | null): void {
+  accessTokenMemory = accessToken;
+}
+
+/** Store access token in memory. Refresh token is ignored (cookie-managed by backend). */
+export function setTokens(accessToken: string, _refreshToken?: string): void {
+  accessTokenMemory = accessToken;
 }
 
 export function clearTokens(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  accessTokenMemory = null;
 }
