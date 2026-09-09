@@ -1,0 +1,36 @@
+name: Fix finance unicode
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-finance-unicode.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode literal \\uXXXX in finance page
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path('frontend/src/app/admin/finance/page.tsx')
+          t = p.read_text()
+          if '\\u06' not in t and '\\u064' not in t:
+              print('already ok')
+          else:
+              fixed = re.sub(r'\\u([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), t)
+              p.write_text(fixed)
+              print('decoded', fixed.count('مدیریت'))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/finance/page.tsx
+          if git diff --staged --quiet; then echo no change; else git commit -m "fix(step9): restore Persian UTF-8 in admin finance page" && git push; fi
