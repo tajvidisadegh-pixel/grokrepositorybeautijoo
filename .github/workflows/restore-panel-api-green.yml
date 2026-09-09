@@ -1,0 +1,38 @@
+name: Restore panel-api green
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore panel-api from last green
+        run: |
+          git show 73a90783a47e83c63600a960af8c949cbc20a00d:frontend/src/lib/panel-api.ts > frontend/src/lib/panel-api.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text()
+          t2 = re.sub(
+              r"if \(file\.size > 50 \* 1024 \* 1024\) \{\n    throw new ApiError\(400, '[^']+'\);\n  \}",
+              "if (!file.size) {\n    throw new ApiError(400, 'فایل خالی است.');\n  }",
+              t,
+              count=1,
+          )
+          p.write_text(t2)
+          print('size', len(t2), 'size_check', '50 * 1024' in t2)
+          PY
+          # remove broken admin-panel-api re-export if any leftover file conflicts
+          true
+      - name: Commit
+        run: |
+          git config user.name "Beautijoo Bot"
+          git config user.email "bot@beautijoo.ir"
+          git add frontend/src/lib/panel-api.ts
+          git commit -m "fix(frontend): restore panel-api from green 73a9078 without size ceiling (step5)" || exit 0
+          git push origin main
