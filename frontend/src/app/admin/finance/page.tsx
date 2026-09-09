@@ -96,8 +96,8 @@ export default function AdminFinancePage() {
       setCommissionInput(String(c.rate));
       setFailedAlert(a);
       setThresholdInput(String(a.threshold));
-    } catch {
-      /* ignore */
+    } catch (e) {
+      setCommissionMsg(e instanceof Error ? e.message : '\u0628\u0627\u0631\u06af\u0630\u0627\u0631\u06cc \u062a\u0646\u0638\u06cc\u0645\u0627\u062a \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062f');
     }
   }, []);
 
@@ -127,14 +127,14 @@ export default function AdminFinancePage() {
   async function handleSaveCommission() {
     const rate = Number(commissionInput);
     if (Number.isNaN(rate) || rate < 0 || rate > 100) {
-      setCommissionMsg('نرخ باید بین ۰ تا ۱۰۰ باشد');
+      setCommissionMsg('\u0646\u0631\u062e \u0628\u0627\u06cc\u062f \u0628\u06cc\u0646 \u06f0 \u062a\u0627 \u06f1\u06f0\u06f0 \u0628\u0627\u0634\u062f');
       return;
     }
     setCommissionBusy(true);
     setCommissionMsg(null);
     try {
       const res = await updateAdminCommissionSetting(rate);
-      setCommissionMsg(res.notice || 'ذخیره شد');
+      setCommissionMsg(res.notice || '\u0630\u062e\u06cc\u0631\u0647 \u0634\u062f');
       await loadSettings();
     } catch (e) {
       setCommissionMsg(friendlyApiError(e));
@@ -162,8 +162,8 @@ export default function AdminFinancePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">مدیریت مالی</h1>
-        <p className="mt-1 text-sm text-gray">خلاصه درآمد، تراکنش‌ها و تنظیمات کارمزد</p>
+        <h1 className="text-2xl font-bold">\u0645\u062f\u06cc\u0631\u06cc\u062a \u0645\u0627\u0644\u06cc</h1>
+        <p className="mt-1 text-sm text-gray">\u062e\u0644\u0627\u0635\u0647 \u062f\u0631\u0622\u0645\u062f\u060c \u062a\u0631\u0627\u06a9\u0646\u0634\u200c\u0647\u0627 \u0648 \u062a\u0646\u0638\u06cc\u0645\u0627\u062a \u06a9\u0627\u0631\u0645\u0632\u062f</p>
       </div>
 
       <Card className="space-y-3">
@@ -175,66 +175,66 @@ export default function AdminFinancePage() {
               variant={period === p ? 'primary' : 'outline'}
               onClick={() => setPeriod(p)}
             >
-              {p === 'today' ? 'امروز' : p === 'this_month' ? 'این ماه' : 'کل'}
+              {p === 'today' ? '\u0627\u0645\u0631\u0648\u0632' : p === 'this_month' ? '\u0627\u06cc\u0646 \u0645\u0627\u0647' : '\u06a9\u0644'}
             </Button>
           ))}
         </div>
         {summaryLoading ? (
-          <PanelLoading label="بارگذاری خلاصه..." />
+          <PanelLoading label="\u0628\u0627\u0631\u06af\u0630\u0627\u0631\u06cc \u062e\u0644\u0627\u0635\u0647..." />
         ) : summaryError ? (
           <PanelError message={summaryError} onRetry={loadSummary} />
         ) : summary ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl bg-gray-light/60 p-3">
-              <p className="text-xs text-gray">درآمد ناخالص</p>
+              <p className="text-xs text-gray">\u062f\u0631\u0622\u0645\u062f \u0646\u0627\u062e\u0627\u0644\u0635</p>
               <p className="text-lg font-bold">{formatPrice(summary.grossRevenue)}</p>
             </div>
             <div className="rounded-xl bg-gray-light/60 p-3">
-              <p className="text-xs text-gray">کارمزد پلتفرم</p>
+              <p className="text-xs text-gray">\u06a9\u0627\u0631\u0645\u0632\u062f \u067e\u0644\u062a\u0641\u0631\u0645</p>
               <p className="text-lg font-bold text-coral">{formatPrice(summary.platformCommission)}</p>
             </div>
             <div className="rounded-xl bg-gray-light/60 p-3">
-              <p className="text-xs text-gray">سهم زیباگر</p>
+              <p className="text-xs text-gray">\u0633\u0647\u0645 \u0632\u06cc\u0628\u0627\u06af\u0631</p>
               <p className="text-lg font-bold">{formatPrice(summary.professionalNet)}</p>
             </div>
             <div className="rounded-xl bg-gray-light/60 p-3">
-              <p className="text-xs text-gray">تراکنش موفق / ناموفق</p>
+              <p className="text-xs text-gray">\u062a\u0631\u0627\u06a9\u0646\u0634 \u0645\u0648\u0641\u0642 / \u0646\u0627\u0645\u0648\u0641\u0642</p>
               <p className="text-lg font-bold">
                 {summary.transactions.paid} / {summary.transactions.failed}
               </p>
             </div>
           </div>
         ) : (
-          <PanelEmpty title="خلاصه‌ای موجود نیست" />
+          <PanelEmpty title="\u062e\u0644\u0627\u0635\u0647\u200c\u0627\u06cc \u0645\u0648\u062c\u0648\u062f \u0646\u06cc\u0633\u062a" />
         )}
       </Card>
 
       <Card className="space-y-3">
-        <h2 className="font-bold">تنظیم کارمزد و هشدار</h2>
+        <h2 className="font-bold">\u062a\u0646\u0638\u06cc\u0645 \u06a9\u0627\u0631\u0645\u0632\u062f \u0648 \u0647\u0634\u062f\u0627\u0631</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm">نرخ کارمزد (%)</label>
+            <label className="text-sm">\u0646\u0631\u062e \u06a9\u0627\u0631\u0645\u0632\u062f (%)</label>
             <div className="flex gap-2">
               <Input value={commissionInput} onChange={(e) => setCommissionInput(e.target.value)} dir="ltr" />
               <Button size="sm" loading={commissionBusy} onClick={handleSaveCommission}>
-                ذخیره
+                \u0630\u062e\u06cc\u0631\u0647
               </Button>
             </div>
             {commissionMsg && <p className="text-xs text-blue">{commissionMsg}</p>}
             {commission?.notice && <p className="text-xs text-gray">{commission.notice}</p>}
           </div>
           <div className="space-y-2">
-            <label className="text-sm">آستانه هشدار تراکنش ناموفق</label>
+            <label className="text-sm">\u0622\u0633\u062a\u0627\u0646\u0647 \u0647\u0634\u062f\u0627\u0631 \u062a\u0631\u0627\u06a9\u0646\u0634 \u0646\u0627\u0645\u0648\u0641\u0642</label>
             <div className="flex gap-2">
               <Input value={thresholdInput} onChange={(e) => setThresholdInput(e.target.value)} dir="ltr" />
               <Button size="sm" loading={thresholdBusy} onClick={handleSaveThreshold}>
-                ذخیره
+                \u0630\u062e\u06cc\u0631\u0647
               </Button>
             </div>
             {failedAlert && (
               <p className="text-xs text-gray">
-                یک ساعت اخیر: {failedAlert.failedCount} ناموفق — آستانه {failedAlert.threshold}
-                {failedAlert.isTriggered ? ' (هشدار فعال)' : ''}
+                \u06cc\u06a9 \u0633\u0627\u0639\u062a \u0627\u062e\u06cc\u0631: {failedAlert.failedCount} \u0646\u0627\u0645\u0648\u0641\u0642 \u2014 \u0622\u0633\u062a\u0627\u0646\u0647 {failedAlert.threshold}
+                {failedAlert.isTriggered ? ' (\u0647\u0634\u062f\u0627\u0631 \u0641\u0639\u0627\u0644)' : ''}
               </p>
             )}
           </div>
@@ -243,7 +243,7 @@ export default function AdminFinancePage() {
 
       {failedAlert?.recentFailed?.length ? (
         <Card className="space-y-2">
-          <h2 className="font-bold text-rose-700">تراکنش‌های ناموفق اخیر</h2>
+          <h2 className="font-bold text-rose-700">\u062a\u0631\u0627\u06a9\u0646\u0634\u200c\u0647\u0627\u06cc \u0646\u0627\u0645\u0648\u0641\u0642 \u0627\u062e\u06cc\u0631</h2>
           <ul className="space-y-2">
             {failedAlert.recentFailed.map((item) => (
               <li key={item.id}>
@@ -251,14 +251,14 @@ export default function AdminFinancePage() {
                   <div className="flex flex-wrap gap-3">
                     <span className="font-mono text-gray-500">{item.id.slice(0, 8)}...</span>
                     <span className="font-semibold text-rose-700">{formatPrice(item.amount)}</span>
-                    <span className="text-gray-600">مشتری: {item.customerName}</span>
+                    <span className="text-gray-600">\u0645\u0634\u062a\u0631\u06cc: {item.customerName}</span>
                     {item.professionalTitle && (
-                      <span className="text-gray-500 hidden sm:inline">زیباگر: {item.professionalTitle}</span>
+                      <span className="text-gray-500 hidden sm:inline">\u0632\u06cc\u0628\u0627\u06af\u0631: {item.professionalTitle}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400 text-[11px]" dir="ltr">
-                      {item.failedAt ? new Date(item.failedAt).toLocaleTimeString('fa-IR') : '—'}
+                      {item.failedAt ? new Date(item.failedAt).toLocaleTimeString('fa-IR') : '\u2014'}
                     </span>
                     <Button
                       size="sm"
@@ -266,7 +266,7 @@ export default function AdminFinancePage() {
                       className="h-6 px-2 text-[11px]"
                       onClick={() => handleOpenDetail(item.id)}
                     >
-                      جزئیات
+                      \u062c\u0632\u0626\u06cc\u0627\u062a
                     </Button>
                   </div>
                 </div>
@@ -279,7 +279,7 @@ export default function AdminFinancePage() {
       <Card className="space-y-3">
         <div className="flex flex-wrap items-end gap-2">
           <div>
-            <label className="mb-1 block text-xs text-gray">وضعیت</label>
+            <label className="mb-1 block text-xs text-gray">\u0648\u0636\u0639\u06cc\u062a</label>
             <select
               className="h-9 rounded-xl border border-border bg-white px-2 text-sm"
               value={statusFilter}
@@ -288,15 +288,15 @@ export default function AdminFinancePage() {
                 setStatusFilter(e.target.value);
               }}
             >
-              <option value="">همه</option>
-              <option value="paid">پرداخت‌شده</option>
-              <option value="pending">در انتظار</option>
-              <option value="failed">ناموفق</option>
-              <option value="cancelled">لغو</option>
+              <option value="">\u0647\u0645\u0647</option>
+              <option value="paid">\u067e\u0631\u062f\u0627\u062e\u062a\u200c\u0634\u062f\u0647</option>
+              <option value="pending">\u062f\u0631 \u0627\u0646\u062a\u0638\u0627\u0631</option>
+              <option value="failed">\u0646\u0627\u0645\u0648\u0641\u0642</option>
+              <option value="cancelled">\u0644\u063a\u0648</option>
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray">درگاه</label>
+            <label className="mb-1 block text-xs text-gray">\u062f\u0631\u06af\u0627\u0647</label>
             <Input
               className="h-9"
               value={providerFilter}
@@ -309,7 +309,7 @@ export default function AdminFinancePage() {
             />
           </div>
           <div className="min-w-[12rem] flex-1">
-            <label className="mb-1 block text-xs text-gray">جستجو</label>
+            <label className="mb-1 block text-xs text-gray">\u062c\u0633\u062a\u062c\u0648</label>
             <Input
               className="h-9"
               value={search}
@@ -317,11 +317,11 @@ export default function AdminFinancePage() {
                 setPage(1);
                 setSearch(e.target.value);
               }}
-              placeholder="نام، موبایل، ref..."
+              placeholder="\u0646\u0627\u0645\u060c \u0645\u0648\u0628\u0627\u06cc\u0644\u060c ref..."
             />
           </div>
           <Button size="sm" variant="outline" onClick={loadTransactions}>
-            بروزرسانی
+            \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc
           </Button>
         </div>
 
@@ -330,7 +330,7 @@ export default function AdminFinancePage() {
         ) : listError ? (
           <PanelError message={listError} onRetry={loadTransactions} />
         ) : transactions.length === 0 ? (
-          <PanelEmpty title="تراکنشی یافت نشد" />
+          <PanelEmpty title="\u062a\u0631\u0627\u06a9\u0646\u0634\u06cc \u06cc\u0627\u0641\u062a \u0646\u0634\u062f" />
         ) : (
           <ul className="space-y-2">
             {transactions.map((tx) => (
@@ -343,8 +343,8 @@ export default function AdminFinancePage() {
                   <div>
                     <p className="font-medium">{formatPrice(tx.amount)}</p>
                     <p className="text-xs text-gray">
-                      {tx.booking?.customer?.profile?.displayName || tx.booking?.customer?.phone || '—'}
-                      {' · '}
+                      {tx.booking?.customer?.profile?.displayName || tx.booking?.customer?.phone || '\u2014'}
+                      {' \u00b7 '}
                       {tx.provider}
                     </p>
                   </div>
@@ -359,11 +359,11 @@ export default function AdminFinancePage() {
 
         <div className="flex items-center justify-between text-xs text-gray">
           <span>
-            صفحه {page} از {totalPages} — {totalCount} مورد
+            \u0635\u0641\u062d\u0647 {page} \u0627\u0632 {totalPages} \u2014 {totalCount} \u0645\u0648\u0631\u062f
           </span>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              قبلی
+              \u0642\u0628\u0644\u06cc
             </Button>
             <Button
               size="sm"
@@ -371,7 +371,7 @@ export default function AdminFinancePage() {
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
             >
-              بعدی
+              \u0628\u0639\u062f\u06cc
             </Button>
           </div>
         </div>
@@ -380,19 +380,19 @@ export default function AdminFinancePage() {
       {(detail || detailLoading) && (
         <Card className="space-y-2">
           <div className="flex items-center justify-between">
-            <h2 className="font-bold">جزئیات تراکنش</h2>
+            <h2 className="font-bold">\u062c\u0632\u0626\u06cc\u0627\u062a \u062a\u0631\u0627\u06a9\u0646\u0634</h2>
             <Button size="sm" variant="ghost" onClick={() => setDetail(null)}>
-              بستن
+              \u0628\u0633\u062a\u0646
             </Button>
           </div>
           {detailLoading ? (
             <PanelLoading />
           ) : detail ? (
             <div className="space-y-1 text-sm">
-              <p>مبلغ: {formatPrice(detail.amount)}</p>
-              <p>وضعیت: {persianPaymentStatus(detail.status)}</p>
-              <p>درگاه: {detail.provider}</p>
-              <p dir="ltr">ref: {detail.providerRef || '—'}</p>
+              <p>\u0645\u0628\u0644\u063a: {formatPrice(detail.amount)}</p>
+              <p>\u0648\u0636\u0639\u06cc\u062a: {persianPaymentStatus(detail.status)}</p>
+              <p>\u062f\u0631\u06af\u0627\u0647: {detail.provider}</p>
+              <p dir="ltr">ref: {detail.providerRef || '\u2014'}</p>
               {detail.providerNote && <p className="text-gray">{detail.providerNote}</p>}
             </div>
           ) : null}
