@@ -34,16 +34,15 @@ describe('Authorization (e2e)', () => {
     await app.close();
   });
 
-  it('customer cannot access professional me endpoints', async () => {
+  it('customer cannot access professional-only booking list', async () => {
     const reg = await register(app, { phone: uniquePhone(), password, role: 'customer' });
     expect([200, 201]).toContain(reg.status);
     expect(reg.body.accessToken).toBeDefined();
 
     const res = await request(app.getHttpServer())
-      .get('/api/v1/professionals/me')
+      .get('/api/v1/bookings/professional')
       .set('Authorization', `Bearer ${reg.body.accessToken}`);
 
-    // RolesGuard → 403; unauthenticated edge → 401
     expect([401, 403]).toContain(res.status);
   });
 
@@ -64,7 +63,7 @@ describe('Authorization (e2e)', () => {
     expect(pro!.status).toBe('draft');
 
     const publicGet = await request(app.getHttpServer()).get(
-      `/api/v1/professionals/${pro!.slug}`,
+      `/api/v1/professionals/${encodeURIComponent(pro!.slug)}`,
     );
     expect([404, 400]).toContain(publicGet.status);
   });
@@ -75,9 +74,9 @@ describe('Authorization (e2e)', () => {
     expect(reg.body.accessToken).toBeDefined();
 
     const res = await request(app.getHttpServer())
-      .get('/api/v1/admin/users')
+      .get('/api/v1/admin/stats')
       .set('Authorization', `Bearer ${reg.body.accessToken}`);
 
-    expect([401, 403, 404]).toContain(res.status);
+    expect([401, 403]).toContain(res.status);
   });
 });
