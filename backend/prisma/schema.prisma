@@ -19,7 +19,7 @@ enum UserStatus {
   deleted
 }
 
-/// Same phone may exist once as customer and once as professional (separate accounts).
+/// Public account persona. Same phone may exist once per type (customer vs professional).
 enum AccountType {
   customer
   professional
@@ -98,7 +98,6 @@ model User {
   phone         String?     @db.VarChar(20)
   email         String?     @unique @db.VarChar(255)
   passwordHash  String?     @map("password_hash") @db.VarChar(255)
-  /// Persona: same phone can have separate customer + professional rows.
   accountType   AccountType @default(customer) @map("account_type")
   status        UserStatus  @default(active)
   phoneVerified Boolean     @default(false) @map("phone_verified")
@@ -260,16 +259,16 @@ model Professional {
 }
 
 model Location {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String?  @db.VarChar(120)
-  address   String   @db.VarChar(500)
-  city      String   @db.VarChar(80)
-  province  String?  @db.VarChar(80)
-  postalCode String? @map("postal_code") @db.VarChar(20)
-  lat       Decimal? @db.Decimal(10, 7)
-  lng       Decimal? @db.Decimal(10, 7)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String?  @db.VarChar(120)
+  address    String   @db.VarChar(500)
+  city       String   @db.VarChar(80)
+  province   String?  @db.VarChar(80)
+  postalCode String?  @map("postal_code") @db.VarChar(20)
+  lat        Decimal? @db.Decimal(10, 7)
+  lng        Decimal? @db.Decimal(10, 7)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
   professionalLocations ProfessionalLocation[]
   bookings              Booking[]
   @@index([city])
@@ -427,11 +426,11 @@ model Booking {
 }
 
 model BookingItem {
-  id        String @id @default(uuid()) @db.Uuid
-  bookingId String @map("booking_id") @db.Uuid
-  serviceId String @map("service_id") @db.Uuid
-  price     Int
-  durationMin Int  @map("duration_min")
+  id          String @id @default(uuid()) @db.Uuid
+  bookingId   String @map("booking_id") @db.Uuid
+  serviceId   String @map("service_id") @db.Uuid
+  price       Int
+  durationMin Int    @map("duration_min")
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   service Service @relation(fields: [serviceId], references: [id])
   @@index([bookingId])
@@ -546,11 +545,11 @@ model MediaAsset {
 }
 
 model ServicePriceRule {
-  id        String   @id @default(uuid()) @db.Uuid
-  serviceId String   @map("service_id") @db.Uuid
-  name      String   @db.VarChar(100)
+  id        String  @id @default(uuid()) @db.Uuid
+  serviceId String  @map("service_id") @db.Uuid
+  name      String  @db.VarChar(100)
   price     Int
-  isActive  Boolean  @default(true) @map("is_active")
+  isActive  Boolean @default(true) @map("is_active")
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   @@index([serviceId])
   @@map("service_price_rules")
