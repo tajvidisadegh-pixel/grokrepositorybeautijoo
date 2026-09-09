@@ -14,19 +14,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Decode literal \\uXXXX in finance page
+      - name: Decode literal backslash-u sequences
         run: |
           python3 << 'PY'
           from pathlib import Path
           import re
           p = Path('frontend/src/app/admin/finance/page.tsx')
           t = p.read_text()
-          if '\\u06' not in t and '\\u064' not in t:
-              print('already ok')
+          # file contains literal sequences: backslash + u + 4 hex digits
+          if re.search(r'\\u[0-9a-fA-F]{4}', t) is None:
+              print('already decoded')
           else:
               fixed = re.sub(r'\\u([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), t)
+              assert 'مدیریت مالی' in fixed
               p.write_text(fixed)
-              print('decoded', fixed.count('مدیریت'))
+              print('decoded ok')
           PY
       - name: Commit
         run: |
