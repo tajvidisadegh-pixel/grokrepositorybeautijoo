@@ -343,6 +343,7 @@ model ProfessionalService {
   priceRules   ServicePriceRule[]
   durationRules ServiceDurationRule[]
   mediaAssets  MediaAsset[]
+  bookingItems BookingItem[]
   @@unique([professionalId, serviceId])
   @@index([professionalId, isActive])
   @@index([serviceId])
@@ -419,8 +420,12 @@ model Booking {
   startAt        DateTime      @map("start_at") @db.Timestamptz
   endAt          DateTime      @map("end_at") @db.Timestamptz
   totalPrice     Int           @map("total_price")
-  note           String?       @db.Text
+  notes          String?       @db.Text
   cancelReason   String?       @map("cancel_reason") @db.VarChar(255)
+  rejectedReason String?       @map("rejected_reason") @db.VarChar(255)
+  confirmedAt    DateTime?     @map("confirmed_at") @db.Timestamptz
+  cancelledAt    DateTime?     @map("cancelled_at") @db.Timestamptz
+  completedAt    DateTime?     @map("completed_at") @db.Timestamptz
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
   customer     User         @relation("CustomerBookings", fields: [customerId], references: [id])
@@ -437,14 +442,18 @@ model Booking {
 }
 
 model BookingItem {
-  id          String @id @default(uuid()) @db.Uuid
-  bookingId   String @map("booking_id") @db.Uuid
-  serviceId   String @map("service_id") @db.Uuid
-  price       Int
-  durationMin Int    @map("duration_min")
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  service Service @relation(fields: [serviceId], references: [id])
+  id                    String  @id @default(uuid()) @db.Uuid
+  bookingId             String  @map("booking_id") @db.Uuid
+  serviceId             String  @map("service_id") @db.Uuid
+  professionalServiceId String? @map("professional_service_id") @db.Uuid
+  price                 Int
+  durationMin           Int     @map("duration_min")
+  sortOrder             Int     @default(0) @map("sort_order")
+  booking             Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  service             Service              @relation(fields: [serviceId], references: [id])
+  professionalService ProfessionalService? @relation(fields: [professionalServiceId], references: [id], onDelete: SetNull)
   @@index([bookingId])
+  @@index([professionalServiceId])
   @@map("booking_items")
 }
 
