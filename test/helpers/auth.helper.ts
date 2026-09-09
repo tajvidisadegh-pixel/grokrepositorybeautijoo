@@ -20,8 +20,15 @@ export async function register(app: INestApplication, body: RegisterBody) {
   return request(app.getHttpServer()).post('/api/v1/auth/register').send(body);
 }
 
-export async function login(app: INestApplication, phone: string, password: string) {
-  return request(app.getHttpServer()).post('/api/v1/auth/login').send({ phone, password });
+export async function login(
+  app: INestApplication,
+  phone: string,
+  password: string,
+  accountType: 'customer' | 'professional' = 'customer',
+) {
+  return request(app.getHttpServer())
+    .post('/api/v1/auth/login')
+    .send({ phone, password, accountType });
 }
 
 export async function me(app: INestApplication, accessToken: string) {
