@@ -40,3 +40,6 @@ process.env.SMS_PROVIDER = process.env.SMS_PROVIDER || 'mock';
 process.env.CORS_ORIGINS = process.env.CORS_ORIGINS || 'http://localhost:3001';
 // Do not start periodic cleanup timers during e2e
 process.env.CLEANUP_ENABLED = process.env.CLEANUP_ENABLED || 'false';
+
+// Deterministic auth after DB cleanup in e2e
+process.env.JWT_USER_CACHE_TTL_SECONDS = process.env.JWT_USER_CACHE_TTL_SECONDS || '0';
