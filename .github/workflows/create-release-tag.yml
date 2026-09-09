@@ -1,0 +1,49 @@
+# Create an annotated tag from workflow_dispatch (uses GITHUB_TOKEN).
+# Does not force-push main. Safe for controlled releases.
+name: Create release tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name (e.g. v3.0.0)'
+        required: true
+        type: string
+      ref:
+        description: 'Commit SHA or branch to tag (default: main HEAD)'
+        required: false
+        default: 'main'
+        type: string
+      message:
+        description: 'Annotated tag message'
+        required: false
+        default: 'Release'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - name: Create and push annotated tag
+        env:
+          TAG: ${{ inputs.tag }}
+          MSG: ${{ inputs.message }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists at $(git rev-parse "$TAG")"
+            exit 0
+          fi
+          git tag -a "$TAG" -m "$MSG"
+          git push origin "$TAG"
+          echo "Created tag $TAG -> $(git rev-parse HEAD)"
