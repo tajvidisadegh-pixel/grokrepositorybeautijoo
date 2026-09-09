@@ -63,7 +63,6 @@ export class BookingsService {
       }
     }
 
-    // Price/duration rules apply to the first (primary) service when provided
     const primary = proServices[0];
     let priceRuleId: string | null = null;
     let durationRuleId: string | null = null;
@@ -140,7 +139,6 @@ export class BookingsService {
     }
     const endAt = new Date(startAt.getTime() + totalDuration * 60_000);
 
-    // Optimistic availability check (fast fail for UX). Authoritative check runs inside the transaction under lock.
     const dateStr = tehranDateStr(startAt);
     const startHHMM = tehranHHMM(startAt);
     const avail = await this.availability.getSlots(
@@ -148,7 +146,15 @@ export class BookingsService {
       dateStr,
       totalDuration,
     );
-    const slotOk = avail.slots.some((s: { start: string; end: string }) => s.start === startHHMM);
+    const normalizeHhmm = (s: string) => {
+      const m = /^(\d{1,2}):(\d{2})/.exec(String(s).trim());
+      if (!m) return s;
+      return `${m[1].padStart(2, '0')}:${m[2]}`;
+    };
+    const want = normalizeHhmm(startHHMM);
+    const slotOk = avail.slots.some(
+      (s: { start: string; end: string }) => normalizeHhmm(s.start) === want,
+    );
     if (!slotOk) {
       throw new ConflictException('این بازه زمانی در دسترس نیست');
     }
@@ -156,13 +162,11 @@ export class BookingsService {
     try {
       const booking = await this.prisma.$transaction(
         async (tx) => {
-          // Serialize concurrent booking attempts for the same professional.
           await tx.$queryRawUnsafe(
             `SELECT id FROM professionals WHERE id = $1::uuid FOR UPDATE`,
             data.professionalId,
           );
 
-          // Authoritative overlap check under lock (bookings + time-offs + manual reservations).
           const overlappingBookings = await tx.booking.count({
             where: {
               professionalId: data.professionalId,
