@@ -5,6 +5,7 @@ import {
   Inject,
   ConflictException,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_PROVIDER, PaymentProvider } from './payment.provider';
@@ -24,10 +25,17 @@ export class PaymentsService {
   ) {}
 
   private providerName(): string {
-    return this.provider.name || 'mock';
+    return this.provider.name || 'disabled';
   }
 
   async initiate(userId: string, bookingId: string, callbackUrl: string) {
+    const providerKey = this.providerName();
+    if (providerKey === 'disabled') {
+      throw new ServiceUnavailableException(
+        'پرداخت آنلاین در حال حاضر فعال نیست. درگاه واقعی پیکربندی نشده است.',
+      );
+    }
+
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: { payment: true },
@@ -37,7 +45,6 @@ export class PaymentsService {
     if (booking.payment?.status === 'paid') throw new ConflictException('قبلاً پرداخت شده');
 
     const idempotencyKey = booking.payment?.idempotencyKey || randomUUID();
-    const providerKey = this.providerName();
 
     if (!booking.payment) {
       await this.prisma.payment.create({
@@ -71,14 +78,13 @@ export class PaymentsService {
   }
 
   /**
-   * Gateway callback.
-   * - Mock: ?ref=mock_xxx&status=ok
-   * - Zarinpal: ?Authority=Axxx&Status=OK|NOK  (also accepts ref= for compatibility)
+   * Gateway callback (provider-agnostic query params).
+   * Mock callbacks are refused in production.
    */
   async callback(providerRef: string, gatewayStatus?: string) {
     if (!providerRef) throw new BadRequestException('شناسه تراکنش درگاه ارسال نشده');
 
-    // Zarinpal user-cancel
+    // Provider user-cancel (e.g. Status=NOK)
     if (gatewayStatus && gatewayStatus.toUpperCase() === 'NOK') {
       const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
       if (payment && payment.status !== 'paid') {
@@ -96,6 +102,19 @@ export class PaymentsService {
     // Idempotency: already paid → do not recompute commission snapshot
     if (payment.status === 'paid') {
       return { status: 'paid', bookingId: payment.bookingId };
+    }
+
+    // Hard guard: never accept mock (or missing real provider) as PAID in production
+    const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+    const storedProvider = (payment.provider || '').toLowerCase();
+    if (isProd && (storedProvider === 'mock' || storedProvider === 'disabled' || !storedProvider)) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'failed', failedAt: new Date() },
+      });
+      throw new BadRequestException(
+        'تأیید پرداخت در production با ارائه‌دهنده غیرواقعی مجاز نیست',
+      );
     }
 
     const verified = await this.provider.verify(providerRef, payment.amount);
@@ -173,9 +192,7 @@ export class PaymentsService {
     });
 
     if (!result.success) {
-      throw new BadRequestException(
-        'استرداد توسط درگاه پرداخت ناموفق بود (برای زرین‌پال ZARINPAL_ACCESS_TOKEN لازم است)',
-      );
+      throw new BadRequestException('استرداد توسط درگاه پرداخت ناموفق بود');
     }
 
     const updated = await this.prisma.payment.update({
