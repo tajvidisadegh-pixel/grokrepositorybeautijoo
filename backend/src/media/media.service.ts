@@ -11,10 +11,17 @@ import {
   type StorageProvider,
 } from '../storage/storage.provider';
 import { MediaKind, MediaStatus } from '@prisma/client';
-import { sniffImageMime } from './image-sniff';
+import { sniffImage } from './image-sniff';
 
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 50 * 1024 * 1024;
+
+/** Minimal file shape from multer memoryStorage (controller does not pass full Express.Multer.File). */
+export type UploadedBufferFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+};
 
 @Injectable()
 export class MediaService {
@@ -23,12 +30,9 @@ export class MediaService {
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
 
-  /**
-   * Upload a media asset for the authenticated professional.
-   */
   async upload(
     userId: string,
-    file: Express.Multer.File,
+    file: UploadedBufferFile,
     kind: MediaKind = MediaKind.portfolio,
     professionalServiceId?: string,
   ) {
@@ -36,14 +40,18 @@ export class MediaService {
       throw new BadRequestException('فایل خالی است');
     }
     if (file.size > MAX_BYTES) {
-      throw new BadRequestException('حجم فایل بیش از ۵ مگابایت است');
+      throw new BadRequestException('حجم فایل بیش از حد مجاز است');
     }
 
-    const sniffed = sniffImageMime(file.buffer);
-    const mime = sniffed || file.mimetype;
-    if (!ALLOWED_MIME.has(mime)) {
-      throw new BadRequestException('فرمت تصویر مجاز نیست (jpeg/png/webp/gif)');
+    const detected = sniffImage(file.buffer);
+    if (!detected) {
+      throw new BadRequestException(
+        'فرمت تصویر مجاز نیست (jpeg/png/webp/gif/heic)',
+      );
     }
+
+    const mime = detected.mime;
+    const ext = detected.ext;
 
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
     if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
@@ -55,17 +63,9 @@ export class MediaService {
       if (!ps) throw new ForbiddenException('خدمت متعلق به شما نیست');
     }
 
-    const ext =
-      mime === 'image/png'
-        ? 'png'
-        : mime === 'image/webp'
-          ? 'webp'
-          : mime === 'image/gif'
-            ? 'gif'
-            : 'jpg';
-
     const key = `professionals/${pro.id}/${kind}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const stored = await this.storage.put(key, file.buffer, mime);
+    const storageKey = await this.storage.upload(key, file.buffer, mime);
+    const url = this.storage.getPublicUrl(storageKey);
 
     const asset = await this.prisma.mediaAsset.create({
       data: {
@@ -73,8 +73,8 @@ export class MediaService {
         professionalServiceId: professionalServiceId || null,
         kind,
         status: MediaStatus.draft,
-        url: stored.url,
-        storageKey: stored.key,
+        url,
+        storageKey,
         mimeType: mime,
         sizeBytes: file.size,
       },
@@ -108,6 +108,24 @@ export class MediaService {
     });
   }
 
+  async publishAssets(userId: string, ids: string[]) {
+    if (!ids?.length) return { updated: 0 };
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const result = await this.prisma.mediaAsset.updateMany({
+      where: {
+        professionalId: pro.id,
+        id: { in: ids },
+      },
+      data: { status: MediaStatus.published },
+    });
+    return { updated: result.count };
+  }
+
+  async deleteMine(userId: string, mediaId: string) {
+    return this.remove(userId, mediaId);
+  }
+
   async remove(userId: string, mediaId: string) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
     if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
@@ -119,7 +137,7 @@ export class MediaService {
       try {
         await this.storage.delete(media.storageKey);
       } catch {
-        // best-effort delete from storage
+        // best-effort
       }
     }
     await this.prisma.mediaAsset.delete({ where: { id: mediaId } });
