@@ -37,10 +37,17 @@ export function tehranDateStr(d: Date): string {
   return dayFormatter.format(d);
 }
 
-/** HH:MM in Asia/Tehran for a given instant. */
+/** HH:MM in Asia/Tehran for a given instant (always zero-padded, never "24:xx"). */
 export function tehranHHMM(d: Date): string {
-  // en-GB 24h → "HH:MM"
-  return timeFormatter.format(d);
+  // en-GB 24h → "HH:MM" (some ICU builds emit "24:xx" for midnight)
+  let s = timeFormatter.format(d);
+  if (s.startsWith('24:')) s = '00:' + s.slice(3);
+  // Normalize bare H:MM → HH:MM
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (m) {
+    return `${m[1].padStart(2, '0')}:${m[2]}`;
+  }
+  return s;
 }
 
 /**
@@ -86,10 +93,9 @@ export function tehranLocalToUtc(dateStr: string, hhmm: string): Date {
 export function tehranDayBounds(dateStr: string): {
   dayStart: Date;
   dayEnd: Date;
-  dayOfWeek: number; // 0 = Sunday … 6 = Saturday (UTC day of the noon instant)
+  dayOfWeek: number; // 0 = Sunday … 6 = Saturday (Tehran local)
 } {
   const dayStart = tehranLocalToUtc(dateStr, '00:00');
-  const nextDay = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
   // Safer next-day calculation via date arithmetic
   const [y, mo, d] = dateStr.split('-').map(Number);
   const next = new Date(Date.UTC(y, mo - 1, d + 1));
@@ -97,7 +103,21 @@ export function tehranDayBounds(dateStr: string): {
   const dayEnd = new Date(tehranLocalToUtc(nextStr, '00:00').getTime() - 1);
 
   const noon = tehranLocalToUtc(dateStr, '12:00');
-  const dayOfWeek = noon.getUTCDay();
+  // Weekday in Asia/Tehran (not UTC) — 0=Sun … 6=Sat
+  const wd = new Intl.DateTimeFormat('en-US', {
+    timeZone: TEHRAN_TZ,
+    weekday: 'short',
+  }).format(noon);
+  const weekdayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  const dayOfWeek = weekdayMap[wd] ?? noon.getUTCDay();
 
   return { dayStart, dayEnd, dayOfWeek };
 }
