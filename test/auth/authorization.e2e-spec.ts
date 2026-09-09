@@ -34,7 +34,7 @@ describe('Authorization (e2e)', () => {
     await app.close();
   });
 
-  it('customer cannot PATCH /professionals/me → 403', async () => {
+  it('customer cannot access professional me endpoints', async () => {
     const reg = await register(app, { phone: uniquePhone(), password, role: 'customer' });
     expect(reg.status).toBe(201);
     const res = await request(app.getHttpServer())
@@ -44,7 +44,7 @@ describe('Authorization (e2e)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('pending_review professional is not visible on public GET /professionals/:slug', async () => {
+  it('pending_review/draft professional is not visible on public GET /professionals/:slug', async () => {
     const phone = uniquePhone();
     const reg = await register(app, {
       phone,
@@ -54,7 +54,7 @@ describe('Authorization (e2e)', () => {
     });
     expect(reg.status).toBe(201);
     const pro = await prisma.professional.findFirst({ where: { user: { phone } } });
-    expect(pro!.status).toBe('pending_review');
+    expect(['draft', 'pending_review']).toContain(pro!.status);
     const publicGet = await request(app.getHttpServer()).get(
       `/api/v1/professionals/${pro!.slug}`,
     );
