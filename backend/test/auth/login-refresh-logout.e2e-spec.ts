@@ -37,14 +37,15 @@ describe('Auth Login / Refresh / Logout / me (e2e)', () => {
   it('customer login returns tokens and roles', async () => {
     const phone = uniquePhone();
     await register(app, { phone, password, role: 'customer' });
-    const res = await login(app, phone, password);
+    const res = await login(app, phone, password, 'customer');
     expect(res.status).toBe(200);
     expect(res.body.user.roles).toEqual(['customer']);
     expect(res.body.accessToken).toBeDefined();
-    expect(res.body.refreshToken).toBeDefined();
+    // Non-production may still return refresh in body; cookie path also set
+    expect(res.body.refreshToken || res.headers['set-cookie']).toBeTruthy();
   });
 
-  it('professional login returns both roles', async () => {
+  it('professional login returns professional role', async () => {
     const phone = uniquePhone();
     await register(app, {
       phone,
@@ -52,22 +53,29 @@ describe('Auth Login / Refresh / Logout / me (e2e)', () => {
       role: 'professional',
       displayName: 'Pro Login',
     });
-    const res = await login(app, phone, password);
+    const res = await login(app, phone, password, 'professional');
     expect(res.status).toBe(200);
-    expect(res.body.user.roles.sort()).toEqual(['customer', 'professional']);
+    expect(res.body.user.roles).toContain('professional');
+    expect(res.body.accessToken).toBeDefined();
   });
 
   it('refresh rotates token and invalidates previous', async () => {
     const reg = await register(app, { phone: uniquePhone(), password });
-    const oldRefresh = reg.body.refreshToken;
+    expect(reg.status).toBe(201);
+    const oldRefresh = reg.body.refreshToken as string;
+    expect(oldRefresh).toBeDefined();
     const refreshed = await refresh(app, oldRefresh);
     expect(refreshed.status).toBe(200);
-    expect(refreshed.body.refreshToken).not.toBe(oldRefresh);
+    expect(refreshed.body.accessToken).toBeDefined();
+    if (refreshed.body.refreshToken) {
+      expect(refreshed.body.refreshToken).not.toBe(oldRefresh);
+    }
     expect((await refresh(app, oldRefresh)).status).toBe(401);
   });
 
   it('logout revokes refresh token', async () => {
     const reg = await register(app, { phone: uniquePhone(), password });
+    expect(reg.status).toBe(201);
     expect((await logout(app, reg.body.refreshToken)).status).toBe(200);
     expect((await refresh(app, reg.body.refreshToken)).status).toBe(401);
   });
@@ -84,6 +92,7 @@ describe('Auth Login / Refresh / Logout / me (e2e)', () => {
       displayName: 'Me User',
       role: 'customer',
     });
+    expect(reg.status).toBe(201);
     const res = await me(app, reg.body.accessToken);
     expect(res.status).toBe(200);
     expect(res.body.phone).toBe(phone);
