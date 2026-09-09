@@ -146,8 +146,13 @@ export default () => {
     },
     corsOrigins,
     smsProvider: process.env.SMS_PROVIDER || 'mock',
-    /** Payment gateway: "mock" | "zarinpal" */
-    paymentProvider: process.env.PAYMENT_PROVIDER || 'mock',
+    /**
+     * Payment gateway key (provider-agnostic).
+     * - mock: development/test only (blocked in production)
+     * - disabled / empty in production: online payment off
+     * - real keys (e.g. zarinpal): optional integrations — not a project lock-in
+     */
+    paymentProvider: process.env.PAYMENT_PROVIDER || '',
     zarinpalMerchantId: process.env.ZARINPAL_MERCHANT_ID || '',
     zarinpalSandbox: process.env.ZARINPAL_SANDBOX || 'false',
     zarinpalAccessToken: process.env.ZARINPAL_ACCESS_TOKEN || '',
