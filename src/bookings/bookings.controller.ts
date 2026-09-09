@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsArray, IsOptional, IsString, IsUUID, ArrayMinSize } from 'class-validator';
 import { BookingsService } from './bookings.service';
@@ -20,7 +20,9 @@ class CreateBookingDto {
 }
 
 class TransitionDto {
-  @IsOptional() @IsString() reason?: string;
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 @ApiTags('bookings')
@@ -65,7 +67,7 @@ export class BookingsController {
 
   @Get(':id')
   one(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('roles') roles: string[],
   ) {
@@ -74,7 +76,7 @@ export class BookingsController {
 
   @Patch(':id/confirm')
   confirm(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('roles') roles: string[],
   ) {
@@ -83,7 +85,7 @@ export class BookingsController {
 
   @Patch(':id/reject')
   reject(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('roles') roles: string[],
     @Body() dto: TransitionDto,
@@ -93,7 +95,7 @@ export class BookingsController {
 
   @Patch(':id/cancel')
   cancel(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('roles') roles: string[],
     @Body() dto: TransitionDto,
@@ -103,7 +105,7 @@ export class BookingsController {
 
   @Patch(':id/complete')
   complete(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('roles') roles: string[],
   ) {
