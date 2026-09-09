@@ -14,10 +14,13 @@ export function assertTestDatabase(): void {
   }
 }
 
+/**
+ * Apply the same linear migration path as production (prisma migrate deploy).
+ * Do not use `db push --accept-data-loss` — that drifts from production history.
+ */
 export function migrateTestDb(): void {
   assertTestDatabase();
-  // Fresh test DBs: db push avoids broken/duplicate migration history on empty Postgres.
-  execSync('npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss', {
+  execSync('npx prisma migrate deploy --schema=./prisma/schema.prisma', {
     cwd: backendRoot,
     env: { ...process.env },
     stdio: 'inherit',
