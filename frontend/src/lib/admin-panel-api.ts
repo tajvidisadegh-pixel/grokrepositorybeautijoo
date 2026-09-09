@@ -1,10 +1,9 @@
 /**
- * Admin dashboard / finance panel API helpers (split from panel-api for maintainability).
+ * Admin dashboard / finance panel API helpers.
  */
 import { apiClient } from './api';
 
 type Paginated<T> = { items?: T[]; data?: T[]; total?: number; page?: number; limit?: number };
-
 function unwrapList<T>(res: Paginated<T> | T[]): T[] {
   if (Array.isArray(res)) return res;
   return res.items ?? res.data ?? [];
@@ -18,14 +17,47 @@ export type AdminWindowStats = {
   cancelledBookings: number;
 };
 export type AdminDayCount = { date: string; count: number };
-export type AdminBookingDay = { date: string; total: number; completed: number; cancelled: number };
+export type AdminBookingDay = { date: string; created: number; completed: number; cancelled: number };
 export type AdminRevenueDay = { date: string; amount: number };
 export type AdminRecentActivityItem = {
   id: string;
-  type: string;
-  title?: string;
+  actor: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
   createdAt: string;
-  meta?: unknown;
+};
+export type AdminRecentProfessional = {
+  id: string;
+  slug: string;
+  title: string | null;
+  status: string;
+  createdAt: string;
+  phone?: string | null;
+  displayName?: string | null;
+};
+export type AdminRecentUser = {
+  id: string;
+  phone?: string | null;
+  email?: string | null;
+  status?: string;
+  createdAt: string;
+  displayName?: string | null;
+};
+export type AdminRecentBooking = {
+  id: string;
+  status: string;
+  startAt: string;
+  totalPrice?: number | null;
+  customerPhone?: string | null;
+  professionalTitle?: string | null;
+};
+export type AdminRecentReview = {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  professionalTitle?: string | null;
 };
 export type AdminDashboard = {
   overview: {
@@ -56,10 +88,11 @@ export type AdminDashboard = {
     failedPayments: number;
   };
   recentActivity: AdminRecentActivityItem[];
-  recent?: {
-    users?: unknown[];
-    bookings?: unknown[];
-    professionals?: unknown[];
+  recent: {
+    users: AdminRecentUser[];
+    bookings: AdminRecentBooking[];
+    professionals: AdminRecentProfessional[];
+    reviews: AdminRecentReview[];
   };
 };
 
@@ -100,6 +133,13 @@ export type AdminFinancialTransactionsResponse = {
     providerRef: string | null;
     createdAt: string;
     paidAt?: string | null;
+    booking?: {
+      id: string;
+      status?: string;
+      startAt?: string;
+      professional?: { title?: string | null } | null;
+      customer?: { phone?: string | null } | null;
+    } | null;
   }>;
   total?: number;
   page?: number;
@@ -114,6 +154,7 @@ export type AdminFinancialTransactionDetail = AdminFinancialTransaction & {
   platformCommissionAmount?: number | null;
   professionalNetAmount?: number | null;
   metadata?: unknown;
+  providerNote?: string | null;
 };
 
 export async function fetchAdminFinancialSummary(period: AdminFinancialPeriod = 'all_time') {
