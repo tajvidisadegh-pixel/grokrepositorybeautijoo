@@ -16,7 +16,8 @@ export function assertTestDatabase(): void {
 
 export function migrateTestDb(): void {
   assertTestDatabase();
-  execSync('npx prisma migrate deploy --schema=./prisma/schema.prisma', {
+  // Fresh test DBs: db push avoids broken/duplicate migration history on empty Postgres.
+  execSync('npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss', {
     cwd: backendRoot,
     env: { ...process.env },
     stdio: 'inherit',
