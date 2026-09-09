@@ -17,7 +17,10 @@ export class RegisterDto {
   @IsString()
   displayName?: string;
 
-  /** Only customer | professional allowed on public registration. Backend rejects admin/staff. */
+  /**
+   * Public registration: only customer | professional.
+   * Each role is a fully separate account even when phone is the same.
+   */
   @ApiPropertyOptional({ example: 'customer', enum: ['customer', 'professional'] })
   @IsOptional()
   @IsIn(['customer', 'professional'], {
@@ -34,6 +37,16 @@ export class LoginDto {
   @ApiProperty()
   @IsString()
   password!: string;
+
+  /**
+   * Which panel/account to enter. Required for correct separation of
+   * customer vs professional when the same phone has both accounts.
+   */
+  @ApiProperty({ example: 'customer', enum: ['customer', 'professional'] })
+  @IsIn(['customer', 'professional'], {
+    message: 'نوع حساب فقط customer یا professional مجاز است',
+  })
+  accountType!: 'customer' | 'professional';
 }
 
 export class RequestOtpDto {
@@ -46,6 +59,12 @@ export class RequestOtpDto {
   @IsOptional()
   @IsString()
   purpose?: string;
+
+  /** Target account persona for OTP login (defaults to customer). */
+  @ApiPropertyOptional({ example: 'customer', enum: ['customer', 'professional'] })
+  @IsOptional()
+  @IsIn(['customer', 'professional'])
+  accountType?: 'customer' | 'professional';
 }
 
 export class VerifyOtpDto {
@@ -63,12 +82,16 @@ export class VerifyOtpDto {
   @IsOptional()
   @IsString()
   purpose?: string;
+
+  /** Target account persona. OTP never auto-creates the other persona. */
+  @ApiPropertyOptional({ example: 'customer', enum: ['customer', 'professional'] })
+  @IsOptional()
+  @IsIn(['customer', 'professional'])
+  accountType?: 'customer' | 'professional';
 }
 
 export class RefreshDto {
-  /** Optional when refresh token is sent via httpOnly cookie */
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
-  refreshToken?: string;
+  refreshToken!: string;
 }
