@@ -19,7 +19,6 @@ enum UserStatus {
   deleted
 }
 
-/// Same phone may exist once as customer and once as professional (separate accounts).
 enum AccountType {
   customer
   professional
@@ -237,6 +236,8 @@ model Professional {
   isFeatured       Boolean            @default(false) @map("is_featured")
   ratingAvg        Decimal            @default(0) @map("rating_avg") @db.Decimal(3, 2)
   ratingCount      Int                @default(0) @map("rating_count")
+  logoUrl          String?            @map("logo_url") @db.VarChar(512)
+  coverImageUrl    String?            @map("cover_image_url") @db.VarChar(512)
   verifiedAt       DateTime?          @map("verified_at") @db.Timestamptz
   publishedAt      DateTime?          @map("published_at") @db.Timestamptz
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
@@ -265,8 +266,8 @@ model Location {
   city       String   @db.VarChar(80)
   province   String?  @db.VarChar(80)
   postalCode String?  @map("postal_code") @db.VarChar(20)
-  lat        Decimal? @db.Decimal(10, 7)
-  lng        Decimal? @db.Decimal(10, 7)
+  latitude   Decimal? @map("lat") @db.Decimal(10, 7)
+  longitude  Decimal? @map("lng") @db.Decimal(10, 7)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
   professionalLocations ProfessionalLocation[]
@@ -282,6 +283,7 @@ model ProfessionalLocation {
   isPrimary      Boolean @default(false) @map("is_primary")
   professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
   location     Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  @@unique([professionalId, locationId])
   @@index([professionalId])
   @@index([locationId])
   @@map("professional_locations")
@@ -368,6 +370,7 @@ model WorkingHour {
   startTime      String    @map("start_time") @db.VarChar(5)
   endTime        String    @map("end_time") @db.VarChar(5)
   isClosed       Boolean   @default(false) @map("is_closed")
+  isActive       Boolean   @default(true) @map("is_active")
   professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
   breaks       WorkingHourBreak[]
   @@unique([professionalId, dayOfWeek, startTime])
@@ -456,6 +459,7 @@ model Payment {
   platformCommissionRate   Decimal?      @map("platform_commission_rate") @db.Decimal(5, 2)
   platformCommissionAmount Int?          @map("platform_commission_amount")
   professionalNetAmount    Int?          @map("professional_net_amount")
+  metadata                 Json?
   paidAt                   DateTime?     @map("paid_at") @db.Timestamptz
   failedAt                 DateTime?     @map("failed_at") @db.Timestamptz
   createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz
@@ -503,9 +507,11 @@ model Notification {
   title     String           @db.VarChar(200)
   body      String           @db.Text
   data      Json?
+  isRead    Boolean          @default(false) @map("is_read")
   readAt    DateTime?        @map("read_at") @db.Timestamptz
   createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isRead])
   @@index([userId, readAt])
   @@index([createdAt])
   @@map("notifications")
@@ -544,6 +550,7 @@ model MediaAsset {
   kind                  MediaKind
   status                MediaStatus @default(draft)
   url                   String      @db.VarChar(512)
+  storageKey            String?     @map("storage_key") @db.VarChar(512)
   mimeType              String?     @map("mime_type") @db.VarChar(100)
   sizeBytes             Int?        @map("size_bytes")
   sortOrder             Int         @default(0) @map("sort_order")
