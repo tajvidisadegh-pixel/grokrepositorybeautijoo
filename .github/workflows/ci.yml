@@ -82,8 +82,8 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate --schema=./prisma/schema.prisma
 
-      - name: Migrate
-        run: npx prisma migrate deploy --schema=./prisma/schema.prisma
+      - name: Sync schema (fresh test DB)
+        run: npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss
 
       - name: Seed roles
         run: node prisma/seed-roles.cjs
