@@ -22,41 +22,36 @@ describe('RolesGuard', () => {
     guard = new RolesGuard(reflector);
   });
 
-  it('allows when no @Roles metadata is set',
-    () => {
-      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
-      expect(guard.canActivate(mockContext({ roles: [] }))).toBe(true);
-    },
-  );
+  it('allows when no @Roles metadata is set', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
+    expect(guard.canActivate(mockContext({ roles: [] }))).toBe(true);
+  });
 
   it('allows SUPER_ADMIN when required role is SUPER_ADMIN', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['SUPER_ADMIN']);
-    expect(
-      guard.canActivate(mockContext({ roles: ['SUPER_ADMIN'] })),
-    ).toBe(true);
+    expect(guard.canActivate(mockContext({ roles: ['SUPER_ADMIN'] }))).toBe(true);
   });
 
-  it('forbids authenticated user without SUPER_ADMIN (403)', () => {
+  it('allows legacy admin role with full access (same as SUPER_ADMIN)', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['SUPER_ADMIN']);
+    expect(guard.canActivate(mockContext({ roles: ['admin', 'customer'] }))).toBe(true);
+  });
+
+  it('forbids authenticated user without admin privileges (403)', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['SUPER_ADMIN']);
     expect(() =>
-      guard.canActivate(mockContext({ roles: ['admin', 'customer'] })),
+      guard.canActivate(mockContext({ roles: ['customer'] })),
     ).toThrow(ForbiddenException);
   });
 
-  it('forbids when user has empty roles',
-    () => {
-      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['SUPER_ADMIN']);
-      expect(() => guard.canActivate(mockContext({ roles: [] }))).toThrow(
-        ForbiddenException,
-      );
-    },
-  );
+  it('forbids when user has empty roles', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['SUPER_ADMIN']);
+    expect(() => guard.canActivate(mockContext({ roles: [] }))).toThrow(ForbiddenException);
+  });
 
   it('forbids when user is missing (post-auth edge case)', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['SUPER_ADMIN']);
-    expect(() => guard.canActivate(mockContext(undefined))).toThrow(
-      ForbiddenException,
-    );
+    expect(() => guard.canActivate(mockContext(undefined))).toThrow(ForbiddenException);
   });
 
   it('does not read roles from request body (only user.roles from JWT/DB)', () => {
