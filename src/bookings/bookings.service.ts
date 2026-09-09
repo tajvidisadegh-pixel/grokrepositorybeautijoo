@@ -157,7 +157,10 @@ export class BookingsService {
       const booking = await this.prisma.$transaction(
         async (tx) => {
           // Serialize concurrent booking attempts for the same professional.
-          await tx.$queryRaw`SELECT id FROM professionals WHERE id = ${data.professionalId}::uuid FOR UPDATE`;
+          await tx.$queryRawUnsafe(
+            `SELECT id FROM professionals WHERE id = $1::uuid FOR UPDATE`,
+            data.professionalId,
+          );
 
           // Authoritative overlap check under lock (bookings + time-offs + manual reservations).
           const overlappingBookings = await tx.booking.count({
@@ -237,7 +240,6 @@ export class BookingsService {
           return b;
         },
         {
-          // Isolation level that supports row locks reliably
           isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
           maxWait: 5_000,
           timeout: 15_000,
@@ -263,11 +265,10 @@ export class BookingsService {
     } catch (e: unknown) {
       if (e instanceof ConflictException) throw e;
       const err = e as { code?: string; message?: string };
-      // Prisma maps exclusion-constraint violations; also match constraint name substring.
       if (
         err.code === 'P2004' ||
         err.message?.includes('bookings_no_overlap') ||
-        err.message?.includes('23P01') // exclusion_violation
+        err.message?.includes('23P01')
       ) {
         throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
       }
@@ -489,4 +490,3 @@ export class BookingsService {
     }
   }
 }
-
