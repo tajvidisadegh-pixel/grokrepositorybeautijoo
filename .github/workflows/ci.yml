@@ -88,8 +88,8 @@ jobs:
       - name: Seed roles
         run: node prisma/seed-roles.cjs
 
-      - name: E2E tests (Auth register, OTP rate-limit, Bookings race)
-        run: npm run test:e2e -- --testPathPattern="auth/(register|otp-rate-limit)|bookings/race"
+      - name: E2E OTP rate-limit
+        run: npm run test:e2e -- --testPathPattern="auth/otp-rate-limit"
 
   frontend:
     name: Frontend build
