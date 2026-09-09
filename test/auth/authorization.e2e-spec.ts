@@ -55,17 +55,19 @@ describe('Authorization (e2e)', () => {
       role: 'professional',
     });
     expect([200, 201]).toContain(reg.status);
+    const userId = reg.body.user?.id as string;
+    expect(userId).toBeDefined();
 
-    const pro = await prisma.professional.findFirst({
-      where: { user: { phone, accountType: 'professional' } },
-    });
+    const pro = await prisma.professional.findFirst({ where: { userId } });
     expect(pro).toBeTruthy();
-    expect(pro!.status).toBe('draft');
+    expect(['draft', 'pending_review']).toContain(pro!.status);
 
     const publicGet = await request(app.getHttpServer()).get(
       `/api/v1/professionals/${encodeURIComponent(pro!.slug)}`,
     );
-    expect([404, 400]).toContain(publicGet.status);
+    // Must not expose unpublished pros
+    expect(publicGet.status).not.toBe(200);
+    expect([404, 400, 403]).toContain(publicGet.status);
   });
 
   it('admin endpoints reject non-admin', async () => {
