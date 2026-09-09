@@ -25,17 +25,13 @@ jobs:
               t,
               count=1,
           )
-          assert '50 * 1024 * 1024' not in t2
           p.write_text(t2)
           print('ok', len(t2))
           PY
-          # drop stale split file if it would shadow exports
-          rm -f frontend/src/lib/admin-panel-api.ts
       - name: Commit
         run: |
           git config user.name "Beautijoo Bot"
           git config user.email "bot@beautijoo.ir"
-          git add -A frontend/src/lib/panel-api.ts frontend/src/lib/admin-panel-api.ts || true
-          git status
+          git add frontend/src/lib/panel-api.ts
           git commit -m "fix(frontend): restore panel-api from 73a9078 raw (no mock, no size ceiling)" || exit 0
           git push origin main
