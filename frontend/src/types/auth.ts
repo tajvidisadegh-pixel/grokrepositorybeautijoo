@@ -19,11 +19,14 @@ export type AuthRegisterResponse = AuthTokens & {
   user: { id: string; phone: string | null; roles?: string[] };
 };
 
+export type AccountType = 'customer' | 'professional';
+
 export type AuthMeResponse = {
   id: string;
   phone: string | null;
   email: string | null;
   status: string;
+  accountType?: AccountType;
   phoneVerified: boolean;
   profile: {
     displayName?: string | null;
@@ -48,21 +51,25 @@ export type RegisterPayload = {
   password: string;
   displayName?: string;
   /** Public registration: only customer | professional (backend validates) */
-  role?: 'customer' | 'professional';
+  role?: AccountType;
 };
 
 export type LoginPayload = {
   phone: string;
   password: string;
+  /** Which separate account to enter (same phone may have both). */
+  accountType: AccountType;
 };
 
 export type RequestOtpPayload = {
   phone: string;
   purpose?: string;
+  accountType?: AccountType;
 };
 
 export type VerifyOtpPayload = {
   phone: string;
   code: string;
   purpose?: string;
+  accountType?: AccountType;
 };
