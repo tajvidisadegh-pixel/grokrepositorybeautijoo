@@ -2,7 +2,8 @@
 
 export type AuthTokens = {
   accessToken: string;
-  refreshToken: string;
+  /** Optional when refresh is httpOnly-cookie only */
+  refreshToken?: string;
 };
 
 export type AuthUserSummary = {
@@ -57,8 +58,8 @@ export type RegisterPayload = {
 export type LoginPayload = {
   phone: string;
   password: string;
-  /** Which separate account to enter (same phone may have both). */
-  accountType: AccountType;
+  /** Optional: which persona when separate accounts exist for same phone */
+  accountType?: AccountType;
 };
 
 export type RequestOtpPayload = {
