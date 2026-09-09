@@ -12,12 +12,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { diskStorage } from 'multer';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { MediaKind } from '@prisma/client';
 import { MediaService } from './media.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import * as os from 'os';
+import { randomBytes } from 'crypto';
 
 /** Broad accept at multer; MediaService sniffs magic bytes. */
 const MULTER_ACCEPT = new Set([
@@ -67,17 +69,23 @@ export class MediaController {
   })
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 50 * 1024 * 1024 },
+      storage: diskStorage({
+        destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+        filename: (_req, file, cb) => {
+          const safe = (file.originalname || 'upload').replace(/[^\w.\-]+/g, '_').slice(0, 80);
+          cb(null, `bj-${Date.now()}-${randomBytes(6).toString('hex')}-${safe}`);
+        },
+      }),
+      limits: { fileSize: Number.MAX_SAFE_INTEGER },
       fileFilter: (_req, file, cb) => {
         if (!file) {
-          return cb(new BadRequestException('فایل ارسال نشده است') as unknown as Error, false);
+          return cb(new BadRequestException('\u0641\u0627\u06cc\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a') as unknown as Error, false);
         }
         const mime = (file.mimetype || '').toLowerCase().trim();
         if (mime && !MULTER_ACCEPT.has(mime) && !mime.startsWith('image/')) {
           return cb(
             new BadRequestException(
-              'فرمت این فایل پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP، GIF یا HEIC مجاز است.',
+              '\u0641\u0631\u0645\u062a \u0627\u06cc\u0646 \u0641\u0627\u06cc\u0644 \u067e\u0634\u062a\u06cc\u0628\u0627\u0646\u06cc \u0646\u0645\u06cc\u200c\u0634\u0648\u062f. \u0641\u0642\u0637 JPG\u060c PNG\u060c WEBP\u060c GIF \u06cc\u0627 HEIC \u0645\u062c\u0627\u0632 \u0627\u0633\u062a.',
             ) as unknown as Error,
             false,
           );
@@ -90,7 +98,8 @@ export class MediaController {
     @CurrentUser('id') userId: string,
     @UploadedFile()
     file: {
-      buffer: Buffer;
+      buffer?: Buffer;
+      path?: string;
       mimetype: string;
       originalname: string;
       size: number;
@@ -98,20 +107,20 @@ export class MediaController {
     @Body('kind') kind: string,
     @Body('professionalServiceId') professionalServiceId?: string,
   ) {
-    if (!file?.buffer?.length) {
-      throw new BadRequestException('فایل ارسال نشده است');
+    if (!file || (!file.path && !file.buffer?.length)) {
+      throw new BadRequestException('\u0641\u0627\u06cc\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a');
     }
     if (!kind || typeof kind !== 'string') {
-      throw new BadRequestException('نوع تصویر مشخص نشده است');
+      throw new BadRequestException('\u0646\u0648\u0639 \u062a\u0635\u0648\u06cc\u0631 \u0645\u0634\u062e\u0635 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a');
     }
     const normalizedKind = kind.trim().toLowerCase() as MediaKind;
     const validKinds = Object.values(MediaKind) as string[];
     if (!validKinds.includes(normalizedKind)) {
-      throw new BadRequestException('نوع تصویر نامعتبر است. لطفاً دوباره تلاش کنید.');
+      throw new BadRequestException('\u0646\u0648\u0639 \u062a\u0635\u0648\u06cc\u0631 \u0646\u0627\u0645\u0639\u062a\u0628\u0631 \u0627\u0633\u062a. \u0644\u0637\u0641\u0627\u064b \u062f\u0648\u0628\u0627\u0631\u0647 \u062a\u0644\u0627\u0634 \u06a9\u0646\u06cc\u062f.');
     }
 
     this.logger.log(
-      `upload user=${userId} kind=${normalizedKind} mime=${file.mimetype || '(empty)'} size=${file.size}`,
+      `upload user=${userId} kind=${normalizedKind} mime=${file.mimetype || '(empty)'} size=${file.size} disk=${Boolean(file.path)}`,
     );
 
     try {
