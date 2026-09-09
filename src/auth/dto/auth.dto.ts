@@ -66,7 +66,9 @@ export class VerifyOtpDto {
 }
 
 export class RefreshDto {
-  @ApiProperty()
+  /** Optional when refresh token is sent via httpOnly cookie */
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  refreshToken!: string;
+  refreshToken?: string;
 }
