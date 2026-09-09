@@ -48,7 +48,7 @@ export class AvailabilityService {
     const dayOfWeek = DAY_MAP[dow];
 
     const hours = await this.prisma.workingHour.findMany({
-      where: { professionalId, dayOfWeek, isActive: true },
+      where: { professionalId, dayOfWeek, isActive: true, isClosed: false },
       include: { breaks: true },
     });
     if (hours.length === 0) return { date: dateStr, slots: [] };
