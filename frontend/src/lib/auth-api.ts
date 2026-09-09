@@ -36,20 +36,16 @@ export const authApi = {
     });
   },
 
-  refresh(refreshToken: string) {
-    return apiClient.post<AuthTokens>(
-      '/auth/refresh',
-      { refreshToken },
-      { skipRefresh: true },
-    );
+  /** Cookie is sent automatically (credentials: include). No body token. */
+  refresh() {
+    return apiClient.post<AuthTokens>('/auth/refresh', {}, { skipRefresh: true });
   },
 
-  logout(refreshToken: string) {
-    return apiClient.post<{ message: string }>(
-      '/auth/logout',
-      { refreshToken },
-      { skipRefresh: true },
-    );
+  /** Cookie is sent automatically; backend clears httpOnly cookie. */
+  logout() {
+    return apiClient.post<{ message: string }>('/auth/logout', {}, {
+      skipRefresh: true,
+    });
   },
 
   me(token?: string | null) {

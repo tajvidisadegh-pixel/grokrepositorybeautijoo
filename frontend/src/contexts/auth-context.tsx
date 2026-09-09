@@ -10,10 +10,10 @@ import {
   type ReactNode,
 } from 'react';
 import { authApi } from '@/lib/auth-api';
+import { tryRefresh } from '@/lib/api';
 import {
   clearTokens,
   getAccessToken,
-  getRefreshToken,
   setTokens,
 } from '@/lib/auth-storage';
 import type { AccountType, AuthMeResponse } from '@/types/auth';
@@ -55,32 +55,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthMeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /**
+   * Bootstrap session:
+   * 1) Use in-memory access token if present
+   * 2) Otherwise silent refresh via httpOnly cookie (survives F5)
+   * 3) Load /auth/me
+   */
   const reload = useCallback(async () => {
-    const token = getAccessToken();
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
     try {
-      const me = await authApi.me(token);
-      setUser(me);
-    } catch {
-      const refresh = getRefreshToken();
-      if (!refresh) {
-        clearTokens();
+      let token = getAccessToken();
+
+      if (!token && typeof window !== 'undefined') {
+        token = await tryRefresh();
+      }
+
+      if (!token) {
         setUser(null);
-        setLoading(false);
         return;
       }
+
       try {
-        const tokens = await authApi.refresh(refresh);
-        setTokens(tokens.accessToken, tokens.refreshToken);
-        const me = await authApi.me(tokens.accessToken);
+        const me = await authApi.me(token);
         setUser(me);
       } catch {
-        clearTokens();
-        setUser(null);
+        const fresh = await tryRefresh();
+        if (!fresh) {
+          clearTokens();
+          setUser(null);
+          return;
+        }
+        try {
+          const me = await authApi.me(fresh);
+          setUser(me);
+        } catch {
+          clearTokens();
+          setUser(null);
+        }
       }
     } finally {
       setLoading(false);
@@ -88,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    reload();
+    void reload();
   }, [reload]);
 
   const loginWithPassword = useCallback(
@@ -118,7 +129,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const requestOtp = useCallback(
-    async (phone: string, purpose = 'login', accountType: AccountType = 'customer') => {
+    async (
+      phone: string,
+      purpose = 'login',
+      accountType: AccountType = 'customer',
+    ) => {
       const res = await authApi.requestOtp({ phone, purpose, accountType });
       return { expiresIn: res.expiresIn };
     },
@@ -141,13 +156,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    const refresh = getRefreshToken();
-    if (refresh) {
-      try {
-        await authApi.logout(refresh);
-      } catch {
-        /* ignore network errors on logout */
-      }
+    try {
+      await authApi.logout();
+    } catch {
+      /* ignore network errors on logout */
     }
     clearTokens();
     setUser(null);
@@ -158,9 +170,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user?.roles?.length) return false;
       const need = Array.isArray(role) ? role : [role];
       if (need.some((r) => user.roles.includes(r))) return true;
-      // SUPER_ADMIN and legacy `admin` are equivalent privileged roles
       const privileged = new Set(['SUPER_ADMIN', 'admin']);
-      if (need.some((r) => privileged.has(r)) && user.roles.some((r) => privileged.has(r))) {
+      if (
+        need.some((r) => privileged.has(r)) &&
+        user.roles.some((r) => privileged.has(r))
+      ) {
         return true;
       }
       return false;
