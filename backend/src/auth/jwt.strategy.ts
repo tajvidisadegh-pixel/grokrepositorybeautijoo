@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { userAuthCache, type CachedAuthUser } from './user-auth-cache';
 
 export interface JwtPayload {
   sub: string;
@@ -31,7 +32,16 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: JwtPayload) {
+  async validate(payload: JwtPayload): Promise<CachedAuthUser> {
+    if (!payload?.sub) {
+      throw new UnauthorizedException();
+    }
+
+    const cached = userAuthCache.get(payload.sub);
+    if (cached) {
+      return cached;
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: {
@@ -50,7 +60,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         professional: { select: { id: true, status: true, slug: true } },
       },
     });
+
     if (!user || user.status !== 'active') {
+      userAuthCache.invalidate(payload.sub);
       throw new UnauthorizedException();
     }
 
@@ -66,7 +78,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       }
     }
 
-    return {
+    const authUser: CachedAuthUser = {
       id: user.id,
       phone: user.phone,
       roles,
@@ -75,5 +87,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       professionalId: user.professional?.id ?? null,
       professionalStatus: user.professional?.status ?? null,
     };
+
+    userAuthCache.set(user.id, authUser);
+    return authUser;
   }
 }
