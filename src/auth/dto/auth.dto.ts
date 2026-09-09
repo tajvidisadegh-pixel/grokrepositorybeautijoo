@@ -82,8 +82,10 @@ export class VerifyOtpDto {
   accountType?: 'customer' | 'professional';
 }
 
+/** Refresh token is primarily read from httpOnly cookie. Body is optional (dev only). */
 export class RefreshDto {
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored in production; use httpOnly cookie' })
+  @IsOptional()
   @IsString()
-  refreshToken!: string;
+  refreshToken?: string;
 }
