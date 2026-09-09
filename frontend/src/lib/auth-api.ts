@@ -36,18 +36,20 @@ export const authApi = {
     });
   },
 
-  refresh(refreshToken: string) {
+  /** Uses httpOnly refresh cookie (credentials: include). */
+  refresh() {
     return apiClient.post<AuthTokens>(
       '/auth/refresh',
-      { refreshToken },
+      {},
       { skipRefresh: true },
     );
   },
 
-  logout(refreshToken: string) {
+  /** Clears server-side refresh + cookie. */
+  logout() {
     return apiClient.post<{ message: string }>(
       '/auth/logout',
-      { refreshToken },
+      {},
       { skipRefresh: true },
     );
   },

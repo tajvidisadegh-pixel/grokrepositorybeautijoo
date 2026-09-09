@@ -1,13 +1,12 @@
 /**
  * Centralized API client for Beautijoo backend.
  * Base URL: NEXT_PUBLIC_API_URL (must include /api/v1)
- * Auth: Bearer access token; auto-refresh on 401 once.
+ * Auth: Bearer access token (memory); refresh via httpOnly cookie + credentials.
  */
 
 import {
   clearTokens,
   getAccessToken,
-  getRefreshToken,
   setTokens,
 } from './auth-storage';
 
@@ -74,6 +73,8 @@ async function rawFetch(
     body: body !== undefined ? JSON.stringify(body) : undefined,
     cache,
     next,
+    // Required for httpOnly refresh cookie on cross-origin API
+    credentials: 'include',
   });
 }
 
@@ -82,12 +83,11 @@ let refreshPromise: Promise<string | null> | null = null;
 async function tryRefresh(): Promise<string | null> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
-    const refresh = getRefreshToken();
-    if (!refresh) return null;
     try {
+      // Cookie is sent automatically; no refresh token in body
       const res = await rawFetch('/auth/refresh', {
         method: 'POST',
-        body: { refreshToken: refresh },
+        body: {},
         skipRefresh: true,
       });
       const text = await res.text();
@@ -103,8 +103,12 @@ async function tryRefresh(): Promise<string | null> {
         clearTokens();
         return null;
       }
-      const tokens = data as { accessToken: string; refreshToken: string };
-      setTokens(tokens.accessToken, tokens.refreshToken);
+      const tokens = data as { accessToken?: string };
+      if (!tokens.accessToken) {
+        clearTokens();
+        return null;
+      }
+      setTokens(tokens.accessToken);
       return tokens.accessToken;
     } catch {
       clearTokens();
@@ -176,4 +180,4 @@ export const apiClient = {
     api<T>(path, { ...opts, method: 'DELETE' }),
 };
 
-export { API_URL };
+export { API_URL, tryRefresh };
