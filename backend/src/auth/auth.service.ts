@@ -11,7 +11,7 @@ import * as argon2 from 'argon2';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
-import { ProfessionalStatus } from '@prisma/client';
+import { AccountType, ProfessionalStatus } from '@prisma/client';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
 import { userAuthCache } from './user-auth-cache';
 
@@ -37,6 +37,11 @@ export class AuthService {
 
   private hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private resolveAccountType(raw?: string | null): AccountType {
+    if (raw === 'professional') return AccountType.professional;
+    return AccountType.customer;
   }
 
   private async issueTokens(userId: string, phone: string | null) {
@@ -67,22 +72,29 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const rawRole = dto.role;
     if (rawRole === undefined || rawRole === null || rawRole === 'customer') {
-      // default
     } else if (rawRole !== 'professional') {
       throw new BadRequestException('نقش ثبت‌نام فقط customer یا professional مجاز است');
     }
 
-    const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
-    if (existing) throw new ConflictException('این شماره قبلاً ثبت شده است');
+    const accountType = this.resolveAccountType(rawRole);
+    const roleName = accountType === AccountType.professional ? 'professional' : 'customer';
+
+    const existing = await this.prisma.user.findFirst({
+      where: { phone: dto.phone, accountType },
+    });
+    if (existing) {
+      const label = roleName === 'professional' ? 'زیباگر' : 'مشتری';
+      throw new ConflictException(`این شماره قبلاً به‌عنوان ${label} ثبت شده است`);
+    }
 
     const passwordHash = await argon2.hash(dto.password);
-    const roleName = rawRole === 'professional' ? 'professional' : 'customer';
     const role = await this.prisma.role.findUniqueOrThrow({ where: { name: roleName } });
 
     const user = await this.prisma.user.create({
       data: {
         phone: dto.phone,
         passwordHash,
+        accountType,
         phoneVerified: false,
         profile: {
           create: { displayName: dto.displayName || dto.phone },
@@ -93,7 +105,7 @@ export class AuthService {
               professional: {
                 create: {
                   title: dto.displayName || 'زیباگر',
-                  slug: `pro-${dto.phone}`,
+                  slug: `pro-${dto.phone}-${Date.now().toString(36)}`,
                   status: ProfessionalStatus.draft,
                 },
               },
@@ -114,24 +126,11 @@ export class AuthService {
     };
   }
 
-  async enableCustomerRole(userId: string) {
-    const customerRole = await this.prisma.role.findUniqueOrThrow({
-      where: { name: 'customer' },
-    });
-    await this.prisma.userRole.upsert({
-      where: {
-        userId_roleId: { userId, roleId: customerRole.id },
-      },
-      create: { userId, roleId: customerRole.id },
-      update: {},
-    });
-    userAuthCache.invalidate(userId);
-    return { message: 'نقش مشتری فعال شد' };
-  }
-
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
+    const accountType = this.resolveAccountType(dto.accountType);
+
+    const user = await this.prisma.user.findFirst({
+      where: { phone: dto.phone, accountType },
       include: { userRoles: { include: { role: true } } },
     });
     if (!user || !user.passwordHash) {
@@ -141,19 +140,34 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
     if (user.status !== 'active') throw new UnauthorizedException('حساب غیرفعال است');
 
+    const roles = user.userRoles.map((r) => r.role.name);
+    if (accountType === AccountType.professional && !roles.includes('professional')) {
+      throw new UnauthorizedException('این حساب دسترسی پنل زیباگر ندارد');
+    }
+    if (accountType === AccountType.customer && !roles.includes('customer')) {
+      throw new UnauthorizedException('این حساب دسترسی پنل مشتری ندارد');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
     const tokens = await this.issueTokens(user.id, user.phone);
     return {
       user: {
         id: user.id,
         phone: user.phone,
-        roles: user.userRoles.map((r) => r.role.name),
+        roles,
       },
       ...tokens,
     };
   }
 
   async requestOtp(dto: RequestOtpDto) {
-    const purpose = dto.purpose || 'login';
+    const purposeBase = dto.purpose || 'login';
+    const accountType = this.resolveAccountType(dto.accountType);
+    const purpose = `${purposeBase}:${accountType}`;
     const ttl = this.config.get<number>('otpTtlSeconds') || 300;
     const cooldownSec = this.config.get<number>('otpCooldownSeconds') || 60;
     const maxPerHour = this.config.get<number>('otpMaxPerHour') || 3;
@@ -201,11 +215,7 @@ export class AuthService {
     }
 
     await this.prisma.otpCode.updateMany({
-      where: {
-        phone: dto.phone,
-        purpose,
-        usedAt: null,
-      },
+      where: { phone: dto.phone, purpose, usedAt: null },
       data: { usedAt: new Date() },
     });
 
@@ -214,12 +224,7 @@ export class AuthService {
     const expiresAt = new Date(now + ttl * 1000);
 
     await this.prisma.otpCode.create({
-      data: {
-        phone: dto.phone,
-        codeHash,
-        purpose,
-        expiresAt,
-      },
+      data: { phone: dto.phone, codeHash, purpose, expiresAt },
     });
 
     await this.sms.sendOtp(dto.phone, code);
@@ -227,7 +232,9 @@ export class AuthService {
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const purpose = dto.purpose || 'login';
+    const purposeBase = dto.purpose || 'login';
+    const accountType = this.resolveAccountType(dto.accountType);
+    const purpose = `${purposeBase}:${accountType}`;
     const otp = await this.prisma.otpCode.findFirst({
       where: {
         phone: dto.phone,
@@ -273,18 +280,24 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    let user = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
+    let user = await this.prisma.user.findFirst({
+      where: { phone: dto.phone, accountType },
       include: { userRoles: { include: { role: true } } },
     });
 
     if (!user) {
+      if (accountType !== AccountType.customer) {
+        throw new UnauthorizedException(
+          'حساب زیباگر برای این شماره وجود ندارد. ابتدا به‌عنوان زیباگر ثبت‌نام کنید.',
+        );
+      }
       const customerRole = await this.prisma.role.findUniqueOrThrow({
         where: { name: 'customer' },
       });
       user = await this.prisma.user.create({
         data: {
           phone: dto.phone,
+          accountType: AccountType.customer,
           phoneVerified: true,
           profile: { create: { displayName: dto.phone } },
           userRoles: { create: { roleId: customerRole.id } },
@@ -294,7 +307,7 @@ export class AuthService {
     } else if (!user.phoneVerified) {
       user = await this.prisma.user.update({
         where: { id: user.id },
-        data: { phoneVerified: true },
+        data: { phoneVerified: true, lastLoginAt: new Date() },
         include: { userRoles: { include: { role: true } } },
       });
     }
@@ -347,7 +360,7 @@ export class AuthService {
       });
       if (payload?.sub) userAuthCache.invalidate(payload.sub);
     } catch {
-      /* ignore invalid token on logout */
+      /* ignore */
     }
     const hash = this.hashToken(refreshToken);
     await this.prisma.refreshToken.updateMany({
@@ -372,6 +385,7 @@ export class AuthService {
       phone: user.phone,
       email: user.email,
       status: user.status,
+      accountType: user.accountType,
       phoneVerified: user.phoneVerified,
       profile: user.profile,
       roles: user.userRoles.map((r) => r.role.name),
