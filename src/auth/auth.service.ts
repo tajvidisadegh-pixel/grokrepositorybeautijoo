@@ -11,7 +11,7 @@ import * as argon2 from 'argon2';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
-import { ProfessionalStatus } from '@prisma/client';
+import { AccountType, ProfessionalStatus } from '@prisma/client';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
 
 function ttlToMs(ttl: string | undefined, fallbackMs: number): number {
@@ -63,28 +63,41 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  private resolveAccountType(raw?: string | null): AccountType {
+    if (raw === 'professional') return AccountType.professional;
+    return AccountType.customer;
+  }
+
   async register(dto: RegisterDto) {
     const rawRole = dto.role;
     if (rawRole === undefined || rawRole === null || rawRole === 'customer') {
-      // default
+      // default customer
     } else if (rawRole !== 'professional') {
       throw new BadRequestException('نقش ثبت‌نام فقط customer یا professional مجاز است');
     }
+    const accountType = this.resolveAccountType(rawRole);
     const requestedRole: 'customer' | 'professional' =
-      rawRole === 'professional' ? 'professional' : 'customer';
+      accountType === AccountType.professional ? 'professional' : 'customer';
 
-    const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
-    if (existing) throw new ConflictException('این شماره قبلاً ثبت شده است');
+    const existingSameType = await this.prisma.user.findFirst({
+      where: { phone: dto.phone, accountType },
+    });
+    if (existingSameType) {
+      const label = accountType === AccountType.professional ? 'زیباگر' : 'مشتری';
+      throw new ConflictException(`این شماره قبلاً به‌عنوان ${label} ثبت شده است`);
+    }
 
     const passwordHash = await argon2.hash(dto.password);
-    const customerRole = await this.prisma.role.findUnique({ where: { name: 'customer' } });
-    if (!customerRole) throw new BadRequestException('نقش مشتری تعریف نشده — seed را اجرا کنید');
 
     if (requestedRole === 'customer') {
+      const customerRole = await this.prisma.role.findUnique({ where: { name: 'customer' } });
+      if (!customerRole) throw new BadRequestException('نقش مشتری تعریف نشده — seed را اجرا کنید');
+
       const user = await this.prisma.user.create({
         data: {
           phone: dto.phone,
           passwordHash,
+          accountType: AccountType.customer,
           phoneVerified: false,
           profile: {
             create: {
@@ -115,6 +128,7 @@ export class AuthService {
         data: {
           phone: dto.phone,
           passwordHash,
+          accountType: AccountType.professional,
           phoneVerified: false,
           profile: {
             create: {
@@ -122,9 +136,7 @@ export class AuthService {
             },
           },
           userRoles: {
-            create: [
-              { roleId: proRole.id },
-            ],
+            create: [{ roleId: proRole.id }],
           },
           professional: {
             create: {
@@ -153,41 +165,28 @@ export class AuthService {
     };
   }
 
-
-  /**
-   * Enable independent customer role for an existing user (e.g. professional
-   * who later wants a customer account on the same phone). Does not remove
-   * other roles. Idempotent.
-   */
-  async enableCustomerRole(userId: string) {
-    const customerRole = await this.prisma.role.findUnique({ where: { name: 'customer' } });
-    if (!customerRole) throw new BadRequestException('نقش مشتری تعریف نشده — seed را اجرا کنید');
-    await this.prisma.userRole.upsert({
-      where: { userId_roleId: { userId, roleId: customerRole.id } },
-      update: {},
-      create: { userId, roleId: customerRole.id },
-    });
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      include: { userRoles: { include: { role: true } } },
-    });
-    return {
-      id: user.id,
-      phone: user.phone,
-      roles: user.userRoles.map((r) => r.role.name),
-    };
-  }
-
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
+    const accountType = this.resolveAccountType(dto.accountType);
+
+    const user = await this.prisma.user.findFirst({
+      where: { phone: dto.phone, accountType },
       include: { userRoles: { include: { role: true } } },
     });
-    if (!user || !user.passwordHash) throw new UnauthorizedException('اطلاعات ورود نادرست است');
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('اطلاعات ورود نادرست است');
+    }
     if (user.status !== 'active') throw new UnauthorizedException('حساب غیرفعال است');
 
     const ok = await argon2.verify(user.passwordHash, dto.password);
     if (!ok) throw new UnauthorizedException('اطلاعات ورود نادرست است');
+
+    const roleNames = user.userRoles.map((r) => r.role.name);
+    if (accountType === AccountType.professional && !roleNames.includes('professional')) {
+      throw new UnauthorizedException('این حساب دسترسی پنل زیباگر ندارد');
+    }
+    if (accountType === AccountType.customer && !roleNames.includes('customer')) {
+      throw new UnauthorizedException('این حساب دسترسی پنل مشتری ندارد');
+    }
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -199,7 +198,7 @@ export class AuthService {
       user: {
         id: user.id,
         phone: user.phone,
-        roles: user.userRoles.map((r) => r.role.name),
+        roles: roleNames,
       },
       ...tokens,
     };
@@ -207,15 +206,17 @@ export class AuthService {
 
   async requestOtp(dto: RequestOtpDto) {
     const purpose = dto.purpose || 'login';
+    const accountType = this.resolveAccountType(dto.accountType);
+    const scopedPurpose = `${purpose}:${accountType}`;
+
     const ttl = this.config.get<number>('otpTtlSeconds') || 300;
     const cooldownSec = this.config.get<number>('otpCooldownSeconds') || 60;
     const maxPerHour = this.config.get<number>('otpMaxPerHour') || 3;
     const maxPerDay = this.config.get<number>('otpMaxPerDay') || 8;
     const now = Date.now();
 
-    // 1) Cooldown: no new code within N seconds of the last one for same phone+purpose
     const last = await this.prisma.otpCode.findFirst({
-      where: { phone: dto.phone, purpose },
+      where: { phone: dto.phone, purpose: scopedPurpose },
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
     });
@@ -229,11 +230,10 @@ export class AuthService {
       }
     }
 
-    // 2) Hourly limit per phone+purpose
     const hourCount = await this.prisma.otpCode.count({
       where: {
         phone: dto.phone,
-        purpose,
+        purpose: scopedPurpose,
         createdAt: { gte: new Date(now - 60 * 60 * 1000) },
       },
     });
@@ -243,7 +243,6 @@ export class AuthService {
       );
     }
 
-    // 3) Daily limit per phone (all purposes) — protects SMS cost
     const dayCount = await this.prisma.otpCode.count({
       where: {
         phone: dto.phone,
@@ -256,11 +255,10 @@ export class AuthService {
       );
     }
 
-    // Invalidate any still-valid unused codes for this phone+purpose
     await this.prisma.otpCode.updateMany({
       where: {
         phone: dto.phone,
-        purpose,
+        purpose: scopedPurpose,
         usedAt: null,
         expiresAt: { gt: new Date() },
       },
@@ -275,7 +273,7 @@ export class AuthService {
       data: {
         phone: dto.phone,
         codeHash,
-        purpose,
+        purpose: scopedPurpose,
         expiresAt,
       },
     });
@@ -286,10 +284,13 @@ export class AuthService {
 
   async verifyOtp(dto: VerifyOtpDto) {
     const purpose = dto.purpose || 'login';
+    const accountType = this.resolveAccountType(dto.accountType);
+    const scopedPurpose = `${purpose}:${accountType}`;
+
     const otp = await this.prisma.otpCode.findFirst({
       where: {
         phone: dto.phone,
-        purpose,
+        purpose: scopedPurpose,
         usedAt: null,
         expiresAt: { gt: new Date() },
       },
@@ -297,10 +298,8 @@ export class AuthService {
     });
     if (!otp) throw new UnauthorizedException('کد نامعتبر یا منقضی شده است');
 
-    // Default 3 attempts (was 5) — stronger against brute-force
     const maxAttempts = this.config.get<number>('otpMaxAttempts') || 3;
     if (otp.attempts >= maxAttempts) {
-      // Permanently invalidate this code so retries cannot continue
       await this.prisma.otpCode.update({
         where: { id: otp.id },
         data: { usedAt: new Date() },
@@ -333,16 +332,24 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    let user = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
+    let user = await this.prisma.user.findFirst({
+      where: { phone: dto.phone, accountType },
       include: { userRoles: { include: { role: true } } },
     });
 
     if (!user) {
-      const customerRole = await this.prisma.role.findUniqueOrThrow({ where: { name: 'customer' } });
+      if (accountType !== AccountType.customer) {
+        throw new UnauthorizedException(
+          'حساب زیباگر برای این شماره وجود ندارد. ابتدا به‌عنوان زیباگر ثبت‌نام کنید.',
+        );
+      }
+      const customerRole = await this.prisma.role.findUniqueOrThrow({
+        where: { name: 'customer' },
+      });
       user = await this.prisma.user.create({
         data: {
           phone: dto.phone,
+          accountType: AccountType.customer,
           phoneVerified: true,
           profile: { create: { displayName: dto.phone } },
           userRoles: { create: { roleId: customerRole.id } },
@@ -419,6 +426,7 @@ export class AuthService {
       phone: user.phone,
       email: user.email,
       status: user.status,
+      accountType: user.accountType,
       phoneVerified: user.phoneVerified,
       profile: user.profile,
       roles: user.userRoles.map((r) => r.role.name),
