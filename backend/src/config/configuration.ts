@@ -14,22 +14,22 @@ const BANNED_SECRETS = new Set([
 
 const MIN_SECRET_LEN = 32;
 
+/** Default origins only for local development. Never used in production. */
+const DEV_CORS_DEFAULTS = [
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+  'http://localhost:3000',
+];
+
 function isWeakSecret(value: string | undefined): boolean {
   if (!value) return true;
   const v = value.trim();
   if (v.length < MIN_SECRET_LEN) return true;
   if (BANNED_SECRETS.has(v)) return true;
-  // Reject all-same-character or obvious sequential placeholders
   if (/^(.)\1+$/.test(v)) return true;
   return false;
 }
 
-/**
- * Resolve a JWT secret.
- * - Production: required from env, min 32 chars, not in ban list.
- * - Development/test: use env if strong; otherwise generate a per-process random secret
- *   (tokens do not survive restart — acceptable for local dev only).
- */
 function resolveJwtSecret(
   envValue: string | undefined,
   label: string,
@@ -46,7 +46,6 @@ function resolveJwtSecret(
     );
   }
 
-  // Dev/test only: ephemeral random secret
   const generated = randomBytes(48).toString('hex');
   // eslint-disable-next-line no-console
   console.warn(
@@ -54,6 +53,54 @@ function resolveJwtSecret(
       `Tokens will be invalid after restart. Set a stable secret in .env for persistent sessions.`,
   );
   return generated;
+}
+
+/**
+ * Resolve allowed CORS origins.
+ * - Production: CORS_ORIGINS required (comma-separated absolute origins).
+ *   localhost-only values are rejected so a misconfigured deploy fails fast.
+ * - Development: CORS_ORIGINS if set, otherwise localhost defaults.
+ */
+function resolveCorsOrigins(isProd: boolean): string[] {
+  const raw = (process.env.CORS_ORIGINS || '').trim();
+  const parsed = raw
+    ? raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+
+  if (isProd) {
+    if (parsed.length === 0) {
+      throw new Error(
+        'FATAL: CORS_ORIGINS is required in production. ' +
+          'Example: CORS_ORIGINS=https://beautijoo.ir,https://www.beautijoo.ir',
+      );
+    }
+    const onlyLocalhost = parsed.every(
+      (o) =>
+        o.startsWith('http://localhost') ||
+        o.startsWith('http://127.0.0.1') ||
+        o.startsWith('https://localhost') ||
+        o.startsWith('https://127.0.0.1'),
+    );
+    if (onlyLocalhost) {
+      throw new Error(
+        'FATAL: CORS_ORIGINS in production must include at least one non-localhost origin. ' +
+          `Got: ${parsed.join(', ')}`,
+      );
+    }
+    for (const origin of parsed) {
+      if (!/^https?:\/\//i.test(origin)) {
+        throw new Error(
+          `FATAL: Invalid CORS origin "${origin}". Use absolute URLs (https://example.com).`,
+        );
+      }
+    }
+    return parsed;
+  }
+
+  return parsed.length > 0 ? parsed : DEV_CORS_DEFAULTS;
 }
 
 export default () => {
@@ -85,6 +132,8 @@ export default () => {
     );
   }
 
+  const corsOrigins = resolveCorsOrigins(isProd);
+
   return {
     nodeEnv,
     port: parseInt(process.env.PORT || '3000', 10),
@@ -95,10 +144,7 @@ export default () => {
       accessTtl: process.env.JWT_ACCESS_TTL || '15m',
       refreshTtl: process.env.JWT_REFRESH_TTL || '7d',
     },
-    corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:3001')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+    corsOrigins,
     smsProvider: process.env.SMS_PROVIDER || 'mock',
     /** Payment gateway: "mock" | "zarinpal" */
     paymentProvider: process.env.PAYMENT_PROVIDER || 'mock',
