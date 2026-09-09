@@ -54,7 +54,9 @@ describe('Bookings race / overlap (e2e)', () => {
       data: { status: ProfessionalStatus.approved, publishedAt: new Date() },
     });
 
-    let category = await prisma.serviceCategory.findFirst({ where: { parentId: null } });
+    let category = await prisma.serviceCategory.findFirst({
+      where: { parentId: null },
+    });
     if (!category) {
       category = await prisma.serviceCategory.create({
         data: {
@@ -85,7 +87,6 @@ describe('Bookings race / overlap (e2e)', () => {
       },
     });
 
-    // Explicit days only (avoid enum key/value duplicates from Object.values)
     const days: DayOfWeek[] = [
       DayOfWeek.saturday,
       DayOfWeek.sunday,
@@ -108,17 +109,27 @@ describe('Bookings race / overlap (e2e)', () => {
       });
     }
 
-    // Pick a real available slot 2 days ahead (Tehran calendar)
-    const probe = new Date(Date.now() + 2 * 86_400_000);
-    const dateStr = tehranDateStr(probe);
-    const avail = await request(app.getHttpServer())
-      .get(`/api/v1/professionals/${pro!.id}/availability`)
-      .query({ date: dateStr, durationMin: '30' });
-    expect(avail.status).toBe(200);
-    const slots = (avail.body?.slots || []) as { start: string; end: string }[];
-    // Fallback fixed Tehran wall time inside working hours if API returns empty
-    const startHhmm = slots[0]?.start || '10:00';
-    const start = tehranLocalToUtc(dateStr, startHhmm);
+    // Find a real available slot within the next week (must match availability API)
+    let start: Date | null = null;
+    for (let addDays = 1; addDays <= 8; addDays++) {
+      const probe = new Date(Date.now() + addDays * 86_400_000);
+      const dateStr = tehranDateStr(probe);
+      const avail = await request(app.getHttpServer())
+        .get(`/api/v1/professionals/${pro!.id}/availability`)
+        .query({ date: dateStr, durationMin: '30' });
+      expect(avail.status).toBe(200);
+      const slots = (avail.body?.slots || []) as { start: string; end: string }[];
+      if (slots.length > 0) {
+        const candidate = tehranLocalToUtc(dateStr, slots[0].start);
+        if (candidate.getTime() > Date.now() + 60_000) {
+          start = candidate;
+          break;
+        }
+      }
+    }
+    if (!start) {
+      throw new Error(`No future availability slots found for pro=${pro!.id}`);
+    }
 
     return { pro, service, start };
   }
@@ -132,6 +143,7 @@ describe('Bookings race / overlap (e2e)', () => {
       role: 'customer',
     });
     expect([200, 201]).toContain(reg.status);
+    expect(reg.body.accessToken).toBeTruthy();
     return reg.body.accessToken as string;
   }
 
@@ -151,7 +163,11 @@ describe('Bookings race / overlap (e2e)', () => {
       .set('Authorization', `Bearer ${token1}`)
       .send(body);
 
-    expect(first.status).toBeLessThan(300);
+    if (first.status >= 300) {
+      throw new Error(
+        `first booking failed status=${first.status} body=${JSON.stringify(first.body)} start=${body.startAt}`,
+      );
+    }
 
     const second = await request(app.getHttpServer())
       .post('/api/v1/bookings')
@@ -184,6 +200,7 @@ describe('Bookings race / overlap (e2e)', () => {
     const statuses = [a.status, b.status];
     const successes = statuses.filter((s) => s < 300).length;
     expect(successes).toBeLessThanOrEqual(1);
+    expect(successes).toBeGreaterThanOrEqual(1);
 
     const count = await prisma.booking.count({
       where: {
@@ -191,6 +208,6 @@ describe('Bookings race / overlap (e2e)', () => {
         status: { in: ['pending', 'confirmed'] },
       },
     });
-    expect(count).toBeLessThanOrEqual(1);
+    expect(count).toBe(1);
   });
 });
