@@ -1,1 +1,59 @@
-placeholder
+name: Apply step6 bookings service
+on:
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore full bookings.service from last known-good + step6 patch
+        run: |
+          set -e
+          # Base: last complete service before incomplete stub (from main history before 25d93bb)
+          git fetch --depth=50 origin main
+          git show 3bade8f3298978e8918df49ef2f6386d55fc5d8b:backend/src/bookings/bookings.service.ts > /tmp/bs.ts || \
+            git show 40d3bd67dc41cec363a149182e3ee0b15d5cb3d5:backend/src/bookings/bookings.service.ts > /tmp/bs.ts
+          wc -c /tmp/bs.ts
+          grep -q 'FOR UPDATE' /tmp/bs.ts
+          python3 <<'PY'
+          from pathlib import Path
+          t = Path('/tmp/bs.ts').read_text()
+          if 'NotificationsService' not in t:
+              t = t.replace(
+                  "import { AvailabilityService } from '../availability/availability.service';\n",
+                  "import { AvailabilityService } from '../availability/availability.service';\n"
+                  "import { NotificationsService } from '../notifications/notifications.service';\n",
+              )
+              t = t.replace(
+                  'import { BookingStatus, Prisma } from \'@prisma/client\';',
+                  'import { BookingStatus, NotificationType, Prisma } from \'@prisma/client\';',
+              )
+              t = t.replace(
+                  '''  constructor(\n    private readonly prisma: PrismaService,\n    private readonly availability: AvailabilityService,\n  ) {}''',
+                  '''  constructor(\n    private readonly prisma: PrismaService,\n    private readonly availability: AvailabilityService,\n    private readonly notifications: NotificationsService,\n  ) {}''',
+              )
+          if 'notifyBookingTransition' not in t:
+              # inject after successful create
+              marker = '''      return booking;\n    } catch (e: unknown) {'''
+              inject = '''      await this.notifications.notify({\n        userId: pro.userId,\n        type: NotificationType.booking_request,\n        title: 'درخواست رزرو جدید',\n        body: 'یک مشتری درخواست رزرو جدید ثبت کرد. جزئیات را در پنل رزروها ببینید.',\n        data: { bookingId: booking.id, customerId, professionalId: data.professionalId },\n        sms: true,\n      });\n      await this.notifications.notify({\n        userId: customerId,\n        type: NotificationType.booking_request,\n        title: 'رزرو ثبت شد',\n        body: 'درخواست رزرو شما ثبت شد و در انتظار تأیید زیباگر است.',\n        data: { bookingId: booking.id, professionalId: data.professionalId },\n        sms: false,\n      });\n      return booking;\n    } catch (e: unknown) {'''
+              if marker not in t:
+                  raise SystemExit('create marker missing')
+              t = t.replace(marker, inject, 1)
+              old = '''    return this.prisma.$transaction(async (tx) => {\n      const updated = await tx.booking.update({ where: { id }, data });\n      await tx.auditLog.create({\n        data: {\n          actorId: userId,\n          action: `booking.${action}`,\n          entityType: 'booking',\n          entityId: id,\n          before: { status: b.status } as Prisma.InputJsonValue,\n          after: { status: newStatus } as Prisma.InputJsonValue,\n        },\n      });\n      return updated;\n    });\n  }\n}'''
+              new = '''    const updated = await this.prisma.$transaction(async (tx) => {\n      const row = await tx.booking.update({ where: { id }, data });\n      await tx.auditLog.create({\n        data: {\n          actorId: userId,\n          action: `booking.${action}`,\n          entityType: 'booking',\n          entityId: id,\n          before: { status: b.status } as Prisma.InputJsonValue,\n          after: { status: newStatus } as Prisma.InputJsonValue,\n        },\n      });\n      return row;\n    });\n\n    const bookingPro = await this.prisma.professional.findUnique({\n      where: { id: b.professionalId },\n      select: { userId: true },\n    });\n\n    await this.notifyBookingTransition({\n      action,\n      bookingId: id,\n      customerId: b.customerId,\n      professionalUserId: bookingPro?.userId,\n      actorUserId: userId,\n      reason,\n    });\n\n    return updated;\n  }\n\n  private async notifyBookingTransition(opts: {\n    action: \'confirm\' | \'reject\' | \'cancel\' | \'complete\';\n    bookingId: string;\n    customerId: string;\n    professionalUserId?: string | null;\n    actorUserId: string;\n    reason?: string;\n  }) {\n    const { action, bookingId, customerId, professionalUserId, reason } = opts;\n    const reasonSuffix = reason?.trim() ? ` دلیل: ${reason.trim()}` : \'\';\n    const map: Record<\n      typeof action,\n      { type: import(\'@prisma/client\').NotificationType; customerTitle: string; customerBody: string; proTitle: string; proBody: string }\n    > = {\n      confirm: {\n        type: NotificationType.booking_confirmed,\n        customerTitle: \'رزرو تأیید شد\',\n        customerBody: \'رزرو شما توسط زیباگر تأیید شد.\',\n        proTitle: \'رزرو تأیید شد\',\n        proBody: \'رزرو با موفقیت تأیید شد.\',\n      },\n      reject: {\n        type: NotificationType.booking_rejected,\n        customerTitle: \'رزرو رد شد\',\n        customerBody: `درخواست رزرو شما رد شد.${reasonSuffix}`,\n        proTitle: \'رزرو رد شد\',\n        proBody: \'رزرو رد شد.\',\n      },\n      cancel: {\n        type: NotificationType.booking_cancelled,\n        customerTitle: \'رزرو لغو شد\',\n        customerBody: `رزرو لغو شد.${reasonSuffix}`,\n        proTitle: \'رزرو لغو شد\',\n        proBody: `یک رزرو لغو شد.${reasonSuffix}`,\n      },\n      complete: {\n        type: NotificationType.booking_completed,\n        customerTitle: \'رزرو تکمیل شد\',\n        customerBody: \'رزرو شما تکمیل شد. از خدمات زیباجو سپاسگزاریم.\',\n        proTitle: \'رزرو تکمیل شد\',\n        proBody: \'رزرو به‌عنوان تکمیل‌شده ثبت شد.\',\n      },\n    };\n    const cfg = map[action];\n    const data = { bookingId, action };\n    if (customerId) {\n      await this.notifications.notify({\n        userId: customerId,\n        type: cfg.type,\n        title: cfg.customerTitle,\n        body: cfg.customerBody,\n        data,\n        sms: true,\n      });\n    }\n    if (professionalUserId) {\n      await this.notifications.notify({\n        userId: professionalUserId,\n        type: cfg.type,\n        title: cfg.proTitle,\n        body: cfg.proBody,\n        data,\n        sms: action === \'cancel\' || action === \'complete\',\n      });\n    }\n  }\n}\n'''
+              if old not in t:
+                  raise SystemExit('transition block missing')
+              t = t.replace(old, new, 1)
+          Path('backend/src/bookings/bookings.service.ts').write_text(t)
+          assert 'notifyBookingTransition' in t and 'FOR UPDATE' in t
+          print('patched ok', len(t))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "Beautijoo Bot"
+          git config user.email "bot@beautijoo.ir"
+          git add backend/src/bookings/bookings.service.ts
+          git commit -m "feat(bookings): step6 full notify+SMS on lifecycle (complete service)" || exit 0
+          git push origin main
