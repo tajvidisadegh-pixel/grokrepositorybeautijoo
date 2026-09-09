@@ -20,6 +20,4 @@ export function clearTokens(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
-  // Legacy client-side super-admin flag (must never grant access)
-  localStorage.removeItem('bj_super_admin_active');
 }

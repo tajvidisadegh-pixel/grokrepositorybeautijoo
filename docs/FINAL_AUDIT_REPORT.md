@@ -9,11 +9,14 @@ See project artifacts for full report. Summary:
 - Production ZIPs: NOT created until BLOCKED items clear
 - GitHub tree incomplete vs full Phase 1-12 code due to workspace session wipes
 
-## Dev seed credentials (NOT for production)
-- Admin: 09120000000 / Admin@12345
-- Zibagar: 09121111111 / Zibagar@123
-- Customer: 09123333333 / Customer@123
-- Professional slug: sara-mohammadi
+## Dev seed credentials
+
+**DEV ONLY — never use in production. Rotate immediately after any production seed.**
+
+Credentials are defined only inside `backend/prisma/seed.ts` (not repeated here).
+Use `backend/prisma/seed-super-admin.cjs` with env vars to promote a real SUPER_ADMIN account.
+
+Do **not** put phone/password in frontend code, docs, or public issues.
 
 ## Unblock requirements
 1. PostgreSQL 15+
