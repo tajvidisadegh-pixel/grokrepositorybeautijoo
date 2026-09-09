@@ -9,7 +9,7 @@ export interface PaymentInitResult {
 export interface PaymentVerifyResult {
   success: boolean;
   amount?: number;
-  /** Gateway reference id (e.g. Zarinpal ref_id) */
+  /** Gateway reference id from the active provider */
   refId?: string;
 }
 
@@ -26,8 +26,9 @@ export interface PaymentProvider {
 
   /**
    * Verify a payment after user returns from gateway.
+   * Real providers must validate amount, transaction id, and provider-specific security rules.
    * @param providerRef  Authority / transaction id from gateway
-   * @param amountToman  Original amount in TOMAN (required by Zarinpal)
+   * @param amountToman  Original amount in TOMAN (when required by the gateway)
    */
   verify(
     providerRef: string,
@@ -36,7 +37,7 @@ export interface PaymentProvider {
 
   /**
    * Request a refund for a previously successful payment.
-   * Mock always succeeds; Zarinpal needs ZARINPAL_ACCESS_TOKEN.
+   * Behavior is provider-specific; mock is blocked in production.
    */
   refund(params: {
     providerRef: string;

@@ -25,15 +25,15 @@ export class PaymentsController {
   @ApiBearerAuth()
   @Roles('customer', 'admin')
   @Post('initiate')
-  @ApiOperation({ summary: 'شروع پرداخت (Mock یا زرین‌پال بر اساس PAYMENT_PROVIDER)' })
+  @ApiOperation({ summary: 'شروع پرداخت آنلاین (بر اساس PAYMENT_PROVIDER؛ mock فقط dev/test)' })
   initiate(@CurrentUser('id') userId: string, @Body() dto: InitiateDto) {
     return this.service.initiate(userId, dto.bookingId, dto.callbackUrl);
   }
 
   /**
-   * Callback from gateway.
-   * Mock:   POST/GET ?ref=mock_xxx&status=ok
-   * Zarinpal: GET ?Authority=Axxx&Status=OK|NOK  (also accepts ref=)
+   * Callback from gateway (provider-agnostic).
+   * Query shape depends on the active real provider (e.g. Authority/Status, ref, …).
+   * Mock callback only works outside production.
    */
   @Public()
   @Post('callback')
@@ -48,7 +48,7 @@ export class PaymentsController {
 
   @Public()
   @Get('callback')
-  @ApiOperation({ summary: 'کالبک درگاه (GET — زرین‌پال با GET برمی‌گرداند)' })
+  @ApiOperation({ summary: 'کالبک درگاه (GET)' })
   callbackGet(
     @Query('ref') ref?: string,
     @Query('Authority') authority?: string,
@@ -60,7 +60,7 @@ export class PaymentsController {
   @ApiBearerAuth()
   @Roles('admin', 'SUPER_ADMIN')
   @Post(':id/refund')
-  @ApiOperation({ summary: 'استرداد تراکنش پرداخت‌شده (Mock / Gateway)' })
+  @ApiOperation({ summary: 'استرداد تراکنش پرداخت‌شده' })
   refund(
     @Param('id') id: string,
     @Body() dto: RefundDto,
