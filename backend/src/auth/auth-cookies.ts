@@ -5,7 +5,7 @@ export const REFRESH_COOKIE_NAME = 'bj_refresh';
 /** Max-Age for refresh cookie (7 days default). */
 export const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-function isProd(): boolean {
+export function isProdEnv(): boolean {
   return (process.env.NODE_ENV || '').toLowerCase() === 'production';
 }
 
@@ -13,12 +13,15 @@ function isProd(): boolean {
  * Build Set-Cookie value for the refresh token.
  * - httpOnly: not readable by JS
  * - secure: HTTPS only in production
- * - sameSite: None in prod (API on subdomain / separate origin + credentials)
- *            Lax in development
- * - path: / so /api/v1/auth/refresh receives it
+ * - sameSite: None in prod (cross-origin API + credentials), Lax in development
+ * - path: / so all API routes receive it
  */
-export function setRefreshCookie(res: Response, refreshToken: string, maxAgeMs = REFRESH_COOKIE_MAX_AGE_MS): void {
-  const prod = isProd();
+export function setRefreshCookie(
+  res: Response,
+  refreshToken: string,
+  maxAgeMs = REFRESH_COOKIE_MAX_AGE_MS,
+): void {
+  const prod = isProdEnv();
   const parts = [
     `${REFRESH_COOKIE_NAME}=${encodeURIComponent(refreshToken)}`,
     'Path=/',
@@ -27,12 +30,11 @@ export function setRefreshCookie(res: Response, refreshToken: string, maxAgeMs =
     prod ? 'Secure' : '',
     prod ? 'SameSite=None' : 'SameSite=Lax',
   ].filter(Boolean);
-  // Append (do not overwrite other Set-Cookie headers)
   res.append('Set-Cookie', parts.join('; '));
 }
 
 export function clearRefreshCookie(res: Response): void {
-  const prod = isProd();
+  const prod = isProdEnv();
   const parts = [
     `${REFRESH_COOKIE_NAME}=`,
     'Path=/',
@@ -44,8 +46,7 @@ export function clearRefreshCookie(res: Response): void {
   res.append('Set-Cookie', parts.join('; '));
 }
 
-export function readRefreshFromRequest(req: Request, bodyToken?: string): string | undefined {
-  if (bodyToken && bodyToken.trim()) return bodyToken.trim();
+function readCookieValue(req: Request): string | undefined {
   const header = req.headers?.cookie;
   if (!header) return undefined;
   for (const part of header.split(';')) {
@@ -62,4 +63,36 @@ export function readRefreshFromRequest(req: Request, bodyToken?: string): string
     }
   }
   return undefined;
+}
+
+/**
+ * Resolve refresh token for the request.
+ * Cookie is always preferred. Body fallback only when allowBodyFallback is true (non-production).
+ */
+export function readRefreshFromRequest(
+  req: Request,
+  bodyToken?: string,
+  options: { allowBodyFallback?: boolean } = {},
+): string | undefined {
+  const fromCookie = readCookieValue(req);
+  if (fromCookie) return fromCookie;
+  if (options.allowBodyFallback && bodyToken?.trim()) {
+    return bodyToken.trim();
+  }
+  return undefined;
+}
+
+/** Attach refresh cookie and strip refreshToken from JSON body in production. */
+export function attachRefreshCookieAndSanitize<T extends { refreshToken?: string }>(
+  res: Response,
+  result: T,
+): Omit<T, 'refreshToken'> | T {
+  if (result.refreshToken) {
+    setRefreshCookie(res, result.refreshToken);
+  }
+  if (isProdEnv()) {
+    const { refreshToken: _omit, ...rest } = result;
+    return rest;
+  }
+  return result;
 }
