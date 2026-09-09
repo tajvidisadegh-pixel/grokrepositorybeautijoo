@@ -124,3 +124,4 @@ model User {
   @@index([createdAt])
   @@map("users")
 }
+
