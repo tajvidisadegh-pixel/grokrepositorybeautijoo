@@ -91,18 +91,26 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Swagger: keep available for now; item #8 will restrict to non-production
-  const swagger = new DocumentBuilder()
-    .setTitle('Beautijoo API')
-    .setDescription('Persian RTL beauty marketplace — زیباگر booking platform')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger only in non-production (issue #37 item 8)
+  if (!isProd) {
+    const swagger = new DocumentBuilder()
+      .setTitle('Beautijoo API')
+      .setDescription('Persian RTL beauty marketplace — زیباگر booking platform')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swagger);
+    SwaggerModule.setup('api/docs', app, document);
+    logger.log('Swagger UI enabled at /api/docs (non-production)');
+  } else {
+    logger.log('Swagger UI disabled in production');
+  }
 
   const port = config.get<number>('port') || 3000;
   await app.listen(port);
-  logger.log(`Beautijoo API listening on :${port}  docs=/api/docs`);
+  logger.log(
+    `Beautijoo API listening on :${port}` +
+      (isProd ? '' : '  docs=/api/docs'),
+  );
 }
 bootstrap();
