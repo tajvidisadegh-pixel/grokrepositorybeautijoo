@@ -227,21 +227,22 @@ model UserRole {
 }
 
 model Professional {
-  id               String             @id @default(uuid()) @db.Uuid
-  userId           String             @unique @map("user_id") @db.Uuid
-  title            String             @db.VarChar(150)
-  slug             String             @unique @db.VarChar(160)
-  bio              String?            @db.Text
-  status           ProfessionalStatus @default(draft)
-  isFeatured       Boolean            @default(false) @map("is_featured")
-  ratingAvg        Decimal            @default(0) @map("rating_avg") @db.Decimal(3, 2)
-  ratingCount      Int                @default(0) @map("rating_count")
-  logoUrl          String?            @map("logo_url") @db.VarChar(512)
-  coverImageUrl    String?            @map("cover_image_url") @db.VarChar(512)
-  verifiedAt       DateTime?          @map("verified_at") @db.Timestamptz
-  publishedAt      DateTime?          @map("published_at") @db.Timestamptz
-  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  id                   String             @id @default(uuid()) @db.Uuid
+  userId               String             @unique @map("user_id") @db.Uuid
+  title                String             @db.VarChar(150)
+  slug                 String             @unique @db.VarChar(160)
+  bio                  String?            @db.Text
+  status               ProfessionalStatus @default(draft)
+  isFeatured           Boolean            @default(false) @map("is_featured")
+  ratingAvg            Decimal            @default(0) @map("rating_avg") @db.Decimal(3, 2)
+  ratingCount          Int                @default(0) @map("rating_count")
+  logoUrl              String?            @map("logo_url") @db.VarChar(512)
+  coverImageUrl        String?            @map("cover_image_url") @db.VarChar(512)
+  selectedCategoryIds  Json?              @map("selected_category_ids")
+  verifiedAt           DateTime?          @map("verified_at") @db.Timestamptz
+  publishedAt          DateTime?          @map("published_at") @db.Timestamptz
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   locations            ProfessionalLocation[]
   professionalServices ProfessionalService[]
