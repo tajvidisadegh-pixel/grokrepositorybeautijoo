@@ -55,6 +55,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: ESLint
+        run: npm run lint
+
       - name: Build
         env:
           NEXT_PUBLIC_API_URL: https://api.beautijoo.ir/api/v1
