@@ -8,14 +8,17 @@ import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
+/** Privileged admin roles that bypass normal role/permission checks. */
+const FULL_ACCESS_ROLES = new Set(['SUPER_ADMIN', 'admin']);
+
 /**
  * Global roles and permissions guard.
  * Roles and permissions come only from JWT → DB (JwtStrategy),
  * never from request body/query/headers controlled by the client.
  *
- * - SUPER_ADMIN always has full access to all protected resources.
- * - If @Roles specified: user must have one of the roles (or SUPER_ADMIN).
- * - If @RequirePermissions specified: user must have the permissions (or SUPER_ADMIN).
+ * - SUPER_ADMIN and admin always have full access to all protected resources.
+ * - If @Roles specified: user must have one of the roles (or full-access role).
+ * - If @RequirePermissions specified: user must have the permissions (or full-access role).
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -32,8 +35,10 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    // If no roles or permissions required, allow (subject to JwtAuthGuard)
-    if ((!requiredRoles || requiredRoles.length === 0) && (!requiredPermissions || requiredPermissions.length === 0)) {
+    if (
+      (!requiredRoles || requiredRoles.length === 0) &&
+      (!requiredPermissions || requiredPermissions.length === 0)
+    ) {
       return true;
     }
 
@@ -41,12 +46,11 @@ export class RolesGuard implements CanActivate {
     const roles: string[] = Array.isArray(user?.roles) ? user.roles : [];
     const permissions: string[] = Array.isArray(user?.permissions) ? user.permissions : [];
 
-    // SUPER_ADMIN has full access to all endpoints
-    if (roles.includes('SUPER_ADMIN')) {
+    // SUPER_ADMIN and legacy `admin` role have full access
+    if (roles.some((r) => FULL_ACCESS_ROLES.has(r))) {
       return true;
     }
 
-    // Role check
     if (requiredRoles && requiredRoles.length > 0) {
       const hasRole = requiredRoles.some((r) => roles.includes(r));
       if (!hasRole) {
@@ -54,7 +58,6 @@ export class RolesGuard implements CanActivate {
       }
     }
 
-    // Permission check
     if (requiredPermissions && requiredPermissions.length > 0) {
       const hasAllPermissions = requiredPermissions.every((p) => permissions.includes(p));
       if (!hasAllPermissions) {
