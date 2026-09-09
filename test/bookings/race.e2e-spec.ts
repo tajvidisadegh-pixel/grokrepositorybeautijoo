@@ -10,7 +10,11 @@ import {
 } from '../helpers/db';
 import { register, uniquePhone } from '../helpers/auth.helper';
 import { PrismaClient, ProfessionalStatus, DayOfWeek } from '@prisma/client';
-import { tehranDateStr, tehranLocalToUtc } from '../../src/common/timezone';
+import {
+  tehranDateStr,
+  tehranLocalToUtc,
+  tehranHHMM,
+} from '../../src/common/timezone';
 
 describe('Bookings race / overlap (e2e)', () => {
   let app: INestApplication;
@@ -34,6 +38,17 @@ describe('Bookings race / overlap (e2e)', () => {
     await prisma.$disconnect();
     await app.close();
   });
+
+  /** Next calendar day in Tehran as YYYY-MM-DD, at least ~26h ahead of now. */
+  function nextTehranDateStr(): string {
+    for (let addDays = 1; addDays <= 10; addDays++) {
+      const probe = new Date(Date.now() + addDays * 86_400_000);
+      const dateStr = tehranDateStr(probe);
+      const noon = tehranLocalToUtc(dateStr, '12:00');
+      if (noon.getTime() > Date.now() + 60_000) return dateStr;
+    }
+    throw new Error('Could not resolve a future Tehran date');
+  }
 
   async function setupApprovedProWithSlot() {
     const proPhone = uniquePhone();
@@ -109,29 +124,25 @@ describe('Bookings race / overlap (e2e)', () => {
       });
     }
 
-    // Find a real available slot within the next week (must match availability API)
-    let start: Date | null = null;
-    for (let addDays = 1; addDays <= 8; addDays++) {
-      const probe = new Date(Date.now() + addDays * 86_400_000);
-      const dateStr = tehranDateStr(probe);
-      const avail = await request(app.getHttpServer())
-        .get(`/api/v1/professionals/${pro!.id}/availability`)
-        .query({ date: dateStr, durationMin: '30' });
-      expect(avail.status).toBe(200);
-      const slots = (avail.body?.slots || []) as { start: string; end: string }[];
-      if (slots.length > 0) {
-        const candidate = tehranLocalToUtc(dateStr, slots[0].start);
-        if (candidate.getTime() > Date.now() + 60_000) {
-          start = candidate;
-          break;
-        }
-      }
-    }
-    if (!start) {
-      throw new Error(`No future availability slots found for pro=${pro!.id}`);
+    // Deterministic future slot: 11:00 Tehran on a future local day
+    const dateStr = nextTehranDateStr();
+    const start = tehranLocalToUtc(dateStr, '11:00');
+    expect(start.getTime()).toBeGreaterThan(Date.now() + 60_000);
+
+    // Must appear in availability API (same path production uses)
+    const avail = await request(app.getHttpServer())
+      .get(`/api/v1/professionals/${pro!.id}/availability`)
+      .query({ date: dateStr, durationMin: '30' });
+    expect(avail.status).toBe(200);
+    const slots = (avail.body?.slots || []) as { start: string; end: string }[];
+    const hhmm = tehranHHMM(start);
+    if (!slots.some((s) => s.start === hhmm)) {
+      throw new Error(
+        `Expected slot ${hhmm} on ${dateStr} not in availability: ${JSON.stringify(slots.slice(0, 8))} (count=${slots.length})`,
+      );
     }
 
-    return { pro, service, start };
+    return { pro, service, start, dateStr };
   }
 
   async function registerCustomer() {
@@ -199,8 +210,11 @@ describe('Bookings race / overlap (e2e)', () => {
 
     const statuses = [a.status, b.status];
     const successes = statuses.filter((s) => s < 300).length;
-    expect(successes).toBeLessThanOrEqual(1);
-    expect(successes).toBeGreaterThanOrEqual(1);
+    if (successes < 1 || successes > 1) {
+      throw new Error(
+        `expected exactly 1 success, got statuses=${JSON.stringify(statuses)} bodies=${JSON.stringify([a.body, b.body])}`,
+      );
+    }
 
     const count = await prisma.booking.count({
       where: {
