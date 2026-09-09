@@ -13,7 +13,6 @@ import { authApi } from '@/lib/auth-api';
 import {
   clearTokens,
   getAccessToken,
-  getRefreshToken,
   setTokens,
 } from '@/lib/auth-storage';
 import type { AuthMeResponse } from '@/types/auth';
@@ -43,7 +42,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    const token = getAccessToken();
+    let token = getAccessToken();
+    // Silent session restore via httpOnly refresh cookie when memory is empty (e.g. page reload)
+    if (!token) {
+      try {
+        const tokens = await authApi.refresh();
+        if (tokens?.accessToken) {
+          setTokens(tokens.accessToken);
+          token = tokens.accessToken;
+        }
+      } catch {
+        clearTokens();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+    }
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -53,16 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await authApi.me(token);
       setUser(me);
     } catch {
-      const refresh = getRefreshToken();
-      if (!refresh) {
-        clearTokens();
-        setUser(null);
-        setLoading(false);
-        return;
-      }
       try {
-        const tokens = await authApi.refresh(refresh);
-        setTokens(tokens.accessToken, tokens.refreshToken);
+        const tokens = await authApi.refresh();
+        setTokens(tokens.accessToken);
         const me = await authApi.me(tokens.accessToken);
         setUser(me);
       } catch {
@@ -80,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithPassword = useCallback(async (phone: string, password: string) => {
     const res = await authApi.login({ phone, password });
-    setTokens(res.accessToken, res.refreshToken);
+    setTokens(res.accessToken);
     const me = await authApi.me(res.accessToken);
     setUser(me);
   }, []);
@@ -93,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role?: 'customer' | 'professional',
     ) => {
       const res = await authApi.register({ phone, password, displayName, role });
-      setTokens(res.accessToken, res.refreshToken);
+      setTokens(res.accessToken);
       const me = await authApi.me(res.accessToken);
       setUser(me);
       return me;
@@ -109,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyOtp = useCallback(
     async (phone: string, code: string, purpose = 'login') => {
       const res = await authApi.verifyOtp({ phone, code, purpose });
-      setTokens(res.accessToken, res.refreshToken);
+      setTokens(res.accessToken);
       const me = await authApi.me(res.accessToken);
       setUser(me);
     },
@@ -117,13 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    const refresh = getRefreshToken();
-    if (refresh) {
-      try {
-        await authApi.logout(refresh);
-      } catch {
-        /* ignore network errors on logout */
-      }
+    try {
+      await authApi.logout();
+    } catch {
+      /* ignore network errors on logout */
     }
     clearTokens();
     setUser(null);
