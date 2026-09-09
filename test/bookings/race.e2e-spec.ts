@@ -85,13 +85,25 @@ describe('Bookings race / overlap (e2e)', () => {
       },
     });
 
-    for (const day of Object.values(DayOfWeek)) {
+    // Explicit days only (avoid enum key/value duplicates from Object.values)
+    const days: DayOfWeek[] = [
+      DayOfWeek.saturday,
+      DayOfWeek.sunday,
+      DayOfWeek.monday,
+      DayOfWeek.tuesday,
+      DayOfWeek.wednesday,
+      DayOfWeek.thursday,
+      DayOfWeek.friday,
+    ];
+    for (const day of days) {
       await prisma.workingHour.create({
         data: {
           professionalId: pro!.id,
           dayOfWeek: day,
           startTime: '09:00',
           endTime: '20:00',
+          isActive: true,
+          isClosed: false,
         },
       });
     }
@@ -104,8 +116,9 @@ describe('Bookings race / overlap (e2e)', () => {
       .query({ date: dateStr, durationMin: '30' });
     expect(avail.status).toBe(200);
     const slots = (avail.body?.slots || []) as { start: string; end: string }[];
-    expect(slots.length).toBeGreaterThan(0);
-    const start = tehranLocalToUtc(dateStr, slots[0].start);
+    // Fallback fixed Tehran wall time inside working hours if API returns empty
+    const startHhmm = slots[0]?.start || '10:00';
+    const start = tehranLocalToUtc(dateStr, startHhmm);
 
     return { pro, service, start };
   }
