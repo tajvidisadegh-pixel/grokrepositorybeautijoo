@@ -19,7 +19,7 @@ enum UserStatus {
   deleted
 }
 
-/// Public account persona. Same phone may exist once per type (customer vs professional).
+/// Same phone may exist once as customer and once as professional (separate accounts).
 enum AccountType {
   customer
   professional
@@ -292,6 +292,7 @@ model ServiceCategory {
   name        String   @db.VarChar(120)
   slug        String   @unique @db.VarChar(140)
   description String?  @db.Text
+  icon        String?  @db.VarChar(80)
   sortOrder   Int      @default(0) @map("sort_order")
   isActive    Boolean  @default(true) @map("is_active")
   parentId    String?  @map("parent_id") @db.Uuid
@@ -318,23 +319,28 @@ model Service {
   category             ServiceCategory      @relation(fields: [categoryId], references: [id])
   professionalServices ProfessionalService[]
   bookingItems         BookingItem[]
-  priceRules           ServicePriceRule[]
-  durationRules        ServiceDurationRule[]
   @@index([categoryId])
   @@index([isActive])
   @@map("services")
 }
 
 model ProfessionalService {
-  id             String  @id @default(uuid()) @db.Uuid
-  professionalId String  @map("professional_id") @db.Uuid
-  serviceId      String  @map("service_id") @db.Uuid
+  id             String   @id @default(uuid()) @db.Uuid
+  professionalId String   @map("professional_id") @db.Uuid
+  serviceId      String   @map("service_id") @db.Uuid
   price          Int
-  durationMin    Int     @map("duration_min")
-  isActive       Boolean @default(true) @map("is_active")
+  durationMin    Int      @map("duration_min")
+  bufferMin      Int      @default(0) @map("buffer_min")
+  description    String?  @db.Text
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
   professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
   service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   addOns       ServiceAddOn[]
+  priceRules   ServicePriceRule[]
+  durationRules ServiceDurationRule[]
+  mediaAssets  MediaAsset[]
   @@unique([professionalId, serviceId])
   @@index([professionalId, isActive])
   @@index([serviceId])
@@ -345,8 +351,10 @@ model ServiceAddOn {
   id                    String  @id @default(uuid()) @db.Uuid
   professionalServiceId String  @map("professional_service_id") @db.Uuid
   name                  String  @db.VarChar(120)
+  description           String? @db.Text
   price                 Int
-  durationMin           Int     @default(0) @map("duration_min")
+  extraDurationMin      Int     @default(0) @map("extra_duration_min")
+  sortOrder             Int     @default(0) @map("sort_order")
   isActive              Boolean @default(true) @map("is_active")
   professionalService ProfessionalService @relation(fields: [professionalServiceId], references: [id], onDelete: Cascade)
   @@index([professionalServiceId])
@@ -530,38 +538,46 @@ model PlatformSetting {
 }
 
 model MediaAsset {
-  id             String      @id @default(uuid()) @db.Uuid
-  professionalId String?     @map("professional_id") @db.Uuid
-  kind           MediaKind
-  status         MediaStatus @default(draft)
-  url            String      @db.VarChar(512)
-  mimeType       String?     @map("mime_type") @db.VarChar(100)
-  sizeBytes      Int?        @map("size_bytes")
-  sortOrder      Int         @default(0) @map("sort_order")
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  professional Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  id                    String      @id @default(uuid()) @db.Uuid
+  professionalId        String?     @map("professional_id") @db.Uuid
+  professionalServiceId String?     @map("professional_service_id") @db.Uuid
+  kind                  MediaKind
+  status                MediaStatus @default(draft)
+  url                   String      @db.VarChar(512)
+  mimeType              String?     @map("mime_type") @db.VarChar(100)
+  sizeBytes             Int?        @map("size_bytes")
+  sortOrder             Int         @default(0) @map("sort_order")
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  professional        Professional?        @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professionalService ProfessionalService? @relation(fields: [professionalServiceId], references: [id], onDelete: SetNull)
   @@index([professionalId, kind])
+  @@index([professionalServiceId])
   @@map("media_assets")
 }
 
 model ServicePriceRule {
-  id        String  @id @default(uuid()) @db.Uuid
-  serviceId String  @map("service_id") @db.Uuid
-  name      String  @db.VarChar(100)
-  price     Int
-  isActive  Boolean @default(true) @map("is_active")
-  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  @@index([serviceId])
+  id                    String   @id @default(uuid()) @db.Uuid
+  professionalServiceId String   @map("professional_service_id") @db.Uuid
+  label                 String   @db.VarChar(100)
+  price                 Int
+  attributes            Json?
+  sortOrder             Int      @default(0) @map("sort_order")
+  isActive              Boolean  @default(true) @map("is_active")
+  professionalService ProfessionalService @relation(fields: [professionalServiceId], references: [id], onDelete: Cascade)
+  @@index([professionalServiceId])
   @@map("service_price_rules")
 }
 
 model ServiceDurationRule {
-  id          String  @id @default(uuid()) @db.Uuid
-  serviceId   String  @map("service_id") @db.Uuid
-  name        String  @db.VarChar(100)
-  durationMin Int     @map("duration_min")
-  isActive    Boolean @default(true) @map("is_active")
-  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  @@index([serviceId])
+  id                    String  @id @default(uuid()) @db.Uuid
+  professionalServiceId String  @map("professional_service_id") @db.Uuid
+  label                 String  @db.VarChar(100)
+  durationMin           Int     @map("duration_min")
+  durationMaxMin        Int?    @map("duration_max_min")
+  attributes            Json?
+  sortOrder             Int     @default(0) @map("sort_order")
+  isActive              Boolean @default(true) @map("is_active")
+  professionalService ProfessionalService @relation(fields: [professionalServiceId], references: [id], onDelete: Cascade)
+  @@index([professionalServiceId])
   @@map("service_duration_rules")
 }
