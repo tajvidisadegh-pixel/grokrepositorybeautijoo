@@ -164,6 +164,13 @@ export default () => {
     // Liara default: true. Only set S3_FORCE_PATH_STYLE=false for pure AWS virtual-host.
     s3ForcePathStyle: (process.env.S3_FORCE_PATH_STYLE || 'true').toLowerCase() !== 'false',
     otpTtlSeconds: parseInt(process.env.OTP_TTL_SECONDS || '300', 10),
-    otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS || '5', 10),
+    /** Max wrong verify attempts per OTP code (default 3). */
+    otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS || '3', 10),
+    /** Minimum seconds between OTP requests for the same phone+purpose. */
+    otpCooldownSeconds: parseInt(process.env.OTP_COOLDOWN_SECONDS || '60', 10),
+    /** Max OTP requests per phone+purpose in a rolling 1-hour window. */
+    otpMaxPerHour: parseInt(process.env.OTP_MAX_PER_HOUR || '3', 10),
+    /** Max OTP requests per phone (all purposes) in a rolling 24-hour window. */
+    otpMaxPerDay: parseInt(process.env.OTP_MAX_PER_DAY || '8', 10),
   };
 };
