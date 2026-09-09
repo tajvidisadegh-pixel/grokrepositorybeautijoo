@@ -6,13 +6,15 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join, isAbsolute, normalize, resolve } from 'path';
+import { isAbsolute, normalize, resolve } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
+  const nodeEnv = config.get<string>('nodeEnv') || process.env.NODE_ENV || 'development';
+  const isProd = nodeEnv === 'production';
 
   const storageKind = (
     process.env.STORAGE_PROVIDER ||
@@ -49,7 +51,9 @@ async function bootstrap() {
     });
     logger.log(`Static /uploads → ${uploadsAbs}`);
   } else {
-    logger.log(`STORAGE_PROVIDER=${storageKind} — static /uploads disabled (object storage serves files)`);
+    logger.log(
+      `STORAGE_PROVIDER=${storageKind} — static /uploads disabled (object storage serves files)`,
+    );
   }
 
   app.use(
@@ -58,12 +62,23 @@ async function bootstrap() {
       crossOriginEmbedderPolicy: false,
     }),
   );
+
+  // CORS origins resolved in configuration.ts:
+  // - production: CORS_ORIGINS required (no localhost-only)
+  // - development: CORS_ORIGINS or localhost defaults
+  const corsOrigins = config.get<string[]>('corsOrigins');
+  if (!corsOrigins || corsOrigins.length === 0) {
+    throw new Error(
+      'FATAL: corsOrigins is empty. Set CORS_ORIGINS in the environment.',
+    );
+  }
   app.enableCors({
-    origin: config.get<string[]>('corsOrigins') || ['http://localhost:3001'],
+    origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Correlation-Id'],
   });
+  logger.log(`CORS origins (${isProd ? 'prod' : 'dev'}): ${corsOrigins.join(', ')}`);
 
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
@@ -76,6 +91,7 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
 
+  // Swagger: keep available for now; item #8 will restrict to non-production
   const swagger = new DocumentBuilder()
     .setTitle('Beautijoo API')
     .setDescription('Persian RTL beauty marketplace — زیباگر booking platform')
