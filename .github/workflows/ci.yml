@@ -69,6 +69,7 @@ jobs:
       OTP_COOLDOWN_SECONDS: "60"
       OTP_MAX_PER_HOUR: "3"
       OTP_MAX_PER_DAY: "8"
+      CLEANUP_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
 
