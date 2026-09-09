@@ -36,6 +36,61 @@ jobs:
       - name: Assert dist output
         run: test -f dist/main.js || test -f dist/src/main.js
 
+      - name: Unit tests
+        run: npm run test:unit
+
+  backend-e2e:
+    name: Backend e2e
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: beautijoo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d beautijoo_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://test:test@localhost:5432/beautijoo_test?schema=public
+      JWT_ACCESS_SECRET: test-access-secret-min-32-chars-long!!
+      JWT_REFRESH_SECRET: test-refresh-secret-min-32-chars-long!
+      SMS_PROVIDER: mock
+      CORS_ORIGINS: http://localhost:3001
+      OTP_COOLDOWN_SECONDS: "60"
+      OTP_MAX_PER_HOUR: "3"
+      OTP_MAX_PER_DAY: "8"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install
+        run: npm install
+
+      - name: Prisma generate
+        run: npx prisma generate --schema=./prisma/schema.prisma
+
+      - name: Migrate
+        run: npx prisma migrate deploy --schema=./prisma/schema.prisma
+
+      - name: Seed roles
+        run: node prisma/seed-roles.cjs
+
+      - name: E2E tests
+        run: npm run test:e2e
+
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
