@@ -15,11 +15,13 @@ const ITEMS = [
   { href: '/zibagar/settings', label: 'تنظیمات' },
 ];
 
+const PRO_ROLES = ['professional', 'admin', 'SUPER_ADMIN'] as const;
+
 export default function ZibagarLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() || '';
   if (pathname.startsWith('/zibagar/profile/complete')) {
     return (
-      <RequireAuth roles={['professional', 'admin']}>
+      <RequireAuth roles={[...PRO_ROLES]}>
         <div className="min-h-screen bg-gray-light">
           <header className="border-b border-border bg-white">
             <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
@@ -33,7 +35,7 @@ export default function ZibagarLayout({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <PanelShell title="پنل زیباگر" items={ITEMS} roles={['professional', 'admin']}>
+    <PanelShell title="پنل زیباگر" items={ITEMS} roles={[...PRO_ROLES]}>
       {children}
     </PanelShell>
   );
