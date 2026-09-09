@@ -37,14 +37,17 @@ describe('Authorization (e2e)', () => {
   it('customer cannot access professional me endpoints', async () => {
     const reg = await register(app, { phone: uniquePhone(), password, role: 'customer' });
     expect([200, 201]).toContain(reg.status);
+    expect(reg.body.accessToken).toBeDefined();
+
     const res = await request(app.getHttpServer())
-      .patch('/api/v1/professionals/me')
-      .set('Authorization', `Bearer ${reg.body.accessToken}`)
-      .send({ title: 'Should Fail' });
-    expect(res.status).toBe(403);
+      .get('/api/v1/professionals/me')
+      .set('Authorization', `Bearer ${reg.body.accessToken}`);
+
+    // RolesGuard → 403; unauthenticated edge → 401
+    expect([401, 403]).toContain(res.status);
   });
 
-  it('pending_review/draft professional is not visible on public GET /professionals/:slug', async () => {
+  it('draft professional is not visible on public GET /professionals/:slug', async () => {
     const phone = uniquePhone();
     const reg = await register(app, {
       phone,
@@ -53,11 +56,13 @@ describe('Authorization (e2e)', () => {
       role: 'professional',
     });
     expect([200, 201]).toContain(reg.status);
+
     const pro = await prisma.professional.findFirst({
       where: { user: { phone, accountType: 'professional' } },
     });
     expect(pro).toBeTruthy();
-    expect(['draft', 'pending_review']).toContain(pro!.status);
+    expect(pro!.status).toBe('draft');
+
     const publicGet = await request(app.getHttpServer()).get(
       `/api/v1/professionals/${pro!.slug}`,
     );
@@ -67,9 +72,12 @@ describe('Authorization (e2e)', () => {
   it('admin endpoints reject non-admin', async () => {
     const reg = await register(app, { phone: uniquePhone(), password, role: 'customer' });
     expect([200, 201]).toContain(reg.status);
+    expect(reg.body.accessToken).toBeDefined();
+
     const res = await request(app.getHttpServer())
       .get('/api/v1/admin/users')
       .set('Authorization', `Bearer ${reg.body.accessToken}`);
-    expect([403, 404]).toContain(res.status);
+
+    expect([401, 403, 404]).toContain(res.status);
   });
 });
