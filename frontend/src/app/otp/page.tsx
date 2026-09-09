@@ -8,22 +8,34 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import type { AccountType } from '@/types/auth';
 
 function OtpForm() {
-  const { requestOtp, verifyOtp, isAuthenticated } = useAuth();
+  const { requestOtp, verifyOtp, isAuthenticated, user } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
-  const next = search?.get('next') || '/panel';
+  const asParam = search?.get('as');
+  const nextDefault = asParam === 'professional' ? '/zibagar' : '/panel';
+  const next = search?.get('next') || nextDefault;
 
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>(
+    asParam === 'professional' ? 'professional' : 'customer',
+  );
   const [expiresIn, setExpiresIn] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    router.replace(next);
+    const dest =
+      user?.accountType === 'professional' || (user?.roles || []).includes('professional')
+        ? '/zibagar'
+        : next.startsWith('/zibagar')
+          ? '/panel'
+          : next;
+    router.replace(dest);
   }
 
   async function onRequest(e: FormEvent) {
@@ -35,13 +47,11 @@ function OtpForm() {
     }
     setLoading(true);
     try {
-      const res = await requestOtp(phone.trim(), 'login');
+      const res = await requestOtp(phone.trim(), 'login', accountType);
       setExpiresIn(res.expiresIn);
       setStep('code');
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : 'ارسال کد ناموفق بود',
-      );
+      setError(err instanceof ApiError ? err.message : 'ارسال کد ناموفق بود');
     } finally {
       setLoading(false);
     }
@@ -52,12 +62,10 @@ function OtpForm() {
     setError(null);
     setLoading(true);
     try {
-      await verifyOtp(phone.trim(), code.trim(), 'login');
-      router.replace(next);
+      await verifyOtp(phone.trim(), code.trim(), 'login', accountType);
+      router.replace(accountType === 'professional' ? '/zibagar' : '/panel');
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : 'تأیید کد ناموفق بود',
-      );
+      setError(err instanceof ApiError ? err.message : 'تأیید کد ناموفق بود');
     } finally {
       setLoading(false);
     }
@@ -69,7 +77,7 @@ function OtpForm() {
         <h1 className="text-2xl font-bold">ورود با کد یک‌بارمصرف</h1>
         <p className="mt-2 text-sm text-gray">
           {step === 'phone'
-            ? 'شماره موبایل خود را وارد کنید'
+            ? 'شماره موبایل و نوع حساب را انتخاب کنید'
             : `کد ارسال‌شده به ${phone} را وارد کنید`}
         </p>
       </div>
@@ -78,9 +86,34 @@ function OtpForm() {
         {step === 'phone' ? (
           <form onSubmit={onRequest} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium">
-                شماره موبایل
-              </label>
+              <p className="mb-2 text-sm font-medium">ورود به‌عنوان</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAccountType('customer')}
+                  className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                    accountType === 'customer'
+                      ? 'border-coral bg-coral-soft text-coral'
+                      : 'border-border text-gray hover:bg-gray-light'
+                  }`}
+                >
+                  مشتری
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAccountType('professional')}
+                  className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                    accountType === 'professional'
+                      ? 'border-coral bg-coral-soft text-coral'
+                      : 'border-border text-gray hover:bg-gray-light'
+                  }`}
+                >
+                  زیباگر
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">شماره موبایل</label>
               <Input
                 type="tel"
                 inputMode="numeric"
@@ -93,9 +126,7 @@ function OtpForm() {
               />
             </div>
             {error && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
             <Button type="submit" className="w-full" loading={loading}>
               دریافت کد
@@ -123,9 +154,7 @@ function OtpForm() {
               )}
             </div>
             {error && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
             <Button type="submit" className="w-full" loading={loading}>
               تأیید و ورود
@@ -147,7 +176,10 @@ function OtpForm() {
 
         <div className="mt-6 border-t border-border pt-4 text-center text-sm text-gray">
           ورود با رمز عبور؟{' '}
-          <Link href="/login" className="font-medium text-coral hover:underline">
+          <Link
+            href={`/login?as=${accountType}`}
+            className="font-medium text-coral hover:underline"
+          >
             صفحه ورود
           </Link>
         </div>

@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
@@ -11,14 +11,18 @@ import { Card } from '@/components/ui/card';
 
 type RegisterRole = 'customer' | 'professional';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const { register, isAuthenticated, hasRole } = useAuth();
   const router = useRouter();
+  const search = useSearchParams();
+  const asParam = search?.get('as');
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<RegisterRole>('customer');
+  const [role, setRole] = useState<RegisterRole>(
+    asParam === 'professional' ? 'professional' : 'customer',
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -83,7 +87,7 @@ export default function RegisterPage() {
                     : 'border-border text-gray hover:bg-gray-light'
                 }`}
               >
-                کاربر
+                مشتری
               </button>
               <button
                 type="button"
@@ -97,9 +101,13 @@ export default function RegisterPage() {
                 زیباگر
               </button>
             </div>
-            {role === 'professional' && (
+            {role === 'professional' ? (
               <p className="mt-2 text-xs text-gray">
-                پس از ثبت‌نام وارد ویزارد تکمیل پروفایل می‌شوید.
+                پس از ثبت‌نام وارد ویزارد تکمیل پروفایل زیباگر می‌شوید. پنل مشتری ساخته نمی‌شود؛ برای رزرو به‌عنوان مشتری باید جداگانه ثبت‌نام کنید.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-gray">
+                فقط پنل مشتری ساخته می‌شود. اگر زیباگر هستید، گزینه «زیباگر» را انتخاب کنید.
               </p>
             )}
           </div>
@@ -152,11 +160,25 @@ export default function RegisterPage() {
 
         <div className="mt-6 border-t border-border pt-4 text-center text-sm text-gray">
           قبلاً ثبت‌نام کرده‌اید؟{' '}
-          <Link href="/login" className="font-medium text-coral hover:underline">
+          <Link href={`/login?as=${role}`} className="font-medium text-coral hover:underline">
             ورود
           </Link>
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center text-gray">
+          در حال بارگذاری...
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }
