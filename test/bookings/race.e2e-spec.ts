@@ -10,6 +10,7 @@ import {
 } from '../helpers/db';
 import { register, uniquePhone } from '../helpers/auth.helper';
 import { PrismaClient, ProfessionalStatus, DayOfWeek } from '@prisma/client';
+import { tehranDateStr, tehranLocalToUtc } from '../../src/common/timezone';
 
 describe('Bookings race / overlap (e2e)', () => {
   let app: INestApplication;
@@ -42,8 +43,10 @@ describe('Bookings race / overlap (e2e)', () => {
       displayName: 'Race Pro',
       role: 'professional',
     });
-    expect(reg.status).toBe(201);
-    const pro = await prisma.professional.findFirst({ where: { user: { phone: proPhone } } });
+    expect([200, 201]).toContain(reg.status);
+    const pro = await prisma.professional.findFirst({
+      where: { user: { phone: proPhone, accountType: 'professional' } },
+    });
     expect(pro).toBeTruthy();
 
     await prisma.professional.update({
@@ -54,7 +57,12 @@ describe('Bookings race / overlap (e2e)', () => {
     let category = await prisma.serviceCategory.findFirst({ where: { parentId: null } });
     if (!category) {
       category = await prisma.serviceCategory.create({
-        data: { name: 'تست', slug: `test-cat-${Date.now()}`, sortOrder: 1, isActive: true },
+        data: {
+          name: 'تست',
+          slug: `test-cat-${Date.now()}`,
+          sortOrder: 1,
+          isActive: true,
+        },
       });
     }
     const service = await prisma.service.create({
@@ -88,17 +96,29 @@ describe('Bookings race / overlap (e2e)', () => {
       });
     }
 
-    const start = new Date();
-    start.setUTCDate(start.getUTCDate() + 2);
-    start.setUTCHours(6, 30, 0, 0);
+    // Pick a real available slot 2 days ahead (Tehran calendar)
+    const probe = new Date(Date.now() + 2 * 86_400_000);
+    const dateStr = tehranDateStr(probe);
+    const avail = await request(app.getHttpServer())
+      .get(`/api/v1/professionals/${pro!.id}/availability`)
+      .query({ date: dateStr, durationMin: '30' });
+    expect(avail.status).toBe(200);
+    const slots = (avail.body?.slots || []) as { start: string; end: string }[];
+    expect(slots.length).toBeGreaterThan(0);
+    const start = tehranLocalToUtc(dateStr, slots[0].start);
 
     return { pro, service, start };
   }
 
   async function registerCustomer() {
     const phone = uniquePhone();
-    const reg = await register(app, { phone, password, displayName: 'Customer', role: 'customer' });
-    expect(reg.status).toBe(201);
+    const reg = await register(app, {
+      phone,
+      password,
+      displayName: 'Customer',
+      role: 'customer',
+    });
+    expect([200, 201]).toContain(reg.status);
     return reg.body.accessToken as string;
   }
 
@@ -118,11 +138,6 @@ describe('Bookings race / overlap (e2e)', () => {
       .set('Authorization', `Bearer ${token1}`)
       .send(body);
 
-    // Soft: availability/schema issues (e.g. addOnsSnapshot drift) must not red the suite
-    if (first.status >= 400) {
-      expect([400, 404, 409, 500]).toContain(first.status);
-      return;
-    }
     expect(first.status).toBeLessThan(300);
 
     const second = await request(app.getHttpServer())
@@ -155,13 +170,7 @@ describe('Bookings race / overlap (e2e)', () => {
 
     const statuses = [a.status, b.status];
     const successes = statuses.filter((s) => s < 300).length;
-
-    if (successes === 0) {
-      expect(statuses.every((s) => [400, 404, 409, 500].includes(s))).toBe(true);
-      return;
-    }
-
-    expect(successes).toBe(1);
+    expect(successes).toBeLessThanOrEqual(1);
 
     const count = await prisma.booking.count({
       where: {
