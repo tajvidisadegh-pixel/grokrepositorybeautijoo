@@ -29,7 +29,8 @@ export class AuthController {
   @Public()
   @Post('otp/request')
   @HttpCode(200)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  // IP throttle: max 3 requests / minute (phone-level limits enforced in service)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.auth.requestOtp(dto);
   }
@@ -37,7 +38,8 @@ export class AuthController {
   @Public()
   @Post('otp/verify')
   @HttpCode(200)
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  // IP throttle: max 5 verify attempts / minute
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.auth.verifyOtp(dto);
   }
