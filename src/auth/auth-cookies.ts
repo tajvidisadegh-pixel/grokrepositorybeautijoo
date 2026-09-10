@@ -10,11 +10,39 @@ export function isProdEnv(): boolean {
 }
 
 /**
+ * Body refreshToken is a legacy/dev escape hatch only.
+ * Enabled when REFRESH_ALLOW_BODY=true, or automatically in non-production.
+ * Production defaults to cookie-only (body ignored).
+ */
+export function allowRefreshBodyFallback(): boolean {
+  const flag = (process.env.REFRESH_ALLOW_BODY || '').toLowerCase();
+  if (flag === 'true' || flag === '1') return true;
+  if (flag === 'false' || flag === '0') return false;
+  return !isProdEnv();
+}
+
+function cookieSameSite(): 'None' | 'Lax' | 'Strict' {
+  const raw = (process.env.COOKIE_SAMESITE || '').toLowerCase();
+  if (raw === 'none') return 'None';
+  if (raw === 'strict') return 'Strict';
+  if (raw === 'lax') return 'Lax';
+  // Default: Lax is enough for beautijoo.ir ↔ api.beautijoo.ir (same-site).
+  // Use COOKIE_SAMESITE=None only when frontend is on a different site.
+  return 'Lax';
+}
+
+function cookieDomain(): string | undefined {
+  const d = (process.env.COOKIE_DOMAIN || '').trim();
+  return d || undefined;
+}
+
+/**
  * Build Set-Cookie value for the refresh token.
  * - httpOnly: not readable by JS
- * - secure: HTTPS only in production
- * - sameSite: None in prod (cross-origin API + credentials), Lax in development
- * - path: / so all API routes receive it
+ * - secure: HTTPS only in production (or COOKIE_SECURE=true)
+ * - sameSite: Lax by default (same-site subdomains); override via COOKIE_SAMESITE
+ * - domain: optional COOKIE_DOMAIN (e.g. .beautijoo.ir)
+ * - path: / so /api/v1/auth/* receives it
  */
 export function setRefreshCookie(
   res: Response,
@@ -22,27 +50,40 @@ export function setRefreshCookie(
   maxAgeMs = REFRESH_COOKIE_MAX_AGE_MS,
 ): void {
   const prod = isProdEnv();
+  const secure =
+    (process.env.COOKIE_SECURE || '').toLowerCase() === 'true' || prod;
+  const sameSite = cookieSameSite();
+  // SameSite=None requires Secure
+  const forceSecure = sameSite === 'None' ? true : secure;
   const parts = [
     `${REFRESH_COOKIE_NAME}=${encodeURIComponent(refreshToken)}`,
     'Path=/',
     `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
     'HttpOnly',
-    prod ? 'Secure' : '',
-    prod ? 'SameSite=None' : 'SameSite=Lax',
+    forceSecure ? 'Secure' : '',
+    `SameSite=${sameSite}`,
   ].filter(Boolean);
+  const domain = cookieDomain();
+  if (domain) parts.push(`Domain=${domain}`);
   res.append('Set-Cookie', parts.join('; '));
 }
 
 export function clearRefreshCookie(res: Response): void {
   const prod = isProdEnv();
+  const secure =
+    (process.env.COOKIE_SECURE || '').toLowerCase() === 'true' || prod;
+  const sameSite = cookieSameSite();
+  const forceSecure = sameSite === 'None' ? true : secure;
   const parts = [
     `${REFRESH_COOKIE_NAME}=`,
     'Path=/',
     'Max-Age=0',
     'HttpOnly',
-    prod ? 'Secure' : '',
-    prod ? 'SameSite=None' : 'SameSite=Lax',
+    forceSecure ? 'Secure' : '',
+    `SameSite=${sameSite}`,
   ].filter(Boolean);
+  const domain = cookieDomain();
+  if (domain) parts.push(`Domain=${domain}`);
   res.append('Set-Cookie', parts.join('; '));
 }
 
@@ -67,7 +108,7 @@ function readCookieValue(req: Request): string | undefined {
 
 /**
  * Resolve refresh token for the request.
- * Cookie is always preferred. Body fallback only when allowBodyFallback is true (non-production).
+ * Cookie is always preferred. Body fallback only when allowBodyFallback is true.
  */
 export function readRefreshFromRequest(
   req: Request,
@@ -90,7 +131,8 @@ export function attachRefreshCookieAndSanitize<T extends { refreshToken?: string
   if (result.refreshToken) {
     setRefreshCookie(res, result.refreshToken);
   }
-  if (isProdEnv()) {
+  // Never expose refresh token in JSON when body fallback is disabled (prod default)
+  if (!allowRefreshBodyFallback()) {
     const { refreshToken: _omit, ...rest } = result;
     return rest;
   }
