@@ -5,11 +5,11 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "prisma generate --schema=./prisma/schema.prisma && nest build",
-    "start": "prisma migrate deploy --schema=./prisma/schema.prisma && node prisma/seed-roles.cjs && node prisma/seed-catalog.cjs && node dist/main.js",
+    "start": "node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && node prisma/seed-catalog.cjs && node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "npm run start",
     "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate deploy --schema=./prisma/schema.prisma",
+    "prisma:migrate": "node scripts/prisma-migrate-deploy.cjs",
     "prisma:seed-roles": "node prisma/seed-roles.cjs",
     "prisma:seed-catalog": "node prisma/seed-catalog.cjs",
     "test:e2e": "NODE_ENV=test jest --config ./test/jest-e2e.json --runInBand --forceExit",
