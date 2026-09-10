@@ -22,3 +22,5 @@
 - POST /api/v1/auth/refresh
 - POST /api/v1/auth/logout
 - GET  /api/v1/auth/me
+
+<!-- ci-health-recheck: no code changed; verifying whether Backend e2e (bookings/race) failure on 2026-09-10 is a flake -->
