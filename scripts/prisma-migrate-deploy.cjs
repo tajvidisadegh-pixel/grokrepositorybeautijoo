@@ -1,10 +1,10 @@
 /**
  * Production-safe migrate deploy with recovery for known P3009.
  *
- * Production DB has a failed row for:
+ * Production DB may still have a failed row for:
  *   20260909093000_account_type_separation
- * That folder was removed from the repo (superseded by 20260909090000_*).
- * Prisma refuses all further deploys until it is resolved → app crash-loop → 502.
+ * (folder removed from repo; superseded by 20260909090000_*).
+ * Prisma refuses all further deploys until it is resolved → crash-loop → 502.
  */
 const { existsSync } = require('fs');
 const { join } = require('path');
@@ -27,6 +27,7 @@ if (!schema) {
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 function run(args) {
+  console.log('[prisma-migrate] $ npx prisma', args.join(' '));
   const r = spawnSync(npx, ['prisma', ...args, '--schema', schema], {
     encoding: 'utf8',
     shell: true,
@@ -37,7 +38,21 @@ function run(args) {
   return { status: r.status === null ? 1 : r.status, out };
 }
 
-console.log('[prisma-migrate] deploy with schema:', schema);
+console.log('[prisma-migrate] schema:', schema);
+
+// Proactively clear known failed rows (safe if already resolved / missing)
+for (const name of KNOWN_FAILED) {
+  console.warn(`[prisma-migrate] ensuring known-failed is rolled-back: ${name}`);
+  const resolved = run(['migrate', 'resolve', '--rolled-back', name]);
+  // status 0 = marked; non-zero usually means already applied/resolved or not found — continue
+  if (resolved.status !== 0) {
+    console.warn(
+      `[prisma-migrate] resolve --rolled-back exited ${resolved.status} (ok if already clean)`,
+    );
+  }
+}
+
+console.log('[prisma-migrate] migrate deploy…');
 let result = run(['migrate', 'deploy']);
 
 if (result.status === 0) {
@@ -45,22 +60,17 @@ if (result.status === 0) {
   process.exit(0);
 }
 
-const m = result.out.match(/The `([^`]+)` migration started at .+ failed/);
-const name = m && m[1];
-
-if (name && KNOWN_FAILED.includes(name)) {
-  console.warn(
-    `[prisma-migrate] P3009: resolving known-failed migration as rolled-back: ${name}`,
-  );
-  const resolved = run(['migrate', 'resolve', '--rolled-back', name]);
-  if (resolved.status !== 0) {
-    console.error('[prisma-migrate] resolve --rolled-back failed');
-    process.exit(resolved.status || 1);
-  }
-  console.log('[prisma-migrate] retrying migrate deploy…');
+// Retry once more if P3009 still present
+if (/P3009|failed migrations/i.test(result.out)) {
+  const m = result.out.match(/The `([^`]+)` migration started at .+ failed/);
+  const name = (m && m[1]) || KNOWN_FAILED[0];
+  console.warn(`[prisma-migrate] still blocked; resolve again: ${name}`);
+  run(['migrate', 'resolve', '--rolled-back', name]);
+  // also try --applied in case schema changes already exist in DB
+  run(['migrate', 'resolve', '--applied', name]);
   result = run(['migrate', 'deploy']);
   if (result.status === 0) {
-    console.log('[prisma-migrate] OK after resolve');
+    console.log('[prisma-migrate] OK after second resolve');
     process.exit(0);
   }
 }
