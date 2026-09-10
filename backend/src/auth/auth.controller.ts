@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import type { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   RegisterDto,
@@ -22,9 +22,9 @@ import {
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import {
+  allowRefreshBodyFallback,
   attachRefreshCookieAndSanitize,
   clearRefreshCookie,
-  isProdEnv,
   readRefreshFromRequest,
 } from './auth-cookies';
 
@@ -78,8 +78,8 @@ export class AuthController {
 
   /**
    * Rotate refresh token.
-   * Production: httpOnly cookie only (body refreshToken ignored).
-   * Development: cookie preferred, body accepted as fallback for tooling.
+   * Cookie is the primary (and production-only) transport.
+   * Body refreshToken accepted only when REFRESH_ALLOW_BODY=true or non-production.
    */
   @Public()
   @Post('refresh')
@@ -89,9 +89,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() body: RefreshDto = {},
   ) {
-    const allowBody = !isProdEnv();
     const token = readRefreshFromRequest(req, body?.refreshToken, {
-      allowBodyFallback: allowBody,
+      allowBodyFallback: allowRefreshBodyFallback(),
     });
     if (!token) {
       clearRefreshCookie(res);
@@ -109,9 +108,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() body: RefreshDto = {},
   ) {
-    const allowBody = !isProdEnv();
     const token = readRefreshFromRequest(req, body?.refreshToken, {
-      allowBodyFallback: allowBody,
+      allowBodyFallback: allowRefreshBodyFallback(),
     });
     if (token) {
       await this.auth.logout(token);
