@@ -29,4 +29,5 @@ ENV STORAGE_LOCAL_PATH=/app/uploads
 ENV STORAGE_PROVIDER=local
 EXPOSE 3000
 
-CMD ["sh", "-c", "mkdir -p \"${STORAGE_LOCAL_PATH:-/app/uploads}\" && chmod 755 \"${STORAGE_LOCAL_PATH:-/app/uploads}\" 2>/dev/null || true; npx prisma migrate deploy --schema=./prisma/schema.prisma && node prisma/seed-roles.cjs && (node prisma/seed-catalog.cjs || true) && node dist/main.js"]
+# Use recovery migrate script (handles P3009 for removed failed migration), not raw prisma migrate deploy
+CMD ["sh", "-c", "mkdir -p \"${STORAGE_LOCAL_PATH:-/app/uploads}\" && chmod 755 \"${STORAGE_LOCAL_PATH:-/app/uploads}\" 2>/dev/null || true; node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && (node prisma/seed-catalog.cjs || true) && node dist/main.js"]
