@@ -92,6 +92,9 @@ jobs:
       - name: E2E Auth login / refresh / logout
         run: npm run test:e2e -- --testPathPattern=auth/login-refresh-logout
 
+      - name: E2E Auth httpOnly cookie path
+        run: npm run test:e2e -- --testPathPattern=auth/cookie-auth
+
       - name: E2E OTP rate-limit
         run: npm run test:e2e -- --testPathPattern=auth/otp-rate-limit
 
