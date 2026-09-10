@@ -1,12 +1,23 @@
+# dependencies / build output
 node_modules/
 .next/
 dist/
+
+# env files
 .env
 .env.local
 .env.*.local
+
+# misc
 uploads/
 *.zip
 .DS_Store
 coverage/
 .turbo/
 *.log
+
+# TS incremental build info (should never be committed)
+*.tsbuildinfo
+
+# one-off restore/recovery scratch dirs — never commit these again
+.tmp-restore*/

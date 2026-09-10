@@ -1,7 +1,16 @@
 /**
  * Typed helpers for customer / professional / admin panel endpoints.
- * Admin helpers intentionally do NOT fall back to mock data.
+ *
+ * Production policy (step 9):
+ * - Admin helpers NEVER fall back to mock / sample / static data.
+ * - On API failure callers must surface errors (PanelError / toast), not invent rows.
+ * - NEXT_PUBLIC_USE_MOCK is unsupported and treated as off.
  */
+if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('NEXT_PUBLIC_USE_MOCK is not allowed in production');
+  }
+}
 import { apiClient } from './api';
 
 export type Paginated<T> = { items?: T[]; data?: T[]; total?: number; page?: number; limit?: number };
