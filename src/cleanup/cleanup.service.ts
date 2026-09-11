@@ -8,7 +8,7 @@ export type CleanupStats = {
   otpsDeleted: number;
   refreshTokensDeleted: number;
   sessionsDeleted: number;
-  bookingsExpired: number;
+  bookingsCompleted: number;
   mediaOrphansDeleted: number;
 };
 
@@ -54,7 +54,7 @@ export class CleanupService implements OnModuleInit, OnModuleDestroy {
       const stats = await this.runAll();
       this.logger.log(
         `Cleanup done: otp=${stats.otpsDeleted} refresh=${stats.refreshTokensDeleted} ` +
-          `sessions=${stats.sessionsDeleted} bookingsExpired=${stats.bookingsExpired} ` +
+          `sessions=${stats.sessionsDeleted} bookingsCompleted=${stats.bookingsCompleted} ` +
           `mediaOrphans=${stats.mediaOrphansDeleted}`,
       );
     } catch (err) {
@@ -66,19 +66,19 @@ export class CleanupService implements OnModuleInit, OnModuleDestroy {
 
   /** Public for tests / manual trigger */
   async runAll(): Promise<CleanupStats> {
-    const [otpsDeleted, refreshTokensDeleted, sessionsDeleted, bookingsExpired, mediaOrphansDeleted] =
+    const [otpsDeleted, refreshTokensDeleted, sessionsDeleted, bookingsCompleted, mediaOrphansDeleted] =
       await Promise.all([
         this.purgeExpiredOtps(),
         this.purgeExpiredRefreshTokens(),
         this.purgeExpiredSessions(),
-        this.expireStaleBookings(),
+        this.completePastBookings(),
         this.purgeOrphanDraftMedia(),
       ]);
     return {
       otpsDeleted,
       refreshTokensDeleted,
       sessionsDeleted,
-      bookingsExpired,
+      bookingsCompleted,
       mediaOrphansDeleted,
     };
   }
@@ -119,15 +119,21 @@ export class CleanupService implements OnModuleInit, OnModuleDestroy {
     return result.count;
   }
 
-  /** pending/confirmed with endAt in the past → expired (keep row for history). */
-  async expireStaleBookings(): Promise<number> {
+  /**
+   * pending/confirmed with endAt in the past → completed (editable later by pro/admin).
+   * Per issue #52: past due bookings auto-marked completed, not expired.
+   */
+  async completePastBookings(): Promise<number> {
     const now = new Date();
     const result = await this.prisma.booking.updateMany({
       where: {
         status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
         endAt: { lt: now },
       },
-      data: { status: BookingStatus.expired },
+      data: {
+        status: BookingStatus.completed,
+        completedAt: now,
+      },
     });
     return result.count;
   }
