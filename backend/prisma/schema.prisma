@@ -522,11 +522,10 @@ model Notification {
   title     String           @db.VarChar(200)
   body      String           @db.Text
   data      Json?
-  isRead    Boolean          @default(false) @map("is_read")
   readAt    DateTime?        @map("read_at") @db.Timestamptz
   createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@index([userId, isRead])
+  @@index([userId, readAt])
   @@index([createdAt])
   @@map("notifications")
 }
@@ -537,9 +536,9 @@ model AuditLog {
   action     String   @db.VarChar(100)
   entityType String   @map("entity_type") @db.VarChar(80)
   entityId   String?  @map("entity_id") @db.Uuid
-  metadata   Json?
+  before     Json?
+  after      Json?
   ipAddress  String?  @map("ip_address") @db.VarChar(45)
-  userAgent  String?  @map("user_agent") @db.VarChar(512)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
   actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
   @@index([actorId])
