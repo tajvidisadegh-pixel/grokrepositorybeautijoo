@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
-import { fetchAdminProfessionals, setProfessionalStatus, type AdminProfessional } from '@/lib/panel-api';
+import { fetchAdminProfessionals, adminSetProfessionalStatus, type AdminProfessional } from '@/lib/panel-api';
 import { persianProfessionalStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 
@@ -23,7 +23,7 @@ export default function AdminProfessionalsPage() {
   useEffect(() => { load(); }, [load]);
   async function onStatus(id: string, status: string) {
     setBusyId(id); setError(null);
-    try { await setProfessionalStatus(id, status); await load(); }
+    try { await adminSetProfessionalStatus(id, status); await load(); }
     catch (e) { setError(friendlyApiError(e)); }
     finally { setBusyId(null); }
   }

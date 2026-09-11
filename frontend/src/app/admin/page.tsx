@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
 import { MiniBarChart, MiniStackedBarChart } from '@/components/panel/mini-chart';
-import { fetchAdminDashboard, type AdminDashboard, type AdminWindowStats } from '@/lib/panel-api';
+import { fetchAdminDashboard, type AdminDashboard, type AdminWindowStats } from '@/lib/admin-dashboard-api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { persianBookingStatus, persianProfessionalStatus } from '@/lib/persian-status';
