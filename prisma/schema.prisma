@@ -408,7 +408,7 @@ model ManualReservation {
   professionalId String   @map("professional_id") @db.Uuid
   startAt        DateTime @map("start_at") @db.Timestamptz
   endAt          DateTime @map("end_at") @db.Timestamptz
-  note           String?  @db.VarChar(255)
+  note           String?  @map("notes") @db.VarChar(255)
   professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
   @@index([professionalId, startAt, endAt])
   @@map("manual_reservations")
