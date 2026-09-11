@@ -67,22 +67,33 @@ export class AdminService {
   }
 
   async stats() {
-    const [users, professionals, bookings, reviews] = await Promise.all([
-      this.safeCount(() => this.prisma.user.count()),
-      this.safeCount(() => this.prisma.professional.count()),
-      this.safeCount(() => this.prisma.booking.count()),
-      this.safeCount(() => this.prisma.review.count()),
-    ]);
-    let bookingsByStatus: any[] = [];
-    try {
-      bookingsByStatus = await this.prisma.booking.groupBy({
-        by: ['status'],
-        _count: true,
-      });
-    } catch {
-      bookingsByStatus = [];
-    }
-    return { users, professionals, bookings, reviews, bookingsByStatus };
+    const [users, professionals, bookings, reviews, completed, cancelled, pending] =
+      await Promise.all([
+        this.safeCount(() => this.prisma.user.count()),
+        this.safeCount(() => this.prisma.professional.count()),
+        this.safeCount(() => this.prisma.booking.count()),
+        this.safeCount(() => this.prisma.review.count()),
+        this.safeCount(() =>
+          this.prisma.booking.count({ where: { status: BookingStatus.completed } }),
+        ),
+        this.safeCount(() =>
+          this.prisma.booking.count({ where: { status: BookingStatus.cancelled } }),
+        ),
+        this.safeCount(() =>
+          this.prisma.booking.count({ where: { status: BookingStatus.pending } }),
+        ),
+      ]);
+    return {
+      users,
+      professionals,
+      bookings,
+      reviews,
+      bookingsByStatus: [
+        { status: 'completed', _count: completed },
+        { status: 'cancelled', _count: cancelled },
+        { status: 'pending', _count: pending },
+      ],
+    };
   }
 
   private async windowStats(since: Date): Promise<WindowStats> {
@@ -116,7 +127,6 @@ export class AdminService {
     }
   }
 
-  /** Full shape required by frontend AdminDashboard */
   async dashboard() {
     const today = startOfTodayUtc();
     const last7 = daysAgoUtc(7);
@@ -251,28 +261,47 @@ export class AdminService {
       createdAt: string;
     }[] = [];
     try {
-      const logs = (await this.prisma.auditLog.findMany({
+      const logs = await this.prisma.auditLog.findMany({
         take: 10,
         orderBy: { createdAt: 'desc' },
-      })) as any[];
+      });
       recentActivity = logs.map((l) => ({
         id: l.id,
         action: l.action,
         entityType: l.entityType,
         actor: null,
-        createdAt:
-          l.createdAt instanceof Date
-            ? l.createdAt.toISOString()
-            : String(l.createdAt),
+        createdAt: l.createdAt.toISOString(),
       }));
     } catch {
       recentActivity = [];
     }
 
-    let recentProfessionals: any[] = [];
-    let recentUsers: any[] = [];
-    let recentBookings: any[] = [];
-    let recentReviews: any[] = [];
+    let recentProfessionals: {
+      id: string;
+      title: string;
+      status: string;
+      displayName: string | null;
+      createdAt: string;
+    }[] = [];
+    let recentUsers: {
+      id: string;
+      phone: string | null;
+      displayName: string | null;
+      createdAt: string;
+    }[] = [];
+    let recentBookings: {
+      id: string;
+      status: string;
+      professionalTitle: string | null;
+      customerName: string | null;
+      createdAt: string;
+    }[] = [];
+    let recentReviews: {
+      id: string;
+      rating: number;
+      professionalTitle: string | null;
+      createdAt: string;
+    }[] = [];
 
     try {
       const rows = await this.prisma.professional.findMany({
@@ -282,7 +311,7 @@ export class AdminService {
           user: { include: { profile: true } },
         },
       });
-      recentProfessionals = rows.map((p: any) => ({
+      recentProfessionals = rows.map((p) => ({
         id: p.id,
         title: p.title,
         status: p.status,
@@ -299,7 +328,7 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         include: { profile: true },
       });
-      recentUsers = rows.map((u: any) => ({
+      recentUsers = rows.map((u) => ({
         id: u.id,
         phone: u.phone,
         displayName: u.profile?.displayName ?? null,
@@ -318,7 +347,7 @@ export class AdminService {
           customer: { include: { profile: true } },
         },
       });
-      recentBookings = rows.map((b: any) => ({
+      recentBookings = rows.map((b) => ({
         id: b.id,
         status: b.status,
         professionalTitle: b.professional?.title ?? null,
@@ -336,7 +365,7 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         include: { professional: true },
       });
-      recentReviews = rows.map((r: any) => ({
+      recentReviews = rows.map((r) => ({
         id: r.id,
         rating: r.rating,
         professionalTitle: r.professional?.title ?? null,
@@ -367,7 +396,7 @@ export class AdminService {
         userGrowth,
         professionalGrowth,
         bookingActivity,
-        revenue: null,
+        revenue: null as null,
       },
       pending: {
         professionalsAwaitingReview: pendingProfessionals,
@@ -401,12 +430,12 @@ export class AdminService {
         cancelled: 0,
         refunded: 0,
       },
-      recentPaidPayments: [],
+      recentPaidPayments: [] as unknown[],
     };
   }
 
-  async listFinancialTransactions(_query: any) {
-    return { items: [], meta: { page: 1, limit: 20, total: 0 } };
+  async listFinancialTransactions(_query: unknown) {
+    return { items: [] as unknown[], meta: { page: 1, limit: 20, total: 0 } };
   }
 
   async getFinancialTransactionDetail(id: string) {
@@ -420,7 +449,7 @@ export class AdminService {
       key: PLATFORM_COMMISSION_RATE_KEY,
       rate: DEFAULT_PLATFORM_COMMISSION_RATE,
       defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE,
-      updatedAt: null,
+      updatedAt: null as string | null,
       notice: '',
     };
   }
@@ -445,7 +474,7 @@ export class AdminService {
       threshold: 3,
       timeWindowMinutes: 60,
       since: new Date().toISOString(),
-      recentFailed: [],
+      recentFailed: [] as unknown[],
     };
   }
 
@@ -704,8 +733,8 @@ export class AdminService {
     return this.prisma.booking.update({ where: { id }, data: { status } });
   }
 
-  async listReviews(_q: any) {
-    return { items: [], meta: { page: 1, limit: 20, total: 0 } };
+  async listReviews(_q: unknown) {
+    return { items: [] as unknown[], meta: { page: 1, limit: 20, total: 0 } };
   }
 
   async setReviewVisibility(
@@ -721,8 +750,8 @@ export class AdminService {
     return this.prisma.review.delete({ where: { id } });
   }
 
-  async listMedia(_q: any) {
-    return { items: [], meta: { page: 1, limit: 24, total: 0 } };
+  async listMedia(_q: unknown) {
+    return { items: [] as unknown[], meta: { page: 1, limit: 24, total: 0 } };
   }
 
   async setMediaStatus(id: string, status: MediaStatus, _actorId?: string) {
@@ -764,11 +793,11 @@ export class AdminService {
     }
   }
 
-  async listNotifications(_q: any) {
-    return { items: [], meta: { page: 1, limit: 30, total: 0 } };
+  async listNotifications(_q: unknown) {
+    return { items: [] as unknown[], meta: { page: 1, limit: 30, total: 0 } };
   }
 
-  async broadcastNotification(_dto: any, _actorId?: string) {
+  async broadcastNotification(_dto: unknown, _actorId?: string) {
     return { success: true };
   }
 
@@ -776,7 +805,7 @@ export class AdminService {
     return {};
   }
 
-  async updatePlatformSettingsGroup(_group: string, _values: any, _actorId?: string) {
+  async updatePlatformSettingsGroup(_group: string, _values: unknown, _actorId?: string) {
     return {};
   }
 
@@ -784,16 +813,16 @@ export class AdminService {
     return {};
   }
 
-  async updateCMSContent(_content: any, _actorId?: string) {
+  async updateCMSContent(_content: unknown, _actorId?: string) {
     return {};
   }
 
   async getSiteBuilder() {
-    return [];
+    return [] as unknown[];
   }
 
-  async updateSiteBuilder(_sections: any[], _actorId?: string) {
-    return [];
+  async updateSiteBuilder(_sections: unknown[], _actorId?: string) {
+    return [] as unknown[];
   }
 
   async listRoles() {
