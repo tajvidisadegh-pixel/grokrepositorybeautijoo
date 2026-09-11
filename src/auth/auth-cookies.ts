@@ -32,8 +32,18 @@ function cookieSameSite(): 'None' | 'Lax' | 'Strict' {
 }
 
 function cookieDomain(): string | undefined {
-  const d = (process.env.COOKIE_DOMAIN || '').trim();
-  return d || undefined;
+  const explicit = (process.env.COOKIE_DOMAIN || '').trim();
+  if (explicit) return explicit;
+  // Production default for beautijoo subdomains so cookie is shared across
+  // beautijoo.ir and api.beautijoo.ir without requiring every deploy to set env.
+  // Override with COOKIE_DOMAIN= (empty) to disable, or set a different domain.
+  if (isProdEnv()) {
+    const cors = (process.env.CORS_ORIGINS || '').toLowerCase();
+    if (cors.includes('beautijoo.ir')) {
+      return '.beautijoo.ir';
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -41,7 +51,7 @@ function cookieDomain(): string | undefined {
  * - httpOnly: not readable by JS
  * - secure: HTTPS only in production (or COOKIE_SECURE=true)
  * - sameSite: Lax by default (same-site subdomains); override via COOKIE_SAMESITE
- * - domain: optional COOKIE_DOMAIN (e.g. .beautijoo.ir)
+ * - domain: COOKIE_DOMAIN or auto .beautijoo.ir in production when CORS matches
  * - path: / so /api/v1/auth/* receives it
  */
 export function setRefreshCookie(
