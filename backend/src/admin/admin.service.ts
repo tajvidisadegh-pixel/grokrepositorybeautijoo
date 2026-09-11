@@ -17,6 +17,7 @@ import {
   DEFAULT_PLATFORM_COMMISSION_RATE,
   PLATFORM_COMMISSION_RATE_KEY,
 } from '../payments/financial.util';
+import { userAuthCache } from '../auth/user-auth-cache';
 
 type WindowStats = {
   newUsers: number;
@@ -54,6 +55,11 @@ function daysAgoUtc(n: number): Date {
   return d;
 }
 
+function withPublicUrl<T extends { url?: string | null }>(row: T): T & { publicUrl: string | null } {
+  const url = row?.url ?? null;
+  return { ...row, publicUrl: url };
+}
+
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
@@ -63,6 +69,30 @@ export class AdminService {
       return await fn();
     } catch {
       return 0;
+    }
+  }
+
+  private async audit(
+    actorId: string | undefined,
+    action: string,
+    entityType: string,
+    entityId: string | null,
+    before?: unknown,
+    after?: unknown,
+  ) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId ?? null,
+          action,
+          entityType,
+          entityId,
+          before: before === undefined ? undefined : (before as Prisma.InputJsonValue),
+          after: after === undefined ? undefined : (after as Prisma.InputJsonValue),
+        },
+      });
+    } catch {
+      /* non-blocking */
     }
   }
 
@@ -307,9 +337,7 @@ export class AdminService {
       const rows = await this.prisma.professional.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
-        include: {
-          user: { include: { profile: true } },
-        },
+        include: { user: { include: { profile: true } } },
       });
       recentProfessionals = rows.map((p) => ({
         id: p.id,
@@ -413,75 +441,257 @@ export class AdminService {
     };
   }
 
-  async getFinancialSummary(_period: 'today' | 'this_month' | 'all_time' = 'all_time') {
+  // ---- Financial ----
+  async getFinancialSummary(period: 'today' | 'this_month' | 'all_time' = 'all_time') {
+    let since: Date | undefined;
+    if (period === 'today') since = startOfTodayUtc();
+    if (period === 'this_month') since = startOfMonthUtc();
+
+    const whereBase: Prisma.PaymentWhereInput = since
+      ? { createdAt: { gte: since } }
+      : {};
+
+    const [paidAgg, pending, failed, cancelled, refunded, recentPaid] =
+      await Promise.all([
+        this.prisma.payment.aggregate({
+          where: { ...whereBase, status: PaymentStatus.paid },
+          _sum: {
+            amount: true,
+            platformCommissionAmount: true,
+            professionalNetAmount: true,
+          },
+          _count: true,
+        }),
+        this.prisma.payment.count({
+          where: { ...whereBase, status: PaymentStatus.pending },
+        }),
+        this.prisma.payment.count({
+          where: { ...whereBase, status: PaymentStatus.failed },
+        }),
+        this.prisma.payment.count({
+          where: { ...whereBase, status: PaymentStatus.cancelled },
+        }),
+        this.prisma.payment.count({
+          where: { ...whereBase, status: PaymentStatus.refunded },
+        }),
+        this.prisma.payment.findMany({
+          where: { status: PaymentStatus.paid },
+          orderBy: { paidAt: 'desc' },
+          take: 10,
+          include: {
+            booking: {
+              select: {
+                id: true,
+                professionalId: true,
+                customerId: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+    const gross = paidAgg._sum.amount ?? 0;
+    const commission = paidAgg._sum.platformCommissionAmount ?? 0;
+    const net = paidAgg._sum.professionalNetAmount ?? Math.max(0, gross - commission);
+
     return {
-      period: _period,
+      period,
       currency: 'TOMAN',
-      providerType: 'test',
-      refundImplemented: false,
-      grossRevenue: 0,
-      platformCommission: 0,
-      professionalNet: 0,
+      providerType: process.env.PAYMENT_PROVIDER || 'none',
+      refundImplemented: true,
+      grossRevenue: gross,
+      platformCommission: commission,
+      professionalNet: net,
       paymentFee: 0,
       transactions: {
-        paid: 0,
-        pending: 0,
-        failed: 0,
-        cancelled: 0,
-        refunded: 0,
+        paid: paidAgg._count ?? 0,
+        pending,
+        failed,
+        cancelled,
+        refunded,
       },
-      recentPaidPayments: [] as unknown[],
+      recentPaidPayments: recentPaid,
     };
   }
 
-  async listFinancialTransactions(_query: unknown) {
-    return { items: [] as unknown[], meta: { page: 1, limit: 20, total: 0 } };
+  async listFinancialTransactions(query: {
+    page?: number;
+    limit?: number;
+    status?: PaymentStatus;
+    provider?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    sortBy?: 'createdAt' | 'paidAt' | 'amount';
+    sortOrder?: 'asc' | 'desc';
+  }) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const skip = (page - 1) * limit;
+    const where: Prisma.PaymentWhereInput = {};
+    if (query.status) where.status = query.status;
+    if (query.provider) where.provider = query.provider;
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) where.createdAt.gte = new Date(query.startDate);
+      if (query.endDate) where.createdAt.lte = new Date(query.endDate);
+    }
+    if (query.search?.trim()) {
+      const term = query.search.trim();
+      where.OR = [
+        { providerRef: { contains: term, mode: 'insensitive' } },
+        { idempotencyKey: { contains: term, mode: 'insensitive' } },
+        { bookingId: { equals: term } },
+      ];
+    }
+    const sortBy = query.sortBy || 'createdAt';
+    const sortOrder = query.sortOrder || 'desc';
+    const [items, total] = await Promise.all([
+      this.prisma.payment.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          booking: {
+            select: {
+              id: true,
+              status: true,
+              professional: { select: { id: true, title: true } },
+              customer: {
+                select: {
+                  id: true,
+                  phone: true,
+                  profile: { select: { displayName: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.payment.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+    };
   }
 
   async getFinancialTransactionDetail(id: string) {
-    const payment = await this.prisma.payment.findUnique({ where: { id } });
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: {
+        booking: {
+          include: {
+            professional: true,
+            customer: { include: { profile: true } },
+            items: true,
+          },
+        },
+      },
+    });
     if (!payment) throw new NotFoundException('Transaction not found');
     return payment;
   }
 
   async getCommissionSetting() {
+    const row = await this.prisma.platformSetting.findUnique({
+      where: { key: PLATFORM_COMMISSION_RATE_KEY },
+    });
+    const rate =
+      typeof row?.value === 'number'
+        ? row.value
+        : typeof row?.value === 'object' &&
+            row?.value &&
+            'rate' in (row.value as object)
+          ? Number((row.value as { rate: number }).rate)
+          : DEFAULT_PLATFORM_COMMISSION_RATE;
     return {
       key: PLATFORM_COMMISSION_RATE_KEY,
-      rate: DEFAULT_PLATFORM_COMMISSION_RATE,
+      rate: Number.isFinite(rate) ? rate : DEFAULT_PLATFORM_COMMISSION_RATE,
       defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE,
-      updatedAt: null as string | null,
+      updatedAt: row?.updatedAt?.toISOString?.() ?? null,
       notice: '',
     };
   }
 
-  async updateCommissionSetting(newRate: number, _adminUserId?: string) {
+  async updateCommissionSetting(newRate: number, adminUserId?: string) {
     if (typeof newRate !== 'number' || isNaN(newRate) || newRate < 0 || newRate > 100) {
       throw new BadRequestException('Commission rate must be between 0 and 100');
     }
+    const rate = Math.round(newRate * 100) / 100;
+    const before = await this.getCommissionSetting();
+    const row = await this.prisma.platformSetting.upsert({
+      where: { key: PLATFORM_COMMISSION_RATE_KEY },
+      create: { key: PLATFORM_COMMISSION_RATE_KEY, value: { rate } },
+      update: { value: { rate } },
+    });
+    await this.audit(
+      adminUserId,
+      'settings.commission_update',
+      'platform_setting',
+      row.id,
+      { rate: before.rate },
+      { rate },
+    );
     return {
       key: PLATFORM_COMMISSION_RATE_KEY,
-      rate: Math.round(newRate * 100) / 100,
+      rate,
       defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE,
-      updatedAt: new Date().toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
       notice: '',
     };
   }
 
   async getFailedTransactionsAlert() {
+    const thresholdSetting = await this.prisma.platformSetting.findUnique({
+      where: { key: 'failed_payment_alert_threshold' },
+    });
+    const threshold =
+      typeof thresholdSetting?.value === 'number'
+        ? thresholdSetting.value
+        : typeof thresholdSetting?.value === 'object' &&
+            thresholdSetting?.value &&
+            'threshold' in (thresholdSetting.value as object)
+          ? Number((thresholdSetting.value as { threshold: number }).threshold)
+          : 3;
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const recentFailed = await this.prisma.payment.findMany({
+      where: { status: PaymentStatus.failed, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
     return {
-      isTriggered: false,
-      failedCount: 0,
-      threshold: 3,
+      isTriggered: recentFailed.length >= threshold,
+      failedCount: recentFailed.length,
+      threshold,
       timeWindowMinutes: 60,
-      since: new Date().toISOString(),
-      recentFailed: [] as unknown[],
+      since: since.toISOString(),
+      recentFailed,
     };
   }
 
-  async updateFailedTransactionsThreshold(threshold: number, _adminUserId?: string) {
+  async updateFailedTransactionsThreshold(threshold: number, adminUserId?: string) {
+    if (!Number.isFinite(threshold) || threshold < 1 || threshold > 1000) {
+      throw new BadRequestException('threshold must be between 1 and 1000');
+    }
+    const row = await this.prisma.platformSetting.upsert({
+      where: { key: 'failed_payment_alert_threshold' },
+      create: { key: 'failed_payment_alert_threshold', value: { threshold } },
+      update: { value: { threshold } },
+    });
+    await this.audit(
+      adminUserId,
+      'settings.failed_threshold_update',
+      'platform_setting',
+      row.id,
+      null,
+      { threshold },
+    );
     return { threshold };
   }
 
+  // ---- Users ----
   async listUsers(q: {
     page?: number;
     limit?: number;
@@ -494,6 +704,9 @@ export class AdminService {
     const skip = (page - 1) * limit;
     const where: Prisma.UserWhereInput = {};
     if (q.status) where.status = q.status;
+    if (q.role) {
+      where.userRoles = { some: { role: { name: q.role } } };
+    }
     if (q.search?.trim()) {
       const term = q.search.trim();
       where.OR = [
@@ -513,26 +726,86 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
     return {
-      items,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      items: items.map((u) => ({
+        ...u,
+        roles: u.userRoles.map((ur) => ur.role.name),
+      })),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
     };
   }
 
   async getUserDetail(id: string) {
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      ...user,
+      roles: user.userRoles.map((ur) => ur.role.name),
+    };
   }
 
-  async setUserStatus(id: string, status: UserStatus, _actorId?: string, _reason?: string) {
-    return this.prisma.user.update({ where: { id }, data: { status } });
+  async setUserStatus(id: string, status: UserStatus, actorId?: string, reason?: string) {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('User not found');
+    const updated = await this.prisma.user.update({ where: { id }, data: { status } });
+    userAuthCache.invalidate(id);
+    await this.audit(actorId, 'user.status_change', 'user', id, { status: existing.status }, { status, reason });
+    return updated;
   }
 
-  async setUserRoles(id: string, roles: string[], _actorId?: string) {
-    return { id, roles };
+  async setUserRoles(id: string, roles: string[], actorId?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const uniqueNames = Array.from(
+      new Set((roles || []).map((r) => String(r).trim()).filter(Boolean)),
+    );
+    if (uniqueNames.length === 0) {
+      throw new BadRequestException('حداقل یک نقش لازم است');
+    }
+
+    const dbRoles = await this.prisma.role.findMany({
+      where: { name: { in: uniqueNames } },
+    });
+    if (dbRoles.length !== uniqueNames.length) {
+      const found = new Set(dbRoles.map((r) => r.name));
+      const missing = uniqueNames.filter((n) => !found.has(n));
+      throw new BadRequestException(`نقش‌های نامعتبر: ${missing.join(', ')}`);
+    }
+
+    const before = await this.prisma.userRole.findMany({
+      where: { userId: id },
+      include: { role: true },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userRole.deleteMany({ where: { userId: id } });
+      await tx.userRole.createMany({
+        data: dbRoles.map((r) => ({
+          userId: id,
+          roleId: r.id,
+          assignedBy: actorId ?? null,
+        })),
+      });
+    });
+
+    userAuthCache.invalidate(id);
+
+    await this.audit(
+      actorId,
+      'user.roles_change',
+      'user',
+      id,
+      { roles: before.map((b) => b.role.name) },
+      { roles: uniqueNames },
+    );
+
+    return this.getUserDetail(id);
   }
 
+  // ---- Professionals ----
   async listProfessionals(q: {
     page?: number;
     limit?: number;
@@ -578,7 +851,7 @@ export class AdminService {
     ]);
     return {
       items,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
     };
   }
 
@@ -598,10 +871,14 @@ export class AdminService {
           include: { service: { include: { category: true } } },
         },
         workingHours: { include: { breaks: true } },
+        mediaAssets: { orderBy: { createdAt: 'desc' }, take: 50 },
       },
     });
     if (!pro) throw new NotFoundException('Professional not found');
-    return pro;
+    return {
+      ...pro,
+      mediaAssets: (pro.mediaAssets || []).map(withPublicUrl),
+    };
   }
 
   async setProfessionalStatus(
@@ -662,28 +939,28 @@ export class AdminService {
       /* non-blocking */
     }
 
-    try {
-      await this.prisma.auditLog.create({
-        data: {
-          actorId: actorId ?? null,
-          action: 'professional.status_change',
-          entityType: 'professional',
-          entityId: id,
-          before: { status: existing.status, publishedAt: existing.publishedAt },
-          after: { status, reason: reason ?? null },
-        },
-      });
-    } catch {
-      /* non-blocking */
-    }
+    await this.audit(
+      actorId,
+      'professional.status_change',
+      'professional',
+      id,
+      { status: existing.status, publishedAt: existing.publishedAt },
+      { status, reason: reason ?? null },
+    );
 
     return updated;
   }
 
-  async setProfessionalFeatured(id: string, isFeatured: boolean, _actorId?: string) {
-    return this.prisma.professional.update({ where: { id }, data: { isFeatured } });
+  async setProfessionalFeatured(id: string, isFeatured: boolean, actorId?: string) {
+    const updated = await this.prisma.professional.update({
+      where: { id },
+      data: { isFeatured },
+    });
+    await this.audit(actorId, 'professional.feature', 'professional', id, null, { isFeatured });
+    return updated;
   }
 
+  // ---- Bookings ----
   async listBookings(q: {
     page?: number;
     limit?: number;
@@ -697,71 +974,202 @@ export class AdminService {
     const skip = (page - 1) * limit;
     const where: Prisma.BookingWhereInput = {};
     if (q.status) where.status = q.status;
-    try {
-      const [items, total] = await Promise.all([
-        this.prisma.booking.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            professional: true,
-            customer: { include: { profile: true } },
-          },
-        }),
-        this.prisma.booking.count({ where }),
-      ]);
-      return {
-        items,
-        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-      };
-    } catch {
-      return { items: [], meta: { page, limit, total: 0, totalPages: 0 } };
+    if (q.startDate || q.endDate) {
+      where.startAt = {};
+      if (q.startDate) where.startAt.gte = new Date(q.startDate);
+      if (q.endDate) where.startAt.lte = new Date(q.endDate);
     }
+    if (q.search?.trim()) {
+      const term = q.search.trim();
+      where.OR = [
+        { id: { equals: term } },
+        { customer: { phone: { contains: term } } },
+        { professional: { title: { contains: term, mode: 'insensitive' } } },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          professional: true,
+          customer: { include: { profile: true } },
+        },
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+    };
   }
 
   async getBookingDetail(id: string) {
-    return this.prisma.booking.findUnique({ where: { id } });
+    const booking = await this.prisma.booking.findUnique({
+      where: { id },
+      include: {
+        professional: true,
+        customer: { include: { profile: true } },
+        items: true,
+        payment: true,
+        review: true,
+      },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    return booking;
   }
 
   async updateBookingStatus(
     id: string,
     status: BookingStatus,
-    _actorId?: string,
-    _reason?: string,
+    actorId?: string,
+    reason?: string,
   ) {
-    return this.prisma.booking.update({ where: { id }, data: { status } });
+    const existing = await this.prisma.booking.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Booking not found');
+    const data: Prisma.BookingUpdateInput = { status };
+    if (status === BookingStatus.confirmed) data.confirmedAt = new Date();
+    if (status === BookingStatus.cancelled) {
+      data.cancelledAt = new Date();
+      data.cancelReason = reason ?? existing.cancelReason;
+    }
+    if (status === BookingStatus.completed) data.completedAt = new Date();
+    if (status === BookingStatus.rejected) data.rejectedReason = reason ?? existing.rejectedReason;
+    const updated = await this.prisma.booking.update({ where: { id }, data });
+    await this.audit(actorId, 'booking.status_change', 'booking', id, { status: existing.status }, { status, reason });
+    return updated;
   }
 
-  async listReviews(_q: unknown) {
-    return { items: [] as unknown[], meta: { page: 1, limit: 20, total: 0 } };
+  // ---- Reviews ----
+  async listReviews(q: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    rating?: number;
+    isPublished?: boolean;
+  }) {
+    const page = Math.max(1, Number(q.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
+    const skip = (page - 1) * limit;
+    const where: Prisma.ReviewWhereInput = {};
+    if (typeof q.isPublished === 'boolean') where.isPublished = q.isPublished;
+    if (typeof q.rating === 'number' && !Number.isNaN(q.rating)) where.rating = q.rating;
+    if (q.search?.trim()) {
+      const term = q.search.trim();
+      where.OR = [
+        { comment: { contains: term, mode: 'insensitive' } },
+        { professional: { title: { contains: term, mode: 'insensitive' } } },
+        { customer: { phone: { contains: term } } },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.review.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          professional: { select: { id: true, title: true, slug: true } },
+          customer: {
+            select: {
+              id: true,
+              phone: true,
+              profile: { select: { displayName: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+    };
   }
 
   async setReviewVisibility(
     id: string,
     isPublished: boolean,
-    _actorId?: string,
-    _reason?: string,
+    actorId?: string,
+    reason?: string,
   ) {
-    return this.prisma.review.update({ where: { id }, data: { isPublished } });
+    const updated = await this.prisma.review.update({
+      where: { id },
+      data: { isPublished },
+    });
+    await this.audit(actorId, 'review.visibility', 'review', id, null, { isPublished, reason });
+    return updated;
   }
 
-  async deleteReview(id: string, _actorId?: string) {
-    return this.prisma.review.delete({ where: { id } });
+  async deleteReview(id: string, actorId?: string) {
+    const existing = await this.prisma.review.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Review not found');
+    await this.prisma.review.delete({ where: { id } });
+    await this.audit(actorId, 'review.delete', 'review', id, existing, null);
+    return { id, deleted: true };
   }
 
-  async listMedia(_q: unknown) {
-    return { items: [] as unknown[], meta: { page: 1, limit: 24, total: 0 } };
+  // ---- Media ----
+  async listMedia(q: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    kind?: string;
+    status?: MediaStatus;
+    professionalId?: string;
+  }) {
+    const page = Math.max(1, Number(q.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 24));
+    const skip = (page - 1) * limit;
+    const where: Prisma.MediaAssetWhereInput = {};
+    if (q.status) where.status = q.status;
+    if (q.kind) where.kind = q.kind as never;
+    if (q.professionalId) where.professionalId = q.professionalId;
+    if (q.search?.trim()) {
+      const term = q.search.trim();
+      where.OR = [
+        { url: { contains: term, mode: 'insensitive' } },
+        { storageKey: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.mediaAsset.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          professional: { select: { id: true, title: true, slug: true } },
+        },
+      }),
+      this.prisma.mediaAsset.count({ where }),
+    ]);
+    return {
+      items: items.map(withPublicUrl),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+    };
   }
 
-  async setMediaStatus(id: string, status: MediaStatus, _actorId?: string) {
-    return this.prisma.mediaAsset.update({ where: { id }, data: { status } });
+  async setMediaStatus(id: string, status: MediaStatus, actorId?: string) {
+    const updated = await this.prisma.mediaAsset.update({
+      where: { id },
+      data: { status },
+    });
+    await this.audit(actorId, 'media.status', 'media_asset', id, null, { status });
+    return withPublicUrl(updated);
   }
 
-  async deleteMedia(id: string, _actorId?: string) {
-    return this.prisma.mediaAsset.delete({ where: { id } });
+  async deleteMedia(id: string, actorId?: string) {
+    const existing = await this.prisma.mediaAsset.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Media not found');
+    await this.prisma.mediaAsset.delete({ where: { id } });
+    await this.audit(actorId, 'media.delete', 'media_asset', id, existing, null);
+    return { id, deleted: true };
   }
 
+  // ---- Audit ----
   async listAuditLogs(q: {
     page?: number;
     limit?: number;
@@ -775,63 +1183,180 @@ export class AdminService {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 50));
     const skip = (page - 1) * limit;
-    try {
-      const [items, total] = await Promise.all([
-        this.prisma.auditLog.findMany({
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-        }),
-        this.prisma.auditLog.count(),
-      ]);
-      return {
-        items,
-        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-      };
-    } catch {
-      return { items: [], meta: { page, limit, total: 0, totalPages: 0 } };
+    const where: Prisma.AuditLogWhereInput = {};
+    if (q.action) where.action = { contains: q.action, mode: 'insensitive' };
+    if (q.actorId) where.actorId = q.actorId;
+    if (q.entityType) where.entityType = q.entityType;
+    if (q.entityId) where.entityId = q.entityId;
+    if (q.startDate || q.endDate) {
+      where.createdAt = {};
+      if (q.startDate) where.createdAt.gte = new Date(q.startDate);
+      if (q.endDate) where.createdAt.lte = new Date(q.endDate);
     }
+    const [items, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+    };
   }
 
-  async listNotifications(_q: unknown) {
-    return { items: [] as unknown[], meta: { page: 1, limit: 30, total: 0 } };
+  // ---- Notifications ----
+  async listNotifications(q: {
+    page?: number;
+    limit?: number;
+    type?: NotificationType;
+    search?: string;
+  }) {
+    const page = Math.max(1, Number(q.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 30));
+    const skip = (page - 1) * limit;
+    const where: Prisma.NotificationWhereInput = {};
+    if (q.type) where.type = q.type;
+    if (q.search?.trim()) {
+      const term = q.search.trim();
+      where.OR = [
+        { title: { contains: term, mode: 'insensitive' } },
+        { body: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              phone: true,
+              profile: { select: { displayName: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+    };
   }
 
-  async broadcastNotification(_dto: unknown, _actorId?: string) {
-    return { success: true };
+  async broadcastNotification(
+    dto: { title: string; body: string; target: 'all' | 'professionals' | 'customers' },
+    actorId?: string,
+  ) {
+    if (!dto?.title?.trim() || !dto?.body?.trim()) {
+      throw new BadRequestException('title and body are required');
+    }
+    const where: Prisma.UserWhereInput = { status: UserStatus.active };
+    if (dto.target === 'professionals') {
+      where.userRoles = { some: { role: { name: 'professional' } } };
+    } else if (dto.target === 'customers') {
+      where.userRoles = { some: { role: { name: 'customer' } } };
+    }
+    const users = await this.prisma.user.findMany({
+      where,
+      select: { id: true },
+      take: 5000,
+    });
+    if (users.length === 0) {
+      return { success: true, created: 0 };
+    }
+    const result = await this.prisma.notification.createMany({
+      data: users.map((u) => ({
+        userId: u.id,
+        type: NotificationType.system,
+        title: dto.title.trim(),
+        body: dto.body.trim(),
+        data: { broadcast: true, target: dto.target, actorId: actorId ?? null },
+      })),
+    });
+    await this.audit(actorId, 'notification.broadcast', 'notification', null, null, {
+      target: dto.target,
+      created: result.count,
+    });
+    return { success: true, created: result.count };
   }
 
+  // ---- Settings / CMS / Site builder (PlatformSetting JSON store) ----
   async getPlatformSettings() {
-    return {};
+    const rows = await this.prisma.platformSetting.findMany();
+    const out: Record<string, unknown> = {};
+    for (const r of rows) out[r.key] = r.value;
+    return out;
   }
 
-  async updatePlatformSettingsGroup(_group: string, _values: unknown, _actorId?: string) {
-    return {};
+  async updatePlatformSettingsGroup(
+    group: string,
+    values: Record<string, unknown>,
+    actorId?: string,
+  ) {
+    const key = `settings.${group}`;
+    const row = await this.prisma.platformSetting.upsert({
+      where: { key },
+      create: { key, value: values as Prisma.InputJsonValue },
+      update: { value: values as Prisma.InputJsonValue },
+    });
+    await this.audit(actorId, 'settings.group_update', 'platform_setting', row.id, null, {
+      group,
+      values,
+    });
+    return { key, value: row.value };
   }
 
   async getCMSContent() {
-    return {};
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'cms.content' } });
+    return (row?.value as Record<string, unknown>) || {};
   }
 
-  async updateCMSContent(_content: unknown, _actorId?: string) {
-    return {};
+  async updateCMSContent(content: Record<string, unknown>, actorId?: string) {
+    const row = await this.prisma.platformSetting.upsert({
+      where: { key: 'cms.content' },
+      create: { key: 'cms.content', value: content as Prisma.InputJsonValue },
+      update: { value: content as Prisma.InputJsonValue },
+    });
+    await this.audit(actorId, 'cms.update', 'platform_setting', row.id, null, content);
+    return row.value;
   }
 
   async getSiteBuilder() {
-    return [] as unknown[];
+    const row = await this.prisma.platformSetting.findUnique({
+      where: { key: 'site.builder' },
+    });
+    const val = row?.value;
+    return Array.isArray(val) ? val : [];
   }
 
-  async updateSiteBuilder(_sections: unknown[], _actorId?: string) {
-    return [] as unknown[];
+  async updateSiteBuilder(sections: unknown[], actorId?: string) {
+    const row = await this.prisma.platformSetting.upsert({
+      where: { key: 'site.builder' },
+      create: { key: 'site.builder', value: sections as Prisma.InputJsonValue },
+      update: { value: sections as Prisma.InputJsonValue },
+    });
+    await this.audit(actorId, 'site_builder.update', 'platform_setting', row.id, null, {
+      count: Array.isArray(sections) ? sections.length : 0,
+    });
+    return Array.isArray(row.value) ? row.value : [];
   }
 
   async listRoles() {
     return this.prisma.role.findMany({
       include: { rolePermissions: { include: { permission: true } } },
+      orderBy: { name: 'asc' },
     });
   }
 
   async listPermissions() {
-    return this.prisma.permission.findMany();
+    return this.prisma.permission.findMany({ orderBy: { code: 'asc' } });
   }
 }
