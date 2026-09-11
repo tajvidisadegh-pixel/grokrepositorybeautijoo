@@ -1,6 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString, IsUUID, ArrayMinSize } from 'class-validator';
+import { IsArray, IsOptional, IsString, IsUUID, ArrayMinSize, MinLength, MaxLength } from 'class-validator';
 import { BookingsService } from './bookings.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -23,6 +32,13 @@ class TransitionDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+class ReportDto {
+  @IsString()
+  @MinLength(5)
+  @MaxLength(2000)
+  message!: string;
 }
 
 @ApiTags('bookings')
@@ -57,12 +73,21 @@ export class BookingsController {
     @CurrentUser('id') userId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('q') q?: string,
+    @Query('status') status?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('serviceId') serviceId?: string,
   ) {
-    return this.service.listMineAsProfessional(
-      userId,
-      page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
-    );
+    return this.service.listMineAsProfessional(userId, {
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      q,
+      status,
+      from,
+      to,
+      serviceId,
+    });
   }
 
   @Get(':id')
@@ -110,5 +135,17 @@ export class BookingsController {
     @CurrentUser('roles') roles: string[],
   ) {
     return this.service.transition(id, userId, roles || [], 'complete');
+  }
+
+  /** Professional (or admin) reports a booking issue to SUPER_ADMIN */
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Post(':id/report')
+  report(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('roles') roles: string[],
+    @Body() dto: ReportDto,
+  ) {
+    return this.service.reportToAdmin(id, userId, roles || [], dto.message);
   }
 }

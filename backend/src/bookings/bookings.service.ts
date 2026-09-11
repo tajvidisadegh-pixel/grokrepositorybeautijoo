@@ -11,6 +11,18 @@ import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { tehranDateStr, tehranHHMM } from '../common/timezone';
 
+export type ProBookingListQuery = {
+  page?: number;
+  limit?: number;
+  /** free-text: customer phone or display name */
+  q?: string;
+  status?: string;
+  /** ISO date YYYY-MM-DD (Tehran calendar day filter on startAt) */
+  from?: string;
+  to?: string;
+  serviceId?: string;
+};
+
 @Injectable()
 export class BookingsService {
   constructor(
@@ -204,12 +216,14 @@ export class BookingsService {
             throw new ConflictException('این بازه زمانی در دسترس نیست');
           }
 
+          // Default: registered as confirmed — no pro approval required (#52)
           const b = await tx.booking.create({
             data: {
               customerId,
               professionalId: data.professionalId,
               locationId: data.locationId,
-              status: BookingStatus.pending,
+              status: BookingStatus.confirmed,
+              confirmedAt: new Date(),
               startAt,
               endAt,
               totalPrice,
@@ -254,17 +268,17 @@ export class BookingsService {
       );
       await this.notifications.notify({
         userId: pro.userId,
-        type: NotificationType.booking_request,
-        title: 'درخواست رزرو جدید',
-        body: 'یک مشتری درخواست رزرو جدید ثبت کرد. جزئیات را در پنل رزروها ببینید.',
+        type: NotificationType.booking_confirmed,
+        title: 'رزرو جدید ثبت شد',
+        body: 'یک مشتری رزرو جدید ثبت کرد. جزئیات را در پنل رزروها ببینید.',
         data: { bookingId: booking.id, customerId, professionalId: data.professionalId },
         sms: true,
       });
       await this.notifications.notify({
         userId: customerId,
-        type: NotificationType.booking_request,
+        type: NotificationType.booking_confirmed,
         title: 'رزرو ثبت شد',
-        body: 'درخواست رزرو شما ثبت شد و در انتظار تأیید زیباگر است.',
+        body: 'رزرو شما با موفقیت ثبت شد.',
         data: { bookingId: booking.id, professionalId: data.professionalId },
         sms: false,
       });
@@ -309,23 +323,75 @@ export class BookingsService {
     return { items, meta: { page, limit, total } };
   }
 
-  async listMineAsProfessional(userId: string, page = 1, limit = 20) {
+  async listMineAsProfessional(userId: string, query: ProBookingListQuery = {}) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
     if (!pro) throw new ForbiddenException();
+
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(100, Math.max(1, query.limit || 20));
     const skip = (page - 1) * limit;
+
+    const where: Prisma.BookingWhereInput = { professionalId: pro.id };
+
+    if (query.status) {
+      const statuses = query.status
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean) as BookingStatus[];
+      if (statuses.length === 1) where.status = statuses[0];
+      else if (statuses.length > 1) where.status = { in: statuses };
+    }
+
+    if (query.from || query.to) {
+      where.startAt = {};
+      if (query.from) {
+        const d = new Date(query.from);
+        if (!isNaN(d.getTime())) (where.startAt as Prisma.DateTimeFilter).gte = d;
+      }
+      if (query.to) {
+        const d = new Date(query.to);
+        if (!isNaN(d.getTime())) {
+          // inclusive end-of-day if date-only
+          if (/^\d{4}-\d{2}-\d{2}$/.test(query.to.trim())) {
+            d.setHours(23, 59, 59, 999);
+          }
+          (where.startAt as Prisma.DateTimeFilter).lte = d;
+        }
+      }
+    }
+
+    if (query.serviceId) {
+      where.items = { some: { serviceId: query.serviceId } };
+    }
+
+    const q = (query.q || '').trim();
+    if (q) {
+      where.OR = [
+        { customer: { phone: { contains: q } } },
+        { customer: { profile: { displayName: { contains: q, mode: 'insensitive' } } } },
+        { notes: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
     const [items, total] = await Promise.all([
       this.prisma.booking.findMany({
-        where: { professionalId: pro.id },
+        where,
         skip,
         take: limit,
         orderBy: { startAt: 'desc' },
         include: {
-          customer: { select: { id: true, phone: true, profile: { select: { displayName: true } } } },
+          customer: {
+            select: {
+              id: true,
+              phone: true,
+              profile: { select: { displayName: true } },
+            },
+          },
           items: { include: { service: true } },
           payment: true,
         },
       }),
-      this.prisma.booking.count({ where: { professionalId: pro.id } }),
+      this.prisma.booking.count({ where }),
     ]);
     return { items, meta: { page, limit, total } };
   }
@@ -357,7 +423,13 @@ export class BookingsService {
     action: 'confirm' | 'reject' | 'cancel' | 'complete',
     reason?: string,
   ) {
-    const b = await this.prisma.booking.findUnique({ where: { id } });
+    const b = await this.prisma.booking.findUnique({
+      where: { id },
+      include: {
+        customer: { select: { id: true, phone: true } },
+        professional: { select: { id: true, userId: true } },
+      },
+    });
     if (!b) throw new NotFoundException();
     const isAdmin = roles.some((r) => ['admin', 'SUPER_ADMIN'].includes(r));
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
@@ -366,11 +438,16 @@ export class BookingsService {
 
     if (action === 'confirm' || action === 'reject') {
       if (!isAdmin && !isPro) throw new ForbiddenException();
-      if (b.status !== BookingStatus.pending) {
-        throw new BadRequestException('فقط رزرو در انتظار قابل تأیید/رد است');
+      // Allow reject from confirmed as well (pro can still decline after auto-confirm)
+      const allowedForReject = [BookingStatus.pending, BookingStatus.confirmed];
+      if (action === 'confirm' && b.status !== BookingStatus.pending) {
+        throw new BadRequestException('فقط رزرو در انتظار قابل تأیید است');
+      }
+      if (action === 'reject' && !allowedForReject.includes(b.status as BookingStatus)) {
+        throw new BadRequestException('این رزرو قابل رد نیست');
       }
       const status = action === 'confirm' ? BookingStatus.confirmed : BookingStatus.rejected;
-      return this.prisma.booking.update({
+      const updated = await this.prisma.booking.update({
         where: { id },
         data: {
           status,
@@ -378,6 +455,31 @@ export class BookingsService {
           rejectedReason: action === 'reject' ? reason ?? null : undefined,
         },
       });
+
+      if (action === 'reject') {
+        const body =
+          reason?.trim()
+            ? `رزرو شما توسط زیباگر رد شد. دلیل: ${reason.trim()}`
+            : 'رزرو شما توسط زیباگر رد شد.';
+        await this.notifications.notify({
+          userId: b.customerId,
+          type: NotificationType.booking_rejected,
+          title: 'رزرو رد شد',
+          body,
+          data: { bookingId: id, reason: reason ?? null },
+          sms: true,
+        });
+      } else {
+        await this.notifications.notify({
+          userId: b.customerId,
+          type: NotificationType.booking_confirmed,
+          title: 'رزرو تأیید شد',
+          body: 'رزرو شما توسط زیباگر تأیید شد.',
+          data: { bookingId: id },
+          sms: true,
+        });
+      }
+      return updated;
     }
 
     if (action === 'cancel') {
@@ -385,7 +487,7 @@ export class BookingsService {
       if (![BookingStatus.pending, BookingStatus.confirmed].includes(b.status as any)) {
         throw new BadRequestException('این رزرو قابل لغو نیست');
       }
-      return this.prisma.booking.update({
+      const updated = await this.prisma.booking.update({
         where: { id },
         data: {
           status: BookingStatus.cancelled,
@@ -393,19 +495,123 @@ export class BookingsService {
           cancelReason: reason ?? null,
         },
       });
+      const notifyUserId = isCustomer ? b.professional.userId : b.customerId;
+      await this.notifications.notify({
+        userId: notifyUserId,
+        type: NotificationType.booking_cancelled,
+        title: 'رزرو لغو شد',
+        body: reason?.trim()
+          ? `رزرو لغو شد. دلیل: ${reason.trim()}`
+          : 'رزرو لغو شد.',
+        data: { bookingId: id, reason: reason ?? null },
+        sms: true,
+      });
+      return updated;
     }
 
     if (action === 'complete') {
       if (!isAdmin && !isPro) throw new ForbiddenException();
-      if (b.status !== BookingStatus.confirmed) {
-        throw new BadRequestException('فقط رزرو تأییدشده قابل تکمیل است');
+      // Allow complete from confirmed, or past pending (auto-confirm era)
+      if (
+        ![BookingStatus.confirmed, BookingStatus.pending, BookingStatus.expired].includes(
+          b.status as BookingStatus,
+        )
+      ) {
+        throw new BadRequestException('این رزرو قابل تکمیل نیست');
       }
-      return this.prisma.booking.update({
+      const updated = await this.prisma.booking.update({
         where: { id },
         data: { status: BookingStatus.completed, completedAt: new Date() },
       });
+      await this.notifications.notify({
+        userId: b.customerId,
+        type: NotificationType.booking_completed,
+        title: 'رزرو تکمیل شد',
+        body: 'رزرو شما به‌عنوان تکمیل‌شده ثبت شد.',
+        data: { bookingId: id },
+        sms: false,
+      });
+      return updated;
     }
 
     throw new BadRequestException('عملیات نامعتبر');
+  }
+
+  /**
+   * Professional reports a problem on a booking → in-app notification to all SUPER_ADMIN
+   * (+ audit log). No separate Ticket table required.
+   */
+  async reportToAdmin(
+    bookingId: string,
+    userId: string,
+    roles: string[],
+    message: string,
+  ) {
+    const text = (message || '').trim();
+    if (text.length < 5) {
+      throw new BadRequestException('متن گزارش حداقل ۵ کاراکتر باشد');
+    }
+    if (text.length > 2000) {
+      throw new BadRequestException('متن گزارش بیش از حد طولانی است');
+    }
+
+    const b = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        customer: { select: { phone: true, profile: { select: { displayName: true } } } },
+        professional: { select: { id: true, userId: true, title: true } },
+      },
+    });
+    if (!b) throw new NotFoundException();
+
+    const isAdmin = roles.some((r) => ['admin', 'SUPER_ADMIN'].includes(r));
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    const isPro = pro && b.professionalId === pro.id;
+    if (!isAdmin && !isPro) throw new ForbiddenException();
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: userId,
+        action: 'booking.report_to_admin',
+        entityType: 'booking',
+        entityId: bookingId,
+        after: {
+          message: text,
+          customerPhone: b.customer?.phone ?? null,
+          professionalId: b.professionalId,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    const admins = await this.prisma.user.findMany({
+      where: {
+        status: 'active',
+        userRoles: { some: { role: { name: { in: ['SUPER_ADMIN', 'admin'] } } } },
+      },
+      select: { id: true },
+      take: 50,
+    });
+
+    const title = 'گزارش مشکل رزرو از زیباگر';
+    const body = `رزرو ${bookingId.slice(0, 8)}… — ${text}`;
+    await Promise.all(
+      admins.map((a) =>
+        this.notifications.notify({
+          userId: a.id,
+          type: NotificationType.system,
+          title,
+          body,
+          data: {
+            bookingId,
+            professionalId: b.professionalId,
+            reporterId: userId,
+            message: text,
+          },
+          sms: false,
+        }),
+      ),
+    );
+
+    return { message: 'گزارش برای سوپرادمین ارسال شد', notified: admins.length };
   }
 }
