@@ -73,7 +73,7 @@ export class AdminService {
       this.safeCount(() => this.prisma.booking.count()),
       this.safeCount(() => this.prisma.review.count()),
     ]);
-    let bookingsByStatus: { status: string; _count: number }[] = [];
+    let bookingsByStatus: any[] = [];
     try {
       bookingsByStatus = await this.prisma.booking.groupBy({
         by: ['status'],
@@ -177,7 +177,6 @@ export class AdminService {
       this.windowStats(thisMonth),
     ]);
 
-    // Simple day-bucket trends (last 30 days) without raw SQL
     const userGrowth: { date: string; count: number }[] = [];
     const professionalGrowth: { date: string; count: number }[] = [];
     const bookingActivity: {
@@ -252,36 +251,22 @@ export class AdminService {
       createdAt: string;
     }[] = [];
     try {
-      const logs = await this.prisma.auditLog.findMany({
+      const logs = (await this.prisma.auditLog.findMany({
         take: 10,
         orderBy: { createdAt: 'desc' },
-        include: {
-          actor: { include: { profile: true } },
-        } as any,
-      });
-      recentActivity = (logs as any[]).map((l) => ({
+      })) as any[];
+      recentActivity = logs.map((l) => ({
         id: l.id,
         action: l.action,
         entityType: l.entityType,
-        actor: l.actor?.profile?.displayName || l.actor?.phone || null,
-        createdAt: l.createdAt?.toISOString?.() || String(l.createdAt),
+        actor: null,
+        createdAt:
+          l.createdAt instanceof Date
+            ? l.createdAt.toISOString()
+            : String(l.createdAt),
       }));
     } catch {
-      try {
-        const logs = await this.prisma.auditLog.findMany({
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-        });
-        recentActivity = logs.map((l) => ({
-          id: l.id,
-          action: l.action,
-          entityType: l.entityType,
-          actor: null,
-          createdAt: l.createdAt.toISOString(),
-        }));
-      } catch {
-        recentActivity = [];
-      }
+      recentActivity = [];
     }
 
     let recentProfessionals: any[] = [];
@@ -290,14 +275,14 @@ export class AdminService {
     let recentReviews: any[] = [];
 
     try {
-      recentProfessionals = await this.prisma.professional.findMany({
+      const rows = await this.prisma.professional.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
         include: {
           user: { include: { profile: true } },
         },
       });
-      recentProfessionals = recentProfessionals.map((p) => ({
+      recentProfessionals = rows.map((p: any) => ({
         id: p.id,
         title: p.title,
         status: p.status,
@@ -309,12 +294,12 @@ export class AdminService {
     }
 
     try {
-      const users = await this.prisma.user.findMany({
+      const rows = await this.prisma.user.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
         include: { profile: true },
       });
-      recentUsers = users.map((u) => ({
+      recentUsers = rows.map((u: any) => ({
         id: u.id,
         phone: u.phone,
         displayName: u.profile?.displayName ?? null,
@@ -325,7 +310,7 @@ export class AdminService {
     }
 
     try {
-      const bookings = await this.prisma.booking.findMany({
+      const rows = await this.prisma.booking.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
         include: {
@@ -333,11 +318,12 @@ export class AdminService {
           customer: { include: { profile: true } },
         },
       });
-      recentBookings = bookings.map((b) => ({
+      recentBookings = rows.map((b: any) => ({
         id: b.id,
         status: b.status,
         professionalTitle: b.professional?.title ?? null,
-        customerName: b.customer?.profile?.displayName ?? b.customer?.phone ?? null,
+        customerName:
+          b.customer?.profile?.displayName ?? b.customer?.phone ?? null,
         createdAt: b.createdAt.toISOString(),
       }));
     } catch {
@@ -345,12 +331,12 @@ export class AdminService {
     }
 
     try {
-      const reviews = await this.prisma.review.findMany({
+      const rows = await this.prisma.review.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
         include: { professional: true },
       });
-      recentReviews = reviews.map((r) => ({
+      recentReviews = rows.map((r: any) => ({
         id: r.id,
         rating: r.rating,
         professionalTitle: r.professional?.title ?? null,
