@@ -91,12 +91,57 @@ ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "platform_commission_amount" INT
 ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "professional_net_amount" INTEGER;
 ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "metadata" JSONB;
 
+-- ========== MEDIA ASSETS (matches Prisma MediaAsset: url required) ==========
+CREATE TABLE IF NOT EXISTS "media_assets" (
+  "id" UUID NOT NULL,
+  "professional_id" UUID,
+  "professional_service_id" UUID,
+  "kind" "MediaKind" NOT NULL DEFAULT 'portfolio',
+  "status" "MediaStatus" NOT NULL DEFAULT 'draft',
+  "url" VARCHAR(512) NOT NULL DEFAULT '',
+  "storage_key" VARCHAR(512),
+  "mime_type" VARCHAR(100),
+  "size_bytes" INTEGER,
+  "sort_order" INTEGER NOT NULL DEFAULT 0,
+  "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "media_assets_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "professional_id" UUID;
 ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "professional_service_id" UUID;
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "kind" "MediaKind";
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "status" "MediaStatus" DEFAULT 'draft';
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "url" VARCHAR(512);
 ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "storage_key" VARCHAR(512);
 ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "public_url" VARCHAR(512);
-ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "mime_type" VARCHAR(120);
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "mime_type" VARCHAR(100);
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "size_bytes" INTEGER;
 ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "sort_order" INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "title" VARCHAR(200);
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE "media_assets" ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- Backfill url from legacy columns if empty
+UPDATE "media_assets"
+SET "url" = COALESCE(
+  NULLIF("url", ''),
+  NULLIF("public_url", ''),
+  NULLIF("storage_key", ''),
+  ''
+)
+WHERE "url" IS NULL OR "url" = '';
+
+UPDATE "media_assets" SET "url" = '' WHERE "url" IS NULL;
+
+DO $$ BEGIN
+  ALTER TABLE "media_assets" ALTER COLUMN "url" SET DEFAULT '';
+  ALTER TABLE "media_assets" ALTER COLUMN "url" SET NOT NULL;
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'media_assets.url NOT NULL: %', SQLERRM;
+END $$;
+
+CREATE INDEX IF NOT EXISTS "media_assets_professional_id_kind_idx" ON "media_assets"("professional_id", "kind");
+CREATE INDEX IF NOT EXISTS "media_assets_professional_service_id_idx" ON "media_assets"("professional_service_id");
 
 ALTER TABLE "service_add_ons" ADD COLUMN IF NOT EXISTS "description" TEXT;
 ALTER TABLE "service_add_ons" ADD COLUMN IF NOT EXISTS "extra_duration_min" INTEGER NOT NULL DEFAULT 0;
