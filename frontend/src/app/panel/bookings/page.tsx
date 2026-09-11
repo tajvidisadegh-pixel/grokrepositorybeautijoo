@@ -20,9 +20,14 @@ export default function PanelBookingsPage() {
   const [submitting, setSubmitting] = useState(false);
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setItems((await fetchMyBookings(1, 50)).items); }
-    catch (e) { setError(friendlyApiError(e)); }
-    finally { setLoading(false); }
+    try {
+      const res = await fetchMyBookings(1, 50);
+      setItems(Array.isArray(res.items) ? res.items : []);
+    } catch (e) {
+      // Soft-fail: show empty list + message instead of blocking whole panel
+      setItems([]);
+      setError(friendlyApiError(e));
+    } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
   async function submitReview(bookingId: string) {
