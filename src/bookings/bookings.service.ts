@@ -439,11 +439,14 @@ export class BookingsService {
     if (action === 'confirm' || action === 'reject') {
       if (!isAdmin && !isPro) throw new ForbiddenException();
       // Allow reject from confirmed as well (pro can still decline after auto-confirm)
-      const allowedForReject = [BookingStatus.pending, BookingStatus.confirmed];
+      const allowedForReject: BookingStatus[] = [
+        BookingStatus.pending,
+        BookingStatus.confirmed,
+      ];
       if (action === 'confirm' && b.status !== BookingStatus.pending) {
         throw new BadRequestException('فقط رزرو در انتظار قابل تأیید است');
       }
-      if (action === 'reject' && !allowedForReject.includes(b.status as BookingStatus)) {
+      if (action === 'reject' && !allowedForReject.includes(b.status)) {
         throw new BadRequestException('این رزرو قابل رد نیست');
       }
       const status = action === 'confirm' ? BookingStatus.confirmed : BookingStatus.rejected;
@@ -484,7 +487,11 @@ export class BookingsService {
 
     if (action === 'cancel') {
       if (!isAdmin && !isCustomer && !isPro) throw new ForbiddenException();
-      if (![BookingStatus.pending, BookingStatus.confirmed].includes(b.status as any)) {
+      const allowedForCancel: BookingStatus[] = [
+        BookingStatus.pending,
+        BookingStatus.confirmed,
+      ];
+      if (!allowedForCancel.includes(b.status)) {
         throw new BadRequestException('این رزرو قابل لغو نیست');
       }
       const updated = await this.prisma.booking.update({
@@ -511,12 +518,13 @@ export class BookingsService {
 
     if (action === 'complete') {
       if (!isAdmin && !isPro) throw new ForbiddenException();
-      // Allow complete from confirmed, or past pending (auto-confirm era)
-      if (
-        ![BookingStatus.confirmed, BookingStatus.pending, BookingStatus.expired].includes(
-          b.status as BookingStatus,
-        )
-      ) {
+      // Allow complete from confirmed, pending, or expired (auto-confirm era)
+      const allowedForComplete: BookingStatus[] = [
+        BookingStatus.confirmed,
+        BookingStatus.pending,
+        BookingStatus.expired,
+      ];
+      if (!allowedForComplete.includes(b.status)) {
         throw new BadRequestException('این رزرو قابل تکمیل نیست');
       }
       const updated = await this.prisma.booking.update({
