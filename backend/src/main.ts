@@ -63,9 +63,6 @@ async function bootstrap() {
     }),
   );
 
-  // CORS origins resolved in configuration.ts:
-  // - production: CORS_ORIGINS required (no localhost-only)
-  // - development: CORS_ORIGINS or localhost defaults
   const corsOrigins = config.get<string[]>('corsOrigins');
   if (!corsOrigins || corsOrigins.length === 0) {
     throw new Error(
@@ -80,6 +77,20 @@ async function bootstrap() {
   });
   logger.log(`CORS origins (${isProd ? 'prod' : 'dev'}): ${corsOrigins.join(', ')}`);
 
+  const smsProvider = (process.env.SMS_PROVIDER || config.get<string>('smsProvider') || 'mock').toLowerCase();
+  if (isProd && (smsProvider === 'mock' || smsProvider === '')) {
+    logger.warn(
+      'SMS_PROVIDER is mock/empty in production — OTP codes will NOT be delivered to real phones. Set SMS_PROVIDER to your live provider.',
+    );
+  }
+
+  const paymentProvider = (process.env.PAYMENT_PROVIDER || config.get<string>('paymentProvider') || '').toLowerCase();
+  if (isProd && (!paymentProvider || paymentProvider === 'mock')) {
+    logger.warn(
+      'PAYMENT_PROVIDER is empty/mock in production — online payments are disabled or test-only.',
+    );
+  }
+
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -91,7 +102,6 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Swagger only in non-production (issue #37 item 8)
   if (!isProd) {
     const swagger = new DocumentBuilder()
       .setTitle('Beautijoo API')
