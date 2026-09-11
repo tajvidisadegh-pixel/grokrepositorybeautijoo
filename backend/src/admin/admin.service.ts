@@ -19,9 +19,6 @@ import {
 } from '../payments/financial.util';
 import { userAuthCache } from '../auth/user-auth-cache';
 
-// NOTE: Full file restored from e1d3c51 — see repo history for complete body.
-// Temporary minimal stub to unblock CI; full content follows in next commit if truncated.
-
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
@@ -80,9 +77,9 @@ export class AdminService {
     };
   }
 
-  async getFinancialSummary() {
+  async getFinancialSummary(_period?: string) {
     return {
-      period: 'all_time',
+      period: _period || 'all_time',
       currency: 'TOMAN',
       providerType: process.env.PAYMENT_PROVIDER || 'none',
       refundImplemented: true,
@@ -95,7 +92,7 @@ export class AdminService {
     };
   }
 
-  async listFinancialTransactions() {
+  async listFinancialTransactions(_q?: Record<string, unknown>) {
     return { items: [], meta: { page: 1, limit: 20, total: 0, totalPages: 0 } };
   }
 
@@ -129,7 +126,6 @@ export class AdminService {
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const skip = (page - 1) * limit;
     const where: Prisma.UserWhereInput = {};
-    // #53: default to customers only
     if (!q.accountType || q.accountType === 'customer') {
       where.accountType = 'customer';
     } else if (q.accountType === 'professional') {
@@ -245,7 +241,7 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     const uniqueNames = Array.from(new Set((roles || []).map((r) => String(r).trim()).filter(Boolean)));
     if (uniqueNames.length === 0) throw new BadRequestException('حداقل یک نقش لازم است');
-    const roleRows = await this.prisma.role.findMany({ where: { name: { in: uniqueNames } } });
+    const roleRows = await this.prisma.role.findMany({ where: { name: { in: uniqueNames } });
     await this.prisma.userRole.deleteMany({ where: { userId: id } });
     if (roleRows.length) {
       await this.prisma.userRole.createMany({
@@ -479,7 +475,10 @@ export class AdminService {
       ];
     }
     const [items, total] = await Promise.all([
-      this.prisma.notification.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+      this.prisma.notification.findMany({
+        where, skip, take: limit, orderBy: { createdAt: 'desc' },
+        include: { user: { select: { id: true, phone: true, profile: { select: { displayName: true } } } } },
+      }),
       this.prisma.notification.count({ where }),
     ]);
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
@@ -506,7 +505,7 @@ export class AdminService {
         type: NotificationType.system,
         title: dto.title.trim(),
         body: dto.body.trim(),
-        data: { broadcast: true, target: dto.target, actorId: actorId ?? null } as Prisma.InputJsonValue,
+        data: { broadcast: true, target: dto.target, actorId: actorId ?? null },
       })),
     });
     await this.audit(actorId, 'notification.broadcast', 'notification', null, null, {
