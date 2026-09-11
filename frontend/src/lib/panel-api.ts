@@ -62,25 +62,6 @@ export type AdminUser = {
   createdAt?: string;
   lastLoginAt?: string | null;
   bookingCount?: number;
-  favoritesCount?: number;
-  reviewsCount?: number;
-  successfulBookings?: number;
-  cancelledBookings?: number;
-  pendingBookings?: number;
-  totalPaid?: number;
-  city?: string | null;
-  lastBooking?: {
-    id?: string;
-    startAt?: string;
-    status?: string;
-    totalPrice?: number | null;
-    city?: string | null;
-  } | null;
-  lastNotification?: {
-    id?: string;
-    title?: string;
-    createdAt?: string;
-  } | null;
 };
 export type AdminUserBooking = {
   id: string;
@@ -97,42 +78,19 @@ export type AdminUserReview = {
   createdAt?: string;
   professional?: { id?: string; title?: string | null } | null;
 };
-export type AdminUserFavorite = {
-  id: string;
-  createdAt?: string;
-  professionalId?: string;
-  professional?: {
-    id?: string;
-    title?: string | null;
-    slug?: string | null;
-    status?: string;
-    user?: { profile?: { displayName?: string | null; avatarUrl?: string | null } | null } | null;
-  } | null;
-};
-export type AdminUserActivity = {
-  at: string;
-  kind: string;
-  label: string;
-  meta?: Record<string, unknown>;
-};
 export type AdminUserDetail = AdminUser & {
   stats?: {
     totalBookings?: number;
     successfulBookings?: number;
     cancelledBookings?: number;
-    pendingBookings?: number;
     totalPaid?: number;
     paidTransactions?: number;
     professionalsUsed?: number;
     reviewsCount?: number;
-    favoritesCount?: number;
   };
   bookings?: AdminUserBooking[];
   reviews?: AdminUserReview[];
-  favorites?: AdminUserFavorite[];
-  notifications?: { id: string; type?: string; title?: string; body?: string; readAt?: string | null; createdAt: string }[];
-  activity?: AdminUserActivity[];
-  auditLogs?: { id: string; action?: string; entityType?: string; entityId?: string; actorId?: string; before?: unknown; after?: unknown; createdAt: string }[];
+  auditLogs?: { id: string; action?: string; entity?: string; entityId?: string; actorId?: string; meta?: unknown; createdAt: string }[];
 };
 export type AdminProfessional = { id: string; slug: string; title?: string | null; status: string; user?: { phone?: string | null; profile?: { displayName?: string | null } | null } | null };
 export type AuditLogItem = { id: string; action?: string; entity?: string; entityId?: string; actorId?: string; meta?: unknown; createdAt: string };
@@ -390,45 +348,99 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
       credentials: 'include',
     });
   let res: Response;
-  try { res = await doUpload(token); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد.'); }
+  try { res = await doUpload(token); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.'); }
   if (res.status === 401) {
-    const refreshed = await tryRefresh();
-    if (!refreshed) { clearTokens(); throw new ApiError(401, 'نشست منقضی شده. دوباره وارد شوید.'); }
-    token = refreshed;
-    try { res = await doUpload(token); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد.'); }
+    const fresh = await tryRefresh();
+    if (!fresh) { clearTokens(); throw new ApiError(401, 'نشست منقضی شده است. دوباره وارد شوید.'); }
+    setTokens(fresh);
+    try { res = await doUpload(fresh); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.'); }
   }
   if (!res.ok) {
-    let msg = 'آپلود ناموفق بود';
-    try { const j = await res.json(); msg = j.message || j.error || msg; } catch {}
-    throw new ApiError(res.status, msg);
+    let msg = 'آپلود ناموفق';
+    let body: unknown;
+    try {
+      body = await res.json();
+      const m = (body as { message?: string | string[] })?.message;
+      msg = Array.isArray(m) ? m.join(', ') : (m || msg);
+    } catch { /* ignore */ }
+    throw new ApiError(res.status, String(msg), body);
   }
-  return res.json();
+  const asset = (await res.json()) as MediaAssetItem & { url?: string };
+  const publicUrl = resolveMediaUrl(asset.publicUrl || asset.url) || asset.publicUrl || '';
+  return { ...asset, publicUrl };
 }
 
-// Admin helpers
+export async function fetchMyMedia(kind?: string) {
+  const q = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+  const list = await apiClient.get<MediaAssetItem[]>(`/professionals/me/media${q}`);
+  return (list || []).map((a) => ({ ...a, publicUrl: resolveMediaUrl(a.publicUrl) }));
+}
+export async function deleteMyMedia(id: string) {
+  return apiClient.delete(`/professionals/me/media/${id}`);
+}
+export async function publishMyMedia(ids: string[]) {
+  return apiClient.post('/professionals/me/media/publish', { ids });
+}
+export async function fetchMyPriceRules(psId: string) {
+  const res = await apiClient.get<PriceRuleItem[] | Paginated<PriceRuleItem>>(`/professionals/me/services/${psId}/price-rules`);
+  return unwrapList(res as Paginated<PriceRuleItem>);
+}
+export async function upsertMyPriceRule(psId: string, payload: Partial<PriceRuleItem> & { label: string; price: number }) {
+  return apiClient.post(`/professionals/me/services/${psId}/price-rules`, payload);
+}
+export async function deleteMyPriceRule(psId: string, ruleId: string) {
+  return apiClient.delete(`/professionals/me/price-rules/${ruleId}`);
+}
+export async function fetchMyDurationRules(psId: string) {
+  const res = await apiClient.get<DurationRuleItem[] | Paginated<DurationRuleItem>>(`/professionals/me/services/${psId}/duration-rules`);
+  return unwrapList(res as Paginated<DurationRuleItem>);
+}
+export async function upsertMyDurationRule(psId: string, payload: Partial<DurationRuleItem> & { label: string; durationMin: number }) {
+  return apiClient.post(`/professionals/me/services/${psId}/duration-rules`, payload);
+}
+export async function deleteMyDurationRule(psId: string, ruleId: string) {
+  return apiClient.delete(`/professionals/me/duration-rules/${ruleId}`);
+}
+
 export async function fetchAdminStats() {
   return apiClient.get<AdminStats>('/admin/stats');
 }
 
-export async function fetchAdminUsers(opts: {
+export type AdminUsersQuery = {
   page?: number;
   limit?: number;
   search?: string;
   status?: string;
+  role?: string;
   accountType?: string;
-  city?: string;
-} = {}) {
-  const { page = 1, limit = 20, search, status, accountType, city } = opts;
+};
+
+export async function fetchAdminUsers(q: AdminUsersQuery | number = 1, limitArg = 20) {
+  let page = 1;
+  let limit = 20;
+  let search: string | undefined;
+  let status: string | undefined;
+  let role: string | undefined;
+  let accountType = 'customer';
+  if (typeof q === 'number') {
+    page = q;
+    limit = limitArg;
+  } else {
+    page = q.page ?? 1;
+    limit = q.limit ?? 20;
+    search = q.search;
+    status = q.status;
+    role = q.role;
+    accountType = q.accountType ?? 'customer';
+  }
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('limit', String(limit));
   if (search) params.set('search', search);
   if (status) params.set('status', status);
+  if (role) params.set('role', role);
   if (accountType) params.set('accountType', accountType);
-  if (city) params.set('city', city);
-  type UsersResponse = {
-    items?: AdminUser[];
-    data?: AdminUser[];
+  type UsersResponse = Paginated<AdminUser> & {
     meta?: { page: number; limit: number; total: number; totalPages: number };
     total?: number;
   };
@@ -461,14 +473,18 @@ export async function adminNotifyUsers(payload: {
 }
 
 export async function fetchAdminProfessionals(page = 1, limit = 20, status?: string) {
-  const params = new URLSearchParams();
-  params.set('page', String(page));
-  params.set('limit', String(limit));
-  if (status) params.set('status', status);
-  const res = await apiClient.get<Paginated<AdminProfessional> | AdminProfessional[]>(`/admin/professionals?${params.toString()}`);
+  const q = status ? `&status=${encodeURIComponent(status)}` : '';
+  const res = await apiClient.get<Paginated<AdminProfessional> | AdminProfessional[]>(`/admin/professionals?page=${page}&limit=${limit}${q}`);
   return { items: unwrapList(res as Paginated<AdminProfessional>), raw: res };
 }
-
+export async function fetchAdminBookings(page = 1, limit = 20) {
+  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/admin/bookings?page=${page}&limit=${limit}`);
+  return { items: unwrapList(res as Paginated<BookingListItem>), raw: res };
+}
+export async function fetchAuditLogs(page = 1, limit = 30) {
+  const res = await apiClient.get<Paginated<AuditLogItem> | AuditLogItem[]>(`/admin/audit-logs?page=${page}&limit=${limit}`);
+  return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
+}
 export async function adminSetProfessionalStatus(id: string, status: string) {
   return apiClient.patch(`/admin/professionals/${id}/status`, { status });
 }
