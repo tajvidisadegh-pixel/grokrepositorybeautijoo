@@ -19,7 +19,7 @@ import {
   type AdminCommissionSetting,
   type AdminFinancialPeriod,
   type HourlyFailedAlert,
-} from '@/lib/panel-api';
+} from '@/lib/admin-finance-api';
 import { persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice } from '@/lib/utils';
