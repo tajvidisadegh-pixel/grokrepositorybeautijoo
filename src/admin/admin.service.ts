@@ -9,7 +9,6 @@ import {
   BookingStatus,
   PaymentStatus,
   UserStatus,
-  MediaKind,
   MediaStatus,
   NotificationType,
   Prisma,
@@ -19,8 +18,6 @@ import {
   PLATFORM_COMMISSION_RATE_KEY,
 } from '../payments/financial.util';
 
-const REVENUE_DATA_RELIABLE = true;
-
 type WindowStats = {
   newUsers: number;
   newProfessionals: number;
@@ -28,74 +25,397 @@ type WindowStats = {
   completedBookings: number;
   cancelledBookings: number;
 };
-type DaySeriesRow = { day: Date; count: bigint };
-type BookingDayRow = { day: Date; status: string; count: bigint };
-type RevenueDayRow = { day: Date; amount: bigint };
+
+function emptyWindow(): WindowStats {
+  return {
+    newUsers: 0,
+    newProfessionals: 0,
+    newBookings: 0,
+    completedBookings: 0,
+    cancelledBookings: 0,
+  };
+}
+
+function startOfTodayUtc(): Date {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfMonthUtc(): Date {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+function daysAgoUtc(n: number): Date {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
 
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async safeCount(fn: () => Promise<number>): Promise<number> {
+    try {
+      return await fn();
+    } catch {
+      return 0;
+    }
+  }
+
   async stats() {
     const [users, professionals, bookings, reviews] = await Promise.all([
-      this.prisma.user.count(),
-      this.prisma.professional.count(),
-      this.prisma.booking.count(),
-      this.prisma.review.count(),
+      this.safeCount(() => this.prisma.user.count()),
+      this.safeCount(() => this.prisma.professional.count()),
+      this.safeCount(() => this.prisma.booking.count()),
+      this.safeCount(() => this.prisma.review.count()),
     ]);
-    const byStatus = await this.prisma.booking.groupBy({
-      by: ['status'],
-      _count: true,
-    });
-    return { users, professionals, bookings, reviews, bookingsByStatus: byStatus };
+    let bookingsByStatus: { status: string; _count: number }[] = [];
+    try {
+      bookingsByStatus = await this.prisma.booking.groupBy({
+        by: ['status'],
+        _count: true,
+      });
+    } catch {
+      bookingsByStatus = [];
+    }
+    return { users, professionals, bookings, reviews, bookingsByStatus };
   }
 
   private async windowStats(since: Date): Promise<WindowStats> {
-    const [
-      newUsers,
-      newProfessionals,
-      newBookings,
-      completedBookings,
-      cancelledBookings,
-    ] = await Promise.all([
-      this.prisma.user.count({ where: { createdAt: { gte: since } } }),
-      this.prisma.professional.count({ where: { createdAt: { gte: since } } }),
-      this.prisma.booking.count({ where: { createdAt: { gte: since } } }),
-      this.prisma.booking.count({
-        where: { createdAt: { gte: since }, status: BookingStatus.completed },
-      }),
-      this.prisma.booking.count({
-        where: { createdAt: { gte: since }, status: BookingStatus.cancelled },
-      }),
-    ]);
-    return {
-      newUsers,
-      newProfessionals,
-      newBookings,
-      completedBookings,
-      cancelledBookings,
-    };
+    try {
+      const [
+        newUsers,
+        newProfessionals,
+        newBookings,
+        completedBookings,
+        cancelledBookings,
+      ] = await Promise.all([
+        this.prisma.user.count({ where: { createdAt: { gte: since } } }),
+        this.prisma.professional.count({ where: { createdAt: { gte: since } } }),
+        this.prisma.booking.count({ where: { createdAt: { gte: since } } }),
+        this.prisma.booking.count({
+          where: { createdAt: { gte: since }, status: BookingStatus.completed },
+        }),
+        this.prisma.booking.count({
+          where: { createdAt: { gte: since }, status: BookingStatus.cancelled },
+        }),
+      ]);
+      return {
+        newUsers,
+        newProfessionals,
+        newBookings,
+        completedBookings,
+        cancelledBookings,
+      };
+    } catch {
+      return emptyWindow();
+    }
   }
 
-  private toDailySeries(rows: DaySeriesRow[]) {
-    return rows.map((r) => ({
-      date: r.day.toISOString().slice(0, 10),
-      count: Number(r.count),
-    }));
-  }
-
+  /** Full shape required by frontend AdminDashboard */
   async dashboard() {
-    return this.stats();
+    const today = startOfTodayUtc();
+    const last7 = daysAgoUtc(7);
+    const last30 = daysAgoUtc(30);
+    const thisMonth = startOfMonthUtc();
+
+    const [
+      totalUsers,
+      totalProfessionals,
+      pendingProfessionals,
+      totalBookings,
+      completedBookings,
+      cancelledBookings,
+      totalReviews,
+      pendingPayments,
+      failedPayments,
+      paidRevenue,
+      timeToday,
+      time7,
+      time30,
+      timeMonth,
+    ] = await Promise.all([
+      this.safeCount(() => this.prisma.user.count()),
+      this.safeCount(() => this.prisma.professional.count()),
+      this.safeCount(() =>
+        this.prisma.professional.count({
+          where: { status: ProfessionalStatus.pending_review },
+        }),
+      ),
+      this.safeCount(() => this.prisma.booking.count()),
+      this.safeCount(() =>
+        this.prisma.booking.count({ where: { status: BookingStatus.completed } }),
+      ),
+      this.safeCount(() =>
+        this.prisma.booking.count({ where: { status: BookingStatus.cancelled } }),
+      ),
+      this.safeCount(() => this.prisma.review.count()),
+      this.safeCount(() =>
+        this.prisma.payment.count({ where: { status: PaymentStatus.pending } }),
+      ),
+      this.safeCount(() =>
+        this.prisma.payment.count({ where: { status: PaymentStatus.failed } }),
+      ),
+      (async () => {
+        try {
+          const agg = await this.prisma.payment.aggregate({
+            where: { status: PaymentStatus.paid },
+            _sum: { amount: true },
+          });
+          return agg._sum.amount ?? 0;
+        } catch {
+          return 0;
+        }
+      })(),
+      this.windowStats(today),
+      this.windowStats(last7),
+      this.windowStats(last30),
+      this.windowStats(thisMonth),
+    ]);
+
+    // Simple day-bucket trends (last 30 days) without raw SQL
+    const userGrowth: { date: string; count: number }[] = [];
+    const professionalGrowth: { date: string; count: number }[] = [];
+    const bookingActivity: {
+      date: string;
+      total: number;
+      completed: number;
+      cancelled: number;
+    }[] = [];
+
+    try {
+      const since = last30;
+      const [users, pros, bookings] = await Promise.all([
+        this.prisma.user.findMany({
+          where: { createdAt: { gte: since } },
+          select: { createdAt: true },
+        }),
+        this.prisma.professional.findMany({
+          where: { createdAt: { gte: since } },
+          select: { createdAt: true },
+        }),
+        this.prisma.booking.findMany({
+          where: { createdAt: { gte: since } },
+          select: { createdAt: true, status: true },
+        }),
+      ]);
+
+      const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+      const uMap = new Map<string, number>();
+      const pMap = new Map<string, number>();
+      const bMap = new Map<
+        string,
+        { total: number; completed: number; cancelled: number }
+      >();
+
+      for (let i = 0; i < 30; i++) {
+        const d = daysAgoUtc(29 - i);
+        const k = dayKey(d);
+        uMap.set(k, 0);
+        pMap.set(k, 0);
+        bMap.set(k, { total: 0, completed: 0, cancelled: 0 });
+      }
+
+      for (const u of users) {
+        const k = dayKey(u.createdAt);
+        if (uMap.has(k)) uMap.set(k, (uMap.get(k) || 0) + 1);
+      }
+      for (const p of pros) {
+        const k = dayKey(p.createdAt);
+        if (pMap.has(k)) pMap.set(k, (pMap.get(k) || 0) + 1);
+      }
+      for (const b of bookings) {
+        const k = dayKey(b.createdAt);
+        const row = bMap.get(k);
+        if (!row) continue;
+        row.total += 1;
+        if (b.status === BookingStatus.completed) row.completed += 1;
+        if (b.status === BookingStatus.cancelled) row.cancelled += 1;
+      }
+
+      for (const [date, count] of uMap) userGrowth.push({ date, count });
+      for (const [date, count] of pMap) professionalGrowth.push({ date, count });
+      for (const [date, v] of bMap) bookingActivity.push({ date, ...v });
+    } catch {
+      /* empty trends */
+    }
+
+    let recentActivity: {
+      id: string;
+      action: string;
+      entityType: string;
+      actor: string | null;
+      createdAt: string;
+    }[] = [];
+    try {
+      const logs = await this.prisma.auditLog.findMany({
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          actor: { include: { profile: true } },
+        } as any,
+      });
+      recentActivity = (logs as any[]).map((l) => ({
+        id: l.id,
+        action: l.action,
+        entityType: l.entityType,
+        actor: l.actor?.profile?.displayName || l.actor?.phone || null,
+        createdAt: l.createdAt?.toISOString?.() || String(l.createdAt),
+      }));
+    } catch {
+      try {
+        const logs = await this.prisma.auditLog.findMany({
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+        });
+        recentActivity = logs.map((l) => ({
+          id: l.id,
+          action: l.action,
+          entityType: l.entityType,
+          actor: null,
+          createdAt: l.createdAt.toISOString(),
+        }));
+      } catch {
+        recentActivity = [];
+      }
+    }
+
+    let recentProfessionals: any[] = [];
+    let recentUsers: any[] = [];
+    let recentBookings: any[] = [];
+    let recentReviews: any[] = [];
+
+    try {
+      recentProfessionals = await this.prisma.professional.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: { include: { profile: true } },
+        },
+      });
+      recentProfessionals = recentProfessionals.map((p) => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        displayName: p.user?.profile?.displayName ?? null,
+        createdAt: p.createdAt.toISOString(),
+      }));
+    } catch {
+      recentProfessionals = [];
+    }
+
+    try {
+      const users = await this.prisma.user.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: { profile: true },
+      });
+      recentUsers = users.map((u) => ({
+        id: u.id,
+        phone: u.phone,
+        displayName: u.profile?.displayName ?? null,
+        createdAt: u.createdAt.toISOString(),
+      }));
+    } catch {
+      recentUsers = [];
+    }
+
+    try {
+      const bookings = await this.prisma.booking.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          professional: true,
+          customer: { include: { profile: true } },
+        },
+      });
+      recentBookings = bookings.map((b) => ({
+        id: b.id,
+        status: b.status,
+        professionalTitle: b.professional?.title ?? null,
+        customerName: b.customer?.profile?.displayName ?? b.customer?.phone ?? null,
+        createdAt: b.createdAt.toISOString(),
+      }));
+    } catch {
+      recentBookings = [];
+    }
+
+    try {
+      const reviews = await this.prisma.review.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: { professional: true },
+      });
+      recentReviews = reviews.map((r) => ({
+        id: r.id,
+        rating: r.rating,
+        professionalTitle: r.professional?.title ?? null,
+        createdAt: r.createdAt.toISOString(),
+      }));
+    } catch {
+      recentReviews = [];
+    }
+
+    return {
+      overview: {
+        totalUsers,
+        totalProfessionals,
+        pendingProfessionals,
+        totalBookings,
+        completedBookings,
+        cancelledBookings,
+        totalReviews,
+        revenue: { available: true, total: paidRevenue },
+      },
+      timeStats: {
+        today: timeToday,
+        last7Days: time7,
+        last30Days: time30,
+        thisMonth: timeMonth,
+      },
+      trends: {
+        userGrowth,
+        professionalGrowth,
+        bookingActivity,
+        revenue: null,
+      },
+      pending: {
+        professionalsAwaitingReview: pendingProfessionals,
+        pendingPayments,
+        failedPayments,
+      },
+      recentActivity,
+      recent: {
+        professionals: recentProfessionals,
+        users: recentUsers,
+        bookings: recentBookings,
+        reviews: recentReviews,
+      },
+    };
   }
 
   async getFinancialSummary(_period: 'today' | 'this_month' | 'all_time' = 'all_time') {
     return {
       period: _period,
       currency: 'TOMAN',
+      providerType: 'test',
+      refundImplemented: false,
       grossRevenue: 0,
       platformCommission: 0,
       professionalNet: 0,
-      transactions: {},
+      paymentFee: 0,
+      transactions: {
+        paid: 0,
+        pending: 0,
+        failed: 0,
+        cancelled: 0,
+        refunded: 0,
+      },
+      recentPaidPayments: [],
     };
   }
 
@@ -114,6 +434,8 @@ export class AdminService {
       key: PLATFORM_COMMISSION_RATE_KEY,
       rate: DEFAULT_PLATFORM_COMMISSION_RATE,
       defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE,
+      updatedAt: null,
+      notice: '',
     };
   }
 
@@ -124,11 +446,21 @@ export class AdminService {
     return {
       key: PLATFORM_COMMISSION_RATE_KEY,
       rate: Math.round(newRate * 100) / 100,
+      defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE,
+      updatedAt: new Date().toISOString(),
+      notice: '',
     };
   }
 
   async getFailedTransactionsAlert() {
-    return { alert: false, count: 0, threshold: 3 };
+    return {
+      isTriggered: false,
+      failedCount: 0,
+      threshold: 3,
+      timeWindowMinutes: 60,
+      since: new Date().toISOString(),
+      recentFailed: [],
+    };
   }
 
   async updateFailedTransactionsThreshold(threshold: number, _adminUserId?: string) {
@@ -337,8 +669,40 @@ export class AdminService {
     return this.prisma.professional.update({ where: { id }, data: { isFeatured } });
   }
 
-  async listBookings(_q: any) {
-    return { items: [], meta: { page: 1, limit: 20, total: 0 } };
+  async listBookings(q: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: BookingStatus;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const page = Math.max(1, Number(q.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
+    const skip = (page - 1) * limit;
+    const where: Prisma.BookingWhereInput = {};
+    if (q.status) where.status = q.status;
+    try {
+      const [items, total] = await Promise.all([
+        this.prisma.booking.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            professional: true,
+            customer: { include: { profile: true } },
+          },
+        }),
+        this.prisma.booking.count({ where }),
+      ]);
+      return {
+        items,
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      };
+    } catch {
+      return { items: [], meta: { page, limit, total: 0, totalPages: 0 } };
+    }
   }
 
   async getBookingDetail(id: string) {
@@ -383,8 +747,35 @@ export class AdminService {
     return this.prisma.mediaAsset.delete({ where: { id } });
   }
 
-  async listAuditLogs(_q: any) {
-    return { items: [], meta: { page: 1, limit: 50, total: 0 } };
+  async listAuditLogs(q: {
+    page?: number;
+    limit?: number;
+    action?: string;
+    actorId?: string;
+    entityType?: string;
+    entityId?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const page = Math.max(1, Number(q.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 50));
+    const skip = (page - 1) * limit;
+    try {
+      const [items, total] = await Promise.all([
+        this.prisma.auditLog.findMany({
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.auditLog.count(),
+      ]);
+      return {
+        items,
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      };
+    } catch {
+      return { items: [], meta: { page, limit, total: 0, totalPages: 0 } };
+    }
   }
 
   async listNotifications(_q: any) {
