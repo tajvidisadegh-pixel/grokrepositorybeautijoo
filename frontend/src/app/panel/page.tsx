@@ -20,11 +20,11 @@ export default function PanelDashboard() {
       setLoading(true); setError(null);
       try {
         const [bookings, unreadRes] = await Promise.all([
-          fetchMyBookings(1, 5),
+          fetchMyBookings(1, 5).catch(() => ({ items: [] as { id: string }[], meta: { total: 0 } })),
           fetchUnreadCount().catch(() => ({ count: 0 })),
         ]);
         if (c) return;
-        setBookingCount(bookings.items.length);
+        setBookingCount(Array.isArray(bookings.items) ? bookings.items.length : 0);
         setUnread(unreadRes.count ?? 0);
       } catch (e) { if (!c) setError(friendlyApiError(e)); }
       finally { if (!c) setLoading(false); }
@@ -48,7 +48,7 @@ export default function PanelDashboard() {
         </Card>
         <Card className="space-y-3">
           <h2 className="font-semibold">اعلان‌ها</h2>
-          <p className="text-sm text-gray">{unread > 0 ? `${unread} اعلان خوانده‌نشده` : 'اعلان خوانده‌نشده‌ای نیست'}</p>
+          <p className="text-sm text-gray">{unread > 0 ? `${unread} اعلان خوانده‌نشده` : 'اعلان خوانده‌نشدهای نیست'}</p>
           <Link href="/panel/notifications"><Button size="sm" variant="secondary">مشاهده اعلان‌ها</Button></Link>
         </Card>
       </div>

@@ -58,6 +58,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
         status = HttpStatus.NOT_FOUND;
         message = 'مورد درخواستی یافت نشد';
         error = 'Not Found';
+      } else if (code === 'P2022') {
+        // Column does not exist — schema drift; log meta for operators
+        const meta = (exception as { meta?: { column?: string; modelName?: string } }).meta;
+        this.logger.error(
+          `Prisma P2022 missing column model=${meta?.modelName ?? '?'} column=${meta?.column ?? '?'}`,
+        );
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+        message = 'ناسازگاری موقت دیتابیس. لطفاً چند لحظه دیگر تلاش کنید.';
+        error = 'Schema Drift';
+      } else if (code === 'P2010') {
+        this.logger.error(`Prisma P2010 raw query failed: ${exception.message}`);
       }
     }
 
