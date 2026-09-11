@@ -17,6 +17,8 @@ type Props = {
   hideWhenForbidden?: boolean;
 };
 
+const PRIVILEGED = new Set(['SUPER_ADMIN', 'admin']);
+
 export function RequireAuth({
   children,
   roles,
@@ -30,6 +32,7 @@ export function RequireAuth({
   const hasRequiredRole = (() => {
     if (!roles?.length) return true;
     const userRoles = user?.roles || [];
+    if (userRoles.some((r) => PRIVILEGED.has(r))) return true;
     return roles.some((r) => userRoles.includes(r));
   })();
 
