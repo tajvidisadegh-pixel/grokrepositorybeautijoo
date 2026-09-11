@@ -17,8 +17,71 @@ const WINDOW_TABS: { key: WindowKey; label: string }[] = [
   { key: 'thisMonth', label: 'این ماه' },
 ];
 
+const EMPTY_WINDOW: AdminWindowStats = {
+  newUsers: 0,
+  newProfessionals: 0,
+  newBookings: 0,
+  completedBookings: 0,
+  cancelledBookings: 0,
+};
+
+function normalizeDashboard(raw: Partial<AdminDashboard> | null | undefined): AdminDashboard {
+  const overview = raw?.overview ?? {
+    totalUsers: 0,
+    totalProfessionals: 0,
+    pendingProfessionals: 0,
+    totalBookings: 0,
+    completedBookings: 0,
+    cancelledBookings: 0,
+    totalReviews: 0,
+    revenue: { available: false },
+  };
+  const timeStats = raw?.timeStats ?? {
+    today: EMPTY_WINDOW,
+    last7Days: EMPTY_WINDOW,
+    last30Days: EMPTY_WINDOW,
+    thisMonth: EMPTY_WINDOW,
+  };
+  return {
+    overview: {
+      totalUsers: overview.totalUsers ?? 0,
+      totalProfessionals: overview.totalProfessionals ?? 0,
+      pendingProfessionals: overview.pendingProfessionals ?? 0,
+      totalBookings: overview.totalBookings ?? 0,
+      completedBookings: overview.completedBookings ?? 0,
+      cancelledBookings: overview.cancelledBookings ?? 0,
+      totalReviews: overview.totalReviews ?? 0,
+      revenue: overview.revenue ?? { available: false },
+    },
+    timeStats: {
+      today: timeStats.today ?? EMPTY_WINDOW,
+      last7Days: timeStats.last7Days ?? EMPTY_WINDOW,
+      last30Days: timeStats.last30Days ?? EMPTY_WINDOW,
+      thisMonth: timeStats.thisMonth ?? EMPTY_WINDOW,
+    },
+    trends: {
+      userGrowth: raw?.trends?.userGrowth ?? [],
+      professionalGrowth: raw?.trends?.professionalGrowth ?? [],
+      bookingActivity: raw?.trends?.bookingActivity ?? [],
+      revenue: raw?.trends?.revenue ?? null,
+    },
+    pending: {
+      professionalsAwaitingReview: raw?.pending?.professionalsAwaitingReview ?? 0,
+      pendingPayments: raw?.pending?.pendingPayments ?? 0,
+      failedPayments: raw?.pending?.failedPayments ?? 0,
+    },
+    recentActivity: raw?.recentActivity ?? [],
+    recent: {
+      professionals: raw?.recent?.professionals ?? [],
+      users: raw?.recent?.users ?? [],
+      bookings: raw?.recent?.bookings ?? [],
+      reviews: raw?.recent?.reviews ?? [],
+    },
+  };
+}
+
 function fmt(n: number) {
-  return new Intl.NumberFormat('fa-IR').format(n);
+  return new Intl.NumberFormat('fa-IR').format(n || 0);
 }
 
 function KpiCard({ label, value, accent = 'text-foreground', href }: { label: string; value: string; accent?: string; href?: string }) {
@@ -64,7 +127,7 @@ export default function AdminDashboardPage() {
       setError(null);
       try {
         const res = await fetchAdminDashboard();
-        if (!cancelled) setData(res);
+        if (!cancelled) setData(normalizeDashboard(res));
       } catch (e) {
         if (!cancelled) setError(friendlyApiError(e));
       } finally {
@@ -102,17 +165,16 @@ export default function AdminDashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold">داشبورد</h1>
-        <p className="mt-1 text-sm text-gray">نمای کلی پلتفرم Beautijoo — بر اساس داده واقعی دیتابیس</p>
+        <p className="mt-1 text-sm text-gray">نمای کلی پلتفرم Beautijoo</p>
       </div>
 
       {!hasAnyData && (
         <PanelEmpty
           title="هنوز داده‌ای در پلتفرم ثبت نشده"
-          description="به محض ثبت‌نام کاربران، زیباگرها و رزروهای واقعی، این داشبورد به‌صورت خودکار پر می‌شود."
+          description="به محض ثبت‌نام کاربران، زیباگرها و رزروها، این داشبورد پر می‌شود."
         />
       )}
 
-      {/* KPI cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="کل کاربران" value={fmt(overview.totalUsers)} href="/admin/users" />
         <KpiCard label="کل زیباگرها" value={fmt(overview.totalProfessionals)} href="/admin/professionals" />
@@ -135,13 +197,12 @@ export default function AdminDashboardPage() {
             {overview.revenue.available ? (
               <p className="text-2xl font-bold text-coral">{formatPrice(overview.revenue.total || 0)}</p>
             ) : (
-              <p className="text-xs text-gray">مدیریت تراکنش‌ها و کارمزد پلتفرم (درگاه تستی)</p>
+              <p className="text-xs text-gray">مدیریت تراکنش‌ها</p>
             )}
           </Card>
         </Link>
       </div>
 
-      {/* Time-based stats */}
       <Card className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-bold text-foreground">آمار زمانی</h2>
@@ -159,59 +220,43 @@ export default function AdminDashboardPage() {
             ))}
           </div>
         </div>
-        <WindowStatsGrid stats={timeStats[windowKey]} />
+        <WindowStatsGrid stats={timeStats[windowKey] ?? EMPTY_WINDOW} />
       </Card>
 
-      {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-3 font-bold text-foreground">رشد کاربران (۳۰ روز اخیر)</h2>
+          <h2 className="mb-3 font-bold text-foreground">رشد کاربران (۳۰ روز)</h2>
           {userGrowthPoints.length ? (
             <MiniBarChart data={userGrowthPoints} color="#2D6CDF" />
           ) : (
-            <p className="py-8 text-center text-sm text-gray">هنوز کاربر جدیدی در این بازه ثبت نشده</p>
+            <p className="py-8 text-center text-sm text-gray">داده‌ای نیست</p>
           )}
         </Card>
         <Card>
-          <h2 className="mb-3 font-bold text-foreground">رشد زیباگرها (۳۰ روز اخیر)</h2>
+          <h2 className="mb-3 font-bold text-foreground">رشد زیباگرها (۳۰ روز)</h2>
           {proGrowthPoints.length ? (
             <MiniBarChart data={proGrowthPoints} color="#FF6F61" />
           ) : (
-            <p className="py-8 text-center text-sm text-gray">هنوز زیباگر جدیدی در این بازه ثبت نشده</p>
+            <p className="py-8 text-center text-sm text-gray">داده‌ای نیست</p>
           )}
         </Card>
         <Card className="lg:col-span-2">
-          <h2 className="mb-3 font-bold text-foreground">فعالیت رزرو (۳۰ روز اخیر)</h2>
+          <h2 className="mb-3 font-bold text-foreground">فعالیت رزرو (۳۰ روز)</h2>
           {bookingActivityPoints.length ? (
             <MiniStackedBarChart
               data={bookingActivityPoints}
               series={[
                 { key: 'completed', color: '#2D6CDF', name: 'انجام‌شده' },
                 { key: 'cancelled', color: '#FF6F61', name: 'لغوشده' },
-                { key: 'other', color: '#D1D5DB', name: 'سایر وضعیت‌ها' },
+                { key: 'other', color: '#D1D5DB', name: 'سایر' },
               ]}
             />
           ) : (
-            <p className="py-8 text-center text-sm text-gray">هنوز رزروی در این بازه ثبت نشده</p>
-          )}
-        </Card>
-        <Card className="lg:col-span-2">
-          <h2 className="mb-3 font-bold text-foreground">درآمد (۳۰ روز اخیر)</h2>
-          {data.trends.revenue ? (
-            <MiniBarChart
-              data={data.trends.revenue.map((d) => ({ label: d.date.slice(5), value: d.amount }))}
-              color="#FF6F61"
-              formatValue={(v) => formatPrice(v)}
-            />
-          ) : (
-            <p className="py-8 text-center text-sm text-gray">
-              درگاه پرداخت واقعی هنوز متصل نشده؛ به محض اتصال، نمودار درآمد واقعی اینجا نمایش داده می‌شود.
-            </p>
+            <p className="py-8 text-center text-sm text-gray">داده‌ای نیست</p>
           )}
         </Card>
       </div>
 
-      {/* Pending / attention */}
       <Card className="space-y-3">
         <h2 className="font-bold text-foreground">موارد نیازمند توجه</h2>
         {pending.professionalsAwaitingReview === 0 && pending.pendingPayments === 0 && pending.failedPayments === 0 ? (
@@ -219,53 +264,15 @@ export default function AdminDashboardPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-3">
             {pending.professionalsAwaitingReview > 0 && (
-              <Link
-                href="/admin/professionals"
-                className="rounded-xl border border-coral/20 bg-coral-soft px-4 py-3 transition hover:opacity-90"
-              >
+              <Link href="/admin/professionals" className="rounded-xl border border-coral/20 bg-coral-soft px-4 py-3">
                 <p className="text-lg font-bold text-coral">{fmt(pending.professionalsAwaitingReview)}</p>
                 <p className="mt-0.5 text-xs text-gray">زیباگر در انتظار بررسی</p>
               </Link>
-            )}
-            {pending.pendingPayments > 0 && (
-              <div className="rounded-xl border border-blue/20 bg-blue-soft px-4 py-3">
-                <p className="text-lg font-bold text-blue">{fmt(pending.pendingPayments)}</p>
-                <p className="mt-0.5 text-xs text-gray">پرداخت در انتظار</p>
-              </div>
-            )}
-            {pending.failedPayments > 0 && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3">
-                <p className="text-lg font-bold text-red-600">{fmt(pending.failedPayments)}</p>
-                <p className="mt-0.5 text-xs text-gray">پرداخت ناموفق</p>
-              </div>
             )}
           </div>
         )}
       </Card>
 
-      {/* Recent activity */}
-      <Card className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-foreground">فعالیت اخیر ادمین‌ها</h2>
-          <Link href="/admin/audit" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
-        </div>
-        {recentActivity.length === 0 ? (
-          <p className="text-sm text-gray">هنوز فعالیتی در لاگ ممیزی ثبت نشده.</p>
-        ) : (
-          <ul className="divide-y divide-border/70">
-            {recentActivity.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                <span className="text-foreground">
-                  <span className="font-medium">{a.actor || 'سیستم'}</span> — {a.action} ({a.entityType})
-                </span>
-                <span className="text-xs text-gray">{formatDate(a.createdAt)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {/* Recent data */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="space-y-3">
           <div className="flex items-center justify-between">
@@ -273,12 +280,12 @@ export default function AdminDashboardPage() {
             <Link href="/admin/professionals" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
           </div>
           {recent.professionals.length === 0 ? (
-            <p className="text-sm text-gray">هنوز زیباگری ثبت‌نام نکرده.</p>
+            <p className="text-sm text-gray">هنوز زیباگری نیست.</p>
           ) : (
             <ul className="space-y-2">
               {recent.professionals.map((p) => (
                 <li key={p.id} className="flex items-center justify-between text-sm">
-                  <span className="text-foreground">{p.title || p.displayName || '—'}</span>
+                  <span>{p.title || p.displayName || '—'}</span>
                   <span className="text-xs text-gray">{persianProfessionalStatus(p.status)}</span>
                 </li>
               ))}
@@ -291,12 +298,12 @@ export default function AdminDashboardPage() {
             <Link href="/admin/users" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
           </div>
           {recent.users.length === 0 ? (
-            <p className="text-sm text-gray">هنوز کاربری ثبت‌نام نکرده.</p>
+            <p className="text-sm text-gray">هنوز کاربری نیست.</p>
           ) : (
             <ul className="space-y-2">
               {recent.users.map((u) => (
                 <li key={u.id} className="flex items-center justify-between text-sm">
-                  <span className="text-foreground">{u.displayName || u.phone || '—'}</span>
+                  <span>{u.displayName || u.phone || '—'}</span>
                   <span className="text-xs text-gray">{formatDate(u.createdAt)}</span>
                 </li>
               ))}
@@ -309,12 +316,12 @@ export default function AdminDashboardPage() {
             <Link href="/admin/bookings" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
           </div>
           {recent.bookings.length === 0 ? (
-            <p className="text-sm text-gray">هنوز رزروی ثبت نشده.</p>
+            <p className="text-sm text-gray">هنوز رزروی نیست.</p>
           ) : (
             <ul className="space-y-2">
               {recent.bookings.map((b) => (
                 <li key={b.id} className="flex items-center justify-between text-sm">
-                  <span className="text-foreground">{b.professionalTitle || '—'} / {b.customerName || '—'}</span>
+                  <span>{b.professionalTitle || '—'} / {b.customerName || '—'}</span>
                   <span className="text-xs text-gray">{persianBookingStatus(b.status)}</span>
                 </li>
               ))}
@@ -322,16 +329,14 @@ export default function AdminDashboardPage() {
           )}
         </Card>
         <Card className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-foreground">نظرات اخیر</h2>
-          </div>
+          <h2 className="font-bold text-foreground">نظرات اخیر</h2>
           {recent.reviews.length === 0 ? (
-            <p className="text-sm text-gray">هنوز نظری ثبت نشده.</p>
+            <p className="text-sm text-gray">هنوز نظری نیست.</p>
           ) : (
             <ul className="space-y-2">
               {recent.reviews.map((r) => (
                 <li key={r.id} className="flex items-center justify-between text-sm">
-                  <span className="text-foreground">{r.professionalTitle || '—'}</span>
+                  <span>{r.professionalTitle || '—'}</span>
                   <span className="text-xs text-gray">{fmt(r.rating)} ⭐</span>
                 </li>
               ))}
@@ -339,6 +344,25 @@ export default function AdminDashboardPage() {
           )}
         </Card>
       </div>
+
+      {recentActivity.length > 0 && (
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-foreground">فعالیت اخیر</h2>
+            <Link href="/admin/audit" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
+          </div>
+          <ul className="divide-y divide-border/70">
+            {recentActivity.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                <span>
+                  <span className="font-medium">{a.actor || 'سیستم'}</span> — {a.action} ({a.entityType})
+                </span>
+                <span className="text-xs text-gray">{formatDate(a.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </div>
   );
 }
