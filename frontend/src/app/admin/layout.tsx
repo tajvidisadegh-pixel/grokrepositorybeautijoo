@@ -5,7 +5,7 @@ import { PanelShell } from '@/components/panel/panel-shell';
 const ITEMS = [
   { href: '/admin', label: 'داشبورد' },
   { href: '/admin/finance', label: 'مدیریت مالی' },
-  { href: '/admin/users', label: 'کاربران' },
+  { href: '/admin/users', label: 'مشتریان' },
   { href: '/admin/professionals', label: 'زیباگرها' },
   { href: '/admin/service-categories', label: 'تخصص‌ها و دسته‌بندی‌ها' },
   { href: '/admin/bookings', label: 'رزروها' },
