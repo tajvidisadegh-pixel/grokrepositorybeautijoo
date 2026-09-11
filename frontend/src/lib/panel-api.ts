@@ -19,6 +19,7 @@ export type BookingListItem = {
   professional?: { id: string; slug?: string; title?: string | null; user?: { profile?: { displayName?: string | null } | null } | null } | null;
   customer?: { id: string; phone?: string | null; profile?: { displayName?: string | null } | null } | null;
   services?: { id: string; name?: string; price?: number }[];
+  items?: { service?: { id?: string; name?: string } | null; price?: number }[];
   location?: { id: string; name?: string; city?: string } | null;
 };
 export type FavoriteItem = {
@@ -113,13 +114,36 @@ export async function fetchMyBookings(page = 1, limit = 20) {
   return { items: unwrapList(res), raw: res };
 }
 
-export async function fetchProBookings(page = 1, limit = 20) {
-  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/professional?page=${page}&limit=${limit}`);
+export type ProBookingFilters = {
+  q?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+  serviceId?: string;
+};
+
+export async function fetchProBookings(page = 1, limit = 20, filters?: ProBookingFilters) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+  if (filters?.q) params.set('q', filters.q);
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.from) params.set('from', filters.from);
+  if (filters?.to) params.set('to', filters.to);
+  if (filters?.serviceId) params.set('serviceId', filters.serviceId);
+  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(
+    `/bookings/professional?${params.toString()}`,
+  );
   return { items: unwrapList(res), raw: res };
 }
 
 export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
   return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);
+}
+
+/** Report a booking issue to SUPER_ADMIN (in-app notification + audit). */
+export async function reportBookingToAdmin(id: string, message: string) {
+  return apiClient.post<{ message: string; notified: number }>(`/bookings/${id}/report`, { message });
 }
 
 export async function fetchFavorites() {
@@ -397,262 +421,25 @@ export async function fetchAdminStats() {
   return apiClient.get<AdminStats>('/admin/stats');
 }
 export async function fetchAdminUsers(page = 1, limit = 20) {
-  const res = await apiClient.get<AdminUser[] | Paginated<AdminUser>>(
-    `/admin/users?page=${page}&limit=${limit}`,
-  );
+  const res = await apiClient.get<Paginated<AdminUser> | AdminUser[]>(`/admin/users?page=${page}&limit=${limit}`);
   return { items: unwrapList(res as Paginated<AdminUser>), raw: res };
 }
-export async function fetchAdminProfessionals(page = 1, limit = 20) {
-  const res = await apiClient.get<AdminProfessional[] | Paginated<AdminProfessional>>(
-    `/admin/professionals?page=${page}&limit=${limit}`,
-  );
+export async function fetchAdminProfessionals(page = 1, limit = 20, status?: string) {
+  const q = status ? `&status=${encodeURIComponent(status)}` : '';
+  const res = await apiClient.get<Paginated<AdminProfessional> | AdminProfessional[]>(`/admin/professionals?page=${page}&limit=${limit}${q}`);
   return { items: unwrapList(res as Paginated<AdminProfessional>), raw: res };
 }
 export async function fetchAdminBookings(page = 1, limit = 20) {
-  const res = await apiClient.get<BookingListItem[] | Paginated<BookingListItem>>(
-    `/admin/bookings?page=${page}&limit=${limit}`,
-  );
+  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/admin/bookings?page=${page}&limit=${limit}`);
   return { items: unwrapList(res as Paginated<BookingListItem>), raw: res };
 }
-export async function setProfessionalStatus(id: string, status: string) {
-  return apiClient.patch(`/admin/professionals/${id}/status`, { status });
-}
-export async function fetchAuditLogs(page = 1, limit = 50) {
-  const res = await apiClient.get<AuditLogItem[] | Paginated<AuditLogItem>>(
-    `/admin/audit-logs?page=${page}&limit=${limit}`,
-  );
+export async function fetchAuditLogs(page = 1, limit = 30) {
+  const res = await apiClient.get<Paginated<AuditLogItem> | AuditLogItem[]>(`/admin/audit?page=${page}&limit=${limit}`);
   return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
 }
-
-export type AdminWindowStats = {
-  newUsers: number;
-  newProfessionals: number;
-  newBookings: number;
-  completedBookings: number;
-  cancelledBookings: number;
-};
-export type AdminDayCount = { date: string; count: number };
-export type AdminBookingDay = { date: string; total: number; completed: number; cancelled: number };
-export type AdminRevenueDay = { date: string; amount: number };
-export type AdminRecentActivityItem = {
-  id: string;
-  actor: string | null;
-  action: string;
-  entityType: string;
-  entityId: string | null;
-  createdAt: string;
-};
-export type AdminRecentProfessional = {
-  id: string; title: string; slug: string; status: string; createdAt: string; displayName: string | null;
-};
-export type AdminRecentUser = { id: string; phone: string | null; displayName: string | null; createdAt: string };
-export type AdminRecentBooking = {
-  id: string; status: string; totalPrice: number; createdAt: string;
-  professionalTitle: string | null; customerName: string | null;
-};
-export type AdminRecentReview = {
-  id: string; rating: number; comment: string | null; createdAt: string;
-  professionalTitle: string | null; customerName: string | null;
-};
-export type AdminDashboard = {
-  overview: {
-    totalUsers: number;
-    totalProfessionals: number;
-    pendingProfessionals: number;
-    totalBookings: number;
-    completedBookings: number;
-    cancelledBookings: number;
-    totalReviews: number;
-    revenue: { available: boolean; total?: number };
-  };
-  timeStats: {
-    today: AdminWindowStats;
-    last7Days: AdminWindowStats;
-    last30Days: AdminWindowStats;
-    thisMonth: AdminWindowStats;
-  };
-  trends: {
-    userGrowth: AdminDayCount[];
-    professionalGrowth: AdminDayCount[];
-    bookingActivity: AdminBookingDay[];
-    revenue: AdminRevenueDay[] | null;
-  };
-  pending: {
-    professionalsAwaitingReview: number;
-    pendingPayments: number;
-    failedPayments: number;
-  };
-  recentActivity: AdminRecentActivityItem[];
-  recent: {
-    professionals: AdminRecentProfessional[];
-    users: AdminRecentUser[];
-    bookings: AdminRecentBooking[];
-    reviews: AdminRecentReview[];
-  };
-};
-export async function fetchAdminDashboard() {
-  return apiClient.get<AdminDashboard>('/admin/dashboard');
+export async function adminSetProfessionalStatus(id: string, status: string) {
+  return apiClient.patch(`/admin/professionals/${id}/status`, { status });
 }
-
-export type AdminFinancialPeriod = 'today' | 'this_month' | 'all_time';
-
-export type HourlyFailedAlert = {
-  isTriggered: boolean;
-  failedCount: number;
-  threshold: number;
-  timeWindowMinutes: number;
-  since: string;
-  recentFailed: Array<{
-    id: string;
-    amount: number;
-    provider: string;
-    providerRef: string | null;
-    createdAt: string;
-    failedAt: string | null;
-    customerName: string | null;
-    customerPhone: string | null;
-    professionalTitle: string | null;
-  }>;
-};
-
-export type AdminCommissionSetting = {
-  key: string;
-  rate: number;
-  defaultRate: number;
-  updatedAt: string | null;
-  notice: string;
-};
-
-export type AdminFinancialSummary = {
-  period: AdminFinancialPeriod;
-  currency: string;
-  providerType: string;
-  refundImplemented: boolean;
-  grossRevenue: number;
-  platformCommission: number;
-  professionalNet: number;
-  paymentFee: number;
-  transactions: {
-    paid: number;
-    pending: number;
-    failed: number;
-    cancelled: number;
-    refunded: number;
-  };
-  recentPaidPayments: Array<{
-    id: string;
-    amount: number;
-    platformCommissionRate: number | null;
-    platformCommissionAmount: number | null;
-    professionalNetAmount: number | null;
-    provider: string;
-    providerRef: string | null;
-    paidAt: string | null;
-    booking: {
-      id: string;
-      customer: { phone: string | null; profile: { displayName: string | null } | null } | null;
-      professional: { title: string | null; slug: string | null } | null;
-    } | null;
-  }>;
-  hourlyFailedAlert: HourlyFailedAlert;
-};
-
-export type AdminFinancialTransactionsResponse = {
-  items: Array<{
-    id: string;
-    bookingId: string;
-    amount: number;
-    status: string;
-    provider: string;
-    providerRef: string | null;
-    idempotencyKey: string | null;
-    platformCommissionRate: number | null;
-    platformCommissionAmount: number | null;
-    professionalNetAmount: number | null;
-    paidAt: string | null;
-    failedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
-    booking: {
-      id: string;
-      totalPrice: number;
-      status: string;
-      scheduledDate?: string;
-      customer: { id: string; phone: string | null; profile: { displayName: string | null } | null } | null;
-      professional: { id: string; title: string | null; slug: string | null } | null;
-    } | null;
-  }>;
-  meta: { page: number; limit: number; total: number; totalPages: number };
-};
-
-export type AdminFinancialTransaction = AdminFinancialTransactionsResponse['items'][number];
-
-export type AdminFinancialTransactionDetail = AdminFinancialTransaction & {
-  isCommissionSnapshotted?: boolean;
-  providerNote?: string | null;
-  refundStatus?: string;
-  booking?: AdminFinancialTransaction['booking'] & {
-    professional?: {
-      id: string;
-      title: string | null;
-      slug: string | null;
-      address?: string | null;
-      user?: { phone?: string | null };
-    } | null;
-    items?: Array<{ id: string; unitPrice: number; durationMin: number; service: { name: string } | null }>;
-  } | null;
-};
-
-export async function fetchAdminFinancialSummary(period: AdminFinancialPeriod = 'all_time') {
-  return apiClient.get<AdminFinancialSummary>(`/admin/finance/summary?period=${period}`);
-}
-
-export async function fetchAdminFinancialTransactions(params: {
-  page?: number;
-  limit?: number;
-  status?: string;
-  provider?: string;
-  search?: string;
-  startDate?: string;
-  endDate?: string;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}) {
-  const query = new URLSearchParams();
-  if (params.page) query.set('page', String(params.page));
-  if (params.limit) query.set('limit', String(params.limit));
-  if (params.status) query.set('status', params.status);
-  if (params.provider) query.set('provider', params.provider);
-  if (params.search) query.set('search', params.search);
-  if (params.startDate) query.set('startDate', params.startDate);
-  if (params.endDate) query.set('endDate', params.endDate);
-  if (params.sortBy) query.set('sortBy', params.sortBy);
-  if (params.sortOrder) query.set('sortOrder', params.sortOrder);
-  return apiClient.get<AdminFinancialTransactionsResponse>(`/admin/finance/transactions?${query.toString()}`);
-}
-
-export async function fetchAdminFinancialTransactionDetail(id: string) {
-  return apiClient.get<AdminFinancialTransactionDetail>(`/admin/finance/transactions/${id}`);
-}
-
-export async function fetchAdminCommissionSetting() {
-  return apiClient.get<AdminCommissionSetting>('/admin/finance/settings/commission');
-}
-
-export async function updateAdminCommissionSetting(rate: number) {
-  return apiClient.post<{ success: boolean; rate: number; updatedAt: string; notice: string }>(
-    '/admin/finance/settings/commission',
-    { rate },
-  );
-}
-
-export async function fetchAdminFailedTransactionsAlert() {
-  return apiClient.get<HourlyFailedAlert>('/admin/finance/failed-alert');
-}
-
-export async function updateAdminFailedTransactionsThreshold(threshold: number) {
-  return apiClient.post<{ success: boolean; threshold: number; updatedAt: string }>(
-    '/admin/finance/failed-alert/threshold',
-    { threshold },
-  );
+export async function adminSetUserStatus(id: string, status: string) {
+  return apiClient.patch(`/admin/users/${id}/status`, { status });
 }
