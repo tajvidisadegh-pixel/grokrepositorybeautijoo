@@ -26,6 +26,8 @@ function ttlToMs(ttl: string | undefined, fallbackMs: number): number {
   return n * mult;
 }
 
+const PRIVILEGED_ROLES = new Set(['SUPER_ADMIN', 'admin']);
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -42,6 +44,10 @@ export class AuthService {
   private resolveAccountType(raw?: string | null): AccountType {
     if (raw === 'professional') return AccountType.professional;
     return AccountType.customer;
+  }
+
+  private isPrivileged(roles: string[]): boolean {
+    return roles.some((r) => PRIVILEGED_ROLES.has(r));
   }
 
   private async issueTokens(userId: string, phone: string | null) {
@@ -129,10 +135,26 @@ export class AuthService {
   async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
 
-    const user = await this.prisma.user.findFirst({
+    // Prefer exact accountType match; for privileged admins also try any account on this phone
+    let user = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
       include: { userRoles: { include: { role: true } } },
     });
+
+    if (!user || !user.passwordHash) {
+      // Fallback: find any active user with this phone that has SUPER_ADMIN/admin
+      const candidates = await this.prisma.user.findMany({
+        where: { phone: dto.phone, status: 'active' },
+        include: { userRoles: { include: { role: true } } },
+      });
+      const privileged = candidates.find((u) =>
+        u.userRoles.some((ur) => PRIVILEGED_ROLES.has(ur.role.name)),
+      );
+      if (privileged?.passwordHash) {
+        user = privileged;
+      }
+    }
+
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
     }
@@ -141,10 +163,17 @@ export class AuthService {
     if (user.status !== 'active') throw new UnauthorizedException('حساب غیرفعال است');
 
     const roles = user.userRoles.map((r) => r.role.name);
-    if (accountType === AccountType.professional && !roles.includes('professional')) {
+    const privileged = this.isPrivileged(roles);
+
+    // Panel gates apply only to non-admin accounts
+    if (
+      !privileged &&
+      accountType === AccountType.professional &&
+      !roles.includes('professional')
+    ) {
       throw new UnauthorizedException('این حساب دسترسی پنل زیباگر ندارد');
     }
-    if (accountType === AccountType.customer && !roles.includes('customer')) {
+    if (!privileged && accountType === AccountType.customer && !roles.includes('customer')) {
       throw new UnauthorizedException('این حساب دسترسی پنل مشتری ندارد');
     }
 

@@ -4,9 +4,6 @@
  *
  * Usage (from backend/):
  *   SUPER_ADMIN_PHONE=0912xxxxxxx SUPER_ADMIN_PASSWORD='your-strong-pass' node prisma/seed-super-admin.cjs
- *
- * Optional:
- *   SUPER_ADMIN_DISPLAY_NAME='مدیر کل'
  */
 const { PrismaClient } = require('@prisma/client');
 const argon2 = require('argon2');
@@ -44,26 +41,48 @@ async function main() {
     },
   });
 
+  // Ensure customer role exists (login gates historically required it)
+  const customerRole = await prisma.role.upsert({
+    where: { name: 'customer' },
+    update: {},
+    create: {
+      name: 'customer',
+      displayName: 'مشتری',
+      isSystem: true,
+    },
+  });
+
   const passwordHash = await argon2.hash(password);
 
-  const user = await prisma.user.upsert({
-    where: { phone },
-    update: {
-      passwordHash,
-      status: 'active',
-      phoneVerified: true,
-    },
-    create: {
-      phone,
-      passwordHash,
-      status: 'active',
-      phoneVerified: true,
-      profile: {
-        create: { displayName },
-      },
-    },
+  let user = await prisma.user.findFirst({
+    where: { phone, accountType: 'customer' },
     include: { profile: true },
   });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        phone,
+        passwordHash,
+        accountType: 'customer',
+        status: 'active',
+        phoneVerified: true,
+        profile: { create: { displayName } },
+      },
+      include: { profile: true },
+    });
+  } else {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        status: 'active',
+        phoneVerified: true,
+        accountType: 'customer',
+      },
+      include: { profile: true },
+    });
+  }
 
   if (user.profile) {
     await prisma.profile.update({
@@ -82,9 +101,16 @@ async function main() {
     create: { userId: user.id, roleId: role.id },
   });
 
+  // Optional: also attach customer so old clients that gate on customer role still work
+  await prisma.userRole.upsert({
+    where: { userId_roleId: { userId: user.id, roleId: customerRole.id } },
+    update: {},
+    create: { userId: user.id, roleId: customerRole.id },
+  });
+
   console.log('SUPER_ADMIN ready for phone:', phone);
   console.log('user id:', user.id);
-  console.log('Login at /login then open /admin');
+  console.log('Login at /login (as مشتری) then open /admin');
 }
 
 main()
