@@ -14,6 +14,7 @@ const RESOLVE_APPLIED = [
   '20260911090000_ensure_production_schema',
   '20260911120000_align_missing_columns',
   '20260911140000_full_schema_align',
+  '20260911150000_media_assets_url',
 ];
 
 const candidates = [
@@ -47,7 +48,6 @@ for (const name of RESOLVE_ROLLED_BACK) {
   run(['migrate', 'resolve', '--rolled-back', name, '--schema', schema]);
 }
 
-// 1) Explicit SQL heal first (handles PK rewrite that db push may struggle with)
 const ensureSql = join(prismaRoot, 'sql', 'ensure-runtime.sql');
 if (existsSync(ensureSql)) {
   console.log('[prisma-migrate] executing ensure-runtime.sql');
@@ -59,7 +59,6 @@ if (existsSync(ensureSql)) {
   );
 }
 
-// 2) Authoritative: push Prisma schema to DB (adds missing columns/tables/indexes)
 console.log('[prisma-migrate] prisma db push --skip-generate');
 const push = run([
   'db',
@@ -79,7 +78,6 @@ for (const name of RESOLVE_APPLIED) {
   run(['migrate', 'resolve', '--applied', name, '--schema', schema]);
 }
 
-// 3) Best-effort migrate deploy
 const deploy = run(['migrate', 'deploy', '--schema', schema]);
 if (deploy.status === 0) {
   console.log('[prisma-migrate] migrate deploy OK');
@@ -89,6 +87,5 @@ if (deploy.status === 0) {
   run(['migrate', 'deploy', '--schema', schema]);
 }
 
-// Always allow boot after alignment attempts
 console.log('[prisma-migrate] boot alignment finished — starting API');
 process.exit(0);
