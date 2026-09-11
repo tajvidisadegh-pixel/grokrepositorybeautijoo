@@ -49,7 +49,7 @@ describe('CleanupService (unit)', () => {
       otpsDeleted: 3,
       refreshTokensDeleted: 2,
       sessionsDeleted: 1,
-      bookingsExpired: 4,
+      bookingsCompleted: 4,
       mediaOrphansDeleted: 0,
     });
   });
@@ -67,12 +67,12 @@ describe('CleanupService (unit)', () => {
     expect(prisma.mediaAsset.delete).toHaveBeenCalledTimes(2);
   });
 
-  it('expireStaleBookings updates pending/confirmed past endAt', async () => {
+  it('completePastBookings updates pending/confirmed past endAt to completed', async () => {
     const { svc, prisma } = makeService({ booking: 5 });
-    const n = await svc.expireStaleBookings();
+    const n = await svc.completePastBookings();
     expect(n).toBe(5);
     expect(prisma.booking.updateMany).toHaveBeenCalled();
     const arg = prisma.booking.updateMany.mock.calls[0][0];
-    expect(arg.data.status).toBe('expired');
+    expect(arg.data.status).toBe('completed');
   });
 });
