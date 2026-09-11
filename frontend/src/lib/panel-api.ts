@@ -290,16 +290,20 @@ export function isAllowedImageFile(file: File): boolean {
 }
 
 export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
-  const { getAccessToken } = await import('./auth-storage');
-  const { ApiError } = await import('./api');
+  const { getAccessToken, setTokens, clearTokens } = await import('./auth-storage');
+  const { ApiError, tryRefresh } = await import('./api');
   const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
-  const token = getAccessToken();
 
   if (!isAllowedImageFile(file) && !(file.type || '').startsWith('video/')) {
     throw new ApiError(400, 'این فایل تصویر/ویدیو قابل قبول نیست. JPG، PNG، WEBP یا HEIC امتحان کنید.');
   }
   if (!file.size) {
     throw new ApiError(400, 'فایل خالی است.');
+  }
+
+  let token = getAccessToken();
+  if (!token && typeof window !== 'undefined') {
+    token = await tryRefresh();
   }
   if (!token) {
     throw new ApiError(401, 'برای آپلود باید وارد حساب کاربری شوید.');
@@ -310,15 +314,33 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
   form.append('kind', kind);
   if (professionalServiceId) form.append('professionalServiceId', professionalServiceId);
 
+  const doUpload = async (access: string) =>
+    fetch(`${API_URL}/professionals/me/media/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${access}`, Accept: 'application/json' },
+      body: form,
+      credentials: 'include',
+    });
+
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/professionals/me/media/upload`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      body: form,
-    });
+    res = await doUpload(token);
   } catch {
     throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.');
+  }
+
+  if (res.status === 401) {
+    const fresh = await tryRefresh();
+    if (!fresh) {
+      clearTokens();
+      throw new ApiError(401, 'نشست منقضی شده است. دوباره وارد شوید.');
+    }
+    setTokens(fresh);
+    try {
+      res = await doUpload(fresh);
+    } catch {
+      throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.');
+    }
   }
 
   if (!res.ok) {
@@ -331,8 +353,9 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
     } catch { /* ignore */ }
     throw new ApiError(res.status, String(msg), body);
   }
-  const asset = (await res.json()) as MediaAssetItem;
-  return { ...asset, publicUrl: resolveMediaUrl(asset.publicUrl) };
+  const asset = (await res.json()) as MediaAssetItem & { url?: string };
+  const publicUrl = resolveMediaUrl(asset.publicUrl || asset.url) || asset.publicUrl || '';
+  return { ...asset, publicUrl };
 }
 
 export async function fetchMyMedia(kind?: string) {
