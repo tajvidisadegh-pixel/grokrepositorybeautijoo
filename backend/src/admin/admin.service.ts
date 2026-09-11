@@ -106,7 +106,7 @@ export class AdminService {
     return { key: PLATFORM_COMMISSION_RATE_KEY, rate: DEFAULT_PLATFORM_COMMISSION_RATE, defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE, updatedAt: null, notice: '' };
   }
 
-  async updateCommissionSetting(newRate: number, adminUserId?: string) {
+  async updateCommissionSetting(newRate: number, _adminUserId?: string) {
     if (typeof newRate !== 'number' || isNaN(newRate) || newRate < 0 || newRate > 100) {
       throw new BadRequestException('Commission rate must be between 0 and 100');
     }
@@ -117,7 +117,7 @@ export class AdminService {
     return { count: 0, threshold: 3, triggered: false };
   }
 
-  async updateFailedTransactionsThreshold(threshold: number, adminUserId?: string) {
+  async updateFailedTransactionsThreshold(threshold: number, _adminUserId?: string) {
     return { threshold };
   }
 
@@ -241,7 +241,7 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     const uniqueNames = Array.from(new Set((roles || []).map((r) => String(r).trim()).filter(Boolean)));
     if (uniqueNames.length === 0) throw new BadRequestException('حداقل یک نقش لازم است');
-    const roleRows = await this.prisma.role.findMany({ where: { name: { in: uniqueNames } });
+    const roleRows = await this.prisma.role.findMany({ where: { name: { in: uniqueNames } } });
     await this.prisma.userRole.deleteMany({ where: { userId: id } });
     if (roleRows.length) {
       await this.prisma.userRole.createMany({
@@ -476,8 +476,13 @@ export class AdminService {
     }
     const [items, total] = await Promise.all([
       this.prisma.notification.findMany({
-        where, skip, take: limit, orderBy: { createdAt: 'desc' },
-        include: { user: { select: { id: true, phone: true, profile: { select: { displayName: true } } } } },
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { id: true, phone: true, profile: { select: { displayName: true } } } },
+        },
       }),
       this.prisma.notification.count({ where }),
     ]);
