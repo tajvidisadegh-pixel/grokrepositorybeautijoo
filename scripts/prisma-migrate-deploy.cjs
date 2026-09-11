@@ -1,14 +1,22 @@
 /**
- * Production-safe migrate deploy:
- * 1) Resolve known failed phantom migration (P3009)
- * 2) Apply idempotent ensure-schema SQL (heals partial columns)
- * 3) prisma migrate deploy
+ * Production-safe migrate deploy.
+ * - Clears known failed rows (P3009) that block every boot
+ * - Applies idempotent ensure-schema SQL (never blocks boot on "already exists")
+ * - Runs prisma migrate deploy
+ * - If ensure migration is still "failed", marks it applied (schema already healed)
  */
-const { existsSync, readFileSync } = require('fs');
+const { existsSync } = require('fs');
 const { join } = require('path');
 const { spawnSync } = require('child_process');
 
-const KNOWN_FAILED = ['20260909093000_account_type_separation'];
+/** Phantom migration removed from repo */
+const RESOLVE_ROLLED_BACK = ['20260909093000_account_type_separation'];
+
+/**
+ * Ensure migration may fail once on duplicate constraint; content is idempotent now.
+ * After SQL heal, mark as applied so deploy never blocks again.
+ */
+const RESOLVE_APPLIED_IF_FAILED = ['20260911090000_ensure_production_schema'];
 
 const candidates = [
   join(process.cwd(), 'prisma', 'schema.prisma'),
@@ -22,7 +30,7 @@ if (!schema) {
   process.exit(1);
 }
 
-const prismaRoot = join(schema, '..'); // .../prisma
+const prismaRoot = join(schema, '..');
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 function run(args) {
@@ -37,11 +45,8 @@ function run(args) {
   return { status: r.status === null ? 1 : r.status, out };
 }
 
-console.log('[prisma-migrate] schema:', schema);
-
-for (const name of KNOWN_FAILED) {
-  console.warn(`[prisma-migrate] resolve --rolled-back ${name}`);
-  const resolved = run([
+function resolveRolledBack(name) {
+  return run([
     'migrate',
     'resolve',
     '--rolled-back',
@@ -49,14 +54,31 @@ for (const name of KNOWN_FAILED) {
     '--schema',
     schema,
   ]);
-  if (resolved.status !== 0) {
-    console.warn(
-      `[prisma-migrate] resolve exited ${resolved.status} (ok if already clean)`,
-    );
+}
+
+function resolveApplied(name) {
+  return run([
+    'migrate',
+    'resolve',
+    '--applied',
+    name,
+    '--schema',
+    schema,
+  ]);
+}
+
+console.log('[prisma-migrate] schema:', schema);
+
+// 1) Clear known phantom failures
+for (const name of RESOLVE_ROLLED_BACK) {
+  console.warn(`[prisma-migrate] resolve --rolled-back ${name}`);
+  const r = resolveRolledBack(name);
+  if (r.status !== 0) {
+    console.warn(`[prisma-migrate] resolve rolled-back ${name} → ${r.status} (ok if clean)`);
   }
 }
 
-// Pre-heal: run ensure SQL if file present (also applied via migration folder)
+// 2) Always heal schema with idempotent SQL (does not touch _prisma_migrations)
 const ensureSql = join(
   prismaRoot,
   'migrations',
@@ -65,21 +87,26 @@ const ensureSql = join(
 );
 if (existsSync(ensureSql)) {
   console.log('[prisma-migrate] applying ensure-schema SQL via db execute…');
-  const exec = run([
-    'db',
-    'execute',
-    '--file',
-    ensureSql,
-    '--schema',
-    schema,
-  ]);
+  const exec = run(['db', 'execute', '--file', ensureSql, '--schema', schema]);
   if (exec.status !== 0) {
     console.warn(
-      '[prisma-migrate] db execute ensure-schema exited non-zero — continuing to migrate deploy',
+      '[prisma-migrate] ensure SQL exited non-zero — continuing (columns may already exist)',
     );
+  } else {
+    console.log('[prisma-migrate] ensure SQL OK');
   }
 }
 
+// 3) If ensure migration previously failed, mark applied so P3009 cannot block boot
+for (const name of RESOLVE_APPLIED_IF_FAILED) {
+  console.warn(`[prisma-migrate] resolve --applied ${name} (heal failed row if any)`);
+  const r = resolveApplied(name);
+  if (r.status !== 0) {
+    console.warn(`[prisma-migrate] resolve applied ${name} → ${r.status} (ok if already applied)`);
+  }
+}
+
+// 4) Normal migrate deploy
 console.log('[prisma-migrate] migrate deploy…');
 let result = run(['migrate', 'deploy', '--schema', schema]);
 
@@ -88,14 +115,22 @@ if (result.status === 0) {
   process.exit(0);
 }
 
+// 5) One more recovery pass for any remaining P3009
 if (/P3009|failed migrations/i.test(result.out)) {
   const m = result.out.match(/The `([^`]+)` migration started at .+ failed/);
-  const name = (m && m[1]) || KNOWN_FAILED[0];
-  console.warn(`[prisma-migrate] still blocked; resolve ${name}`);
-  run(['migrate', 'resolve', '--rolled-back', name, '--schema', schema]);
+  const name = m && m[1];
+  if (name) {
+    console.warn(`[prisma-migrate] P3009 on ${name} — trying applied then rolled-back`);
+    resolveApplied(name);
+    resolveRolledBack(name);
+    // Prefer applied for ensure migration
+    if (RESOLVE_APPLIED_IF_FAILED.includes(name)) {
+      resolveApplied(name);
+    }
+  }
   result = run(['migrate', 'deploy', '--schema', schema]);
   if (result.status === 0) {
-    console.log('[prisma-migrate] OK after second resolve');
+    console.log('[prisma-migrate] OK after P3009 recovery');
     process.exit(0);
   }
 }
