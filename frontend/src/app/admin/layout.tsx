@@ -6,6 +6,7 @@ const ITEMS = [
   { href: '/admin', label: 'داشبورد' },
   { href: '/admin/finance', label: 'مدیریت مالی' },
   { href: '/admin/users', label: 'مشتریان' },
+  { href: '/admin/notifications', label: 'اعلان‌ها' },
   { href: '/admin/professionals', label: 'زیباگرها' },
   { href: '/admin/service-categories', label: 'تخصص‌ها و دسته‌بندی‌ها' },
   { href: '/admin/bookings', label: 'رزروها' },
