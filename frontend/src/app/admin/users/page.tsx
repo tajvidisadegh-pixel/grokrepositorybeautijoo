@@ -15,21 +15,9 @@ import {
   type AdminUsersQuery,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
+import { formatDate } from '@/lib/utils';
 
 type StatusFilter = '' | 'active' | 'blocked' | 'inactive';
-
-function formatDate(iso?: string | null) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('fa-IR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function formatMoney(n?: number | null) {
   if (n == null) return '—';
@@ -374,7 +362,7 @@ export default function AdminUsersPage() {
                   <td className="p-3 font-medium">{u.profile?.displayName || u.profile?.firstName || 'بدون نام'}</td>
                   <td className="p-3" dir="ltr">{u.phone || '—'}</td>
                   <td className="p-3">{(u as AdminUser & { city?: string }).city || '—'}</td>
-                  <td className="p-3">{formatDate(u.createdAt)}</td>
+                  <td className="p-3">{formatDate(u.createdAt, { style: 'short' })}</td>
                   <td className="p-3">{u.bookingCount ?? '—'}</td>
                   <td className="p-3">
                     <span
@@ -452,57 +440,28 @@ export default function AdminUsersPage() {
                   </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray">عضویت</p>
-                    <p className="font-semibold">{formatDate(detail.createdAt)}</p>
+                    <p className="font-semibold">{formatDate(detail.createdAt, { style: 'short' })}</p>
                   </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray">رزرو موفق</p>
                     <p className="font-semibold">{detail.stats?.successfulBookings ?? 0}</p>
                   </Card>
                   <Card className="p-3">
-                    <p className="text-xs text-gray">لغو شده</p>
-                    <p className="font-semibold">{detail.stats?.cancelledBookings ?? 0}</p>
+                    <p className="text-xs text-gray">کل رزرو</p>
+                    <p className="font-semibold">{detail.stats?.totalBookings ?? 0}</p>
                   </Card>
-                  <Card className="p-3">
-                    <p className="text-xs text-gray">مبلغ پرداخت‌شده</p>
-                    <p className="font-semibold">{formatMoney(detail.stats?.totalPaid)}</p>
-                  </Card>
-                  <Card className="p-3">
-                    <p className="text-xs text-gray">نظرات</p>
-                    <p className="font-semibold">{detail.stats?.reviewsCount ?? 0}</p>
-                  </Card>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"
-                    onClick={() => openNotify([detail.id], 'selected')}
-                  >
-                    ارسال اعلان
-                  </button>
-                  {detail.status === 'active' ? (
-                    <button type="button" className="rounded-lg border border-red-400 px-3 py-2 text-sm text-red-700" disabled={busy} onClick={() => changeStatus(detail.id, 'blocked')}>
-                      مسدود کردن
-                    </button>
-                  ) : (
-                    <button type="button" className="rounded-lg border border-green-400 px-3 py-2 text-sm text-green-700" disabled={busy} onClick={() => changeStatus(detail.id, 'active')}>
-                      فعال‌سازی
-                    </button>
-                  )}
                 </div>
                 <div>
                   <h3 className="mb-2 font-semibold">آخرین رزروها</h3>
-                  {(detail.bookings || []).length === 0 ? (
+                  {!detail.bookings?.length ? (
                     <p className="text-sm text-gray">رزروی ثبت نشده</p>
                   ) : (
-                    <ul className="space-y-2 text-sm">
-                      {(detail.bookings || []).slice(0, 10).map((b: AdminUserBooking) => (
-                        <li key={b.id} className="rounded border p-2">
-                          <div className="flex justify-between">
-                            <span>{b.professional?.title || 'زیباگر'}</span>
-                            <span className="text-xs">{b.status}</span>
-                          </div>
+                    <ul className="space-y-2">
+                      {(detail.bookings as AdminUserBooking[]).slice(0, 10).map((b) => (
+                        <li key={b.id} className="rounded border p-2 text-sm">
+                          <div className="font-medium">{b.professional?.title || '—'}</div>
                           <div className="mt-1 text-xs text-gray">
-                            {formatDate(b.startAt)} · {formatMoney(b.payment?.amount ?? b.totalPrice)}
+                            {formatDate(b.startAt, { style: 'short' })} · {formatMoney(b.payment?.amount ?? b.totalPrice)}
                           </div>
                         </li>
                       ))}

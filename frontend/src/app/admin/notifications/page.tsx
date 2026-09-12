@@ -12,21 +12,7 @@ import {
   type AdminCampaignRecipient,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
-
-function formatDate(iso?: string | null) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('fa-IR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
+import { formatDateTime } from '@/lib/utils';
 
 export default function AdminNotificationsPage() {
   const [items, setItems] = useState<AdminNotificationCampaign[]>([]);
@@ -218,7 +204,7 @@ export default function AdminNotificationsPage() {
                     <div className="font-medium">{c.title}</div>
                     <div className="mt-0.5 max-w-xs truncate text-xs text-gray">{c.body}</div>
                   </td>
-                  <td className="p-3 whitespace-nowrap">{formatDate(c.createdAt)}</td>
+                  <td className="p-3 whitespace-nowrap">{formatDateTime(c.createdAt)}</td>
                   <td className="p-3">{c.total}</td>
                   <td className="p-3 text-green-700">{c.sent}</td>
                   <td className="p-3 text-red-700">{c.failed}</td>
