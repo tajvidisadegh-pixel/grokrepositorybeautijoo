@@ -1,1 +1,1 @@
-PLACEHOLDER_SERVICE
+SEE_ARTIFACT_admin.service.full.ts
