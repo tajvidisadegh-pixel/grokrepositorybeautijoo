@@ -76,14 +76,35 @@ export function priceToWords(amount: number): string {
   return parts.join(' و ') + ' تومان';
 }
 
-export function formatDate(iso: string): string {
+/**
+ * Canonical site-wide Jalali (Solar Hijri) date formatter.
+ * Uses fa-IR calendar so year/month/day are always شمسی across the product.
+ */
+export function formatDate(
+  iso?: string | Date | null,
+  opts?: { style?: 'short' | 'long'; includeTime?: boolean },
+): string {
+  if (iso == null || iso === '') return '—';
   try {
-    return new Intl.DateTimeFormat('fa-IR', {
+    const d = typeof iso === 'string' || typeof iso === 'number' ? new Date(iso) : iso;
+    if (Number.isNaN(d.getTime())) return String(iso);
+    const style = opts?.style ?? 'long';
+    const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
-      month: 'long',
+      month: style === 'short' ? 'short' : 'long',
       day: 'numeric',
-    }).format(new Date(iso));
+    };
+    if (opts?.includeTime) {
+      options.hour = '2-digit';
+      options.minute = '2-digit';
+    }
+    return new Intl.DateTimeFormat('fa-IR', options).format(d);
   } catch {
-    return iso;
+    return String(iso);
   }
+}
+
+/** Shortcut: Jalali date + time. */
+export function formatDateTime(iso?: string | Date | null): string {
+  return formatDate(iso, { style: 'short', includeTime: true });
 }
