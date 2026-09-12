@@ -7,6 +7,7 @@ import {
   fetchAdminNotificationCampaigns,
   fetchAdminCampaignRecipients,
   adminRetryFailedCampaign,
+  adminNotifyByFilter,
   type AdminNotificationCampaign,
   type AdminCampaignRecipient,
 } from '@/lib/panel-api';
@@ -41,6 +42,13 @@ export default function AdminNotificationsPage() {
   const [recMeta, setRecMeta] = useState({ page: 1, total: 0, totalPages: 0 });
   const [recStatus, setRecStatus] = useState('');
   const [recLoading, setRecLoading] = useState(false);
+
+  // compose / send new notification
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [notifyTitle, setNotifyTitle] = useState('');
+  const [notifyBody, setNotifyBody] = useState('');
+  const [notifySms, setNotifySms] = useState(false);
+  const [notifyTarget, setNotifyTarget] = useState<'customers' | 'never_notified' | 'has_paid'>('customers');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,14 +108,64 @@ export default function AdminNotificationsPage() {
     }
   };
 
+  const openCompose = () => {
+    setNotifyTitle('');
+    setNotifyBody('');
+    setNotifySms(false);
+    setNotifyTarget('customers');
+    setComposeOpen(true);
+  };
+
+  const sendNewNotification = async () => {
+    if (!notifyTitle.trim() || !notifyBody.trim()) {
+      setMsg('عنوان و متن اعلان الزامی است');
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      const filters: Record<string, unknown> = { accountType: 'customer' };
+      if (notifyTarget === 'never_notified') filters.neverNotified = true;
+      if (notifyTarget === 'has_paid') filters.hasPaid = true;
+
+      const res = await adminNotifyByFilter({
+        title: notifyTitle.trim(),
+        body: notifyBody.trim(),
+        sms: notifySms,
+        limit: 500,
+        filters,
+      });
+      setMsg(
+        `اعلان برای ${res.notified} نفر ارسال شد` +
+          (notifySms ? ` (پیامک: ${res.smsSent ?? 0})` : '') +
+          (res.campaignId ? ` · کمپین: ${res.campaignId}` : ''),
+      );
+      setComposeOpen(false);
+      await load();
+    } catch (e) {
+      setMsg(friendlyApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading && items.length === 0) return <PanelLoading />;
   if (error && items.length === 0) return <PanelError message={error} onRetry={load} />;
 
   return (
     <div className="space-y-6" dir="rtl">
-      <div>
-        <h1 className="text-2xl font-bold">اعلان‌ها و کمپین‌ها</h1>
-        <p className="mt-1 text-sm text-gray">تاریخچه ارسال، وضعیت گیرندگان و ارسال مجدد ناموفق‌ها</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">اعلان‌ها و کمپین‌ها</h1>
+          <p className="mt-1 text-sm text-gray">ارسال اعلان جدید، تاریخچه کمپین‌ها و وضعیت گیرندگان</p>
+        </div>
+        <button
+          type="button"
+          className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow hover:opacity-90"
+          onClick={openCompose}
+        >
+          ارسال اعلان جدید
+        </button>
       </div>
 
       {msg && (
@@ -143,7 +201,7 @@ export default function AdminNotificationsPage() {
       </Card>
 
       {items.length === 0 ? (
-        <PanelEmpty title="کمپینی ثبت نشده" />
+        <PanelEmpty title="کمپینی ثبت نشده — از دکمه «ارسال اعلان جدید» استفاده کنید" />
       ) : (
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[800px] text-sm">
@@ -216,6 +274,72 @@ export default function AdminNotificationsPage() {
           >
             بعدی
           </button>
+        </div>
+      )}
+
+      {/* Compose modal */}
+      {composeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComposeOpen(false)}>
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <h3 className="mb-4 text-lg font-bold">ارسال اعلان جدید</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-gray">گیرندگان</label>
+                <select
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  value={notifyTarget}
+                  onChange={(e) => setNotifyTarget(e.target.value as typeof notifyTarget)}
+                >
+                  <option value="customers">همه مشتریان</option>
+                  <option value="never_notified">مشتریانی که هرگز اعلان نگرفته‌اند</option>
+                  <option value="has_paid">مشتریان دارای پرداخت</option>
+                </select>
+                <p className="mt-1 text-[11px] text-gray">
+                  برای فیلتر دقیق‌تر از صفحه «مشتریان» استفاده کنید.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray">عنوان</label>
+                <input
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  value={notifyTitle}
+                  onChange={(e) => setNotifyTitle(e.target.value)}
+                  placeholder="عنوان اعلان"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray">متن</label>
+                <textarea
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  rows={4}
+                  value={notifyBody}
+                  onChange={(e) => setNotifyBody(e.target.value)}
+                  placeholder="متن اعلان..."
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={notifySms} onChange={(e) => setNotifySms(e.target.checked)} />
+                ارسال پیامک هم
+              </label>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" className="rounded border px-4 py-2 text-sm" onClick={() => setComposeOpen(false)}>
+                  انصراف
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  disabled={busy}
+                  onClick={sendNewNotification}
+                >
+                  {busy ? 'در حال ارسال...' : 'ارسال اعلان'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
