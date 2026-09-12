@@ -42,8 +42,6 @@ export default function AdminNotificationsPage() {
   const [recMeta, setRecMeta] = useState({ page: 1, total: 0, totalPages: 0 });
   const [recStatus, setRecStatus] = useState('');
   const [recLoading, setRecLoading] = useState(false);
-
-  // compose / send new notification
   const [composeOpen, setComposeOpen] = useState(false);
   const [notifyTitle, setNotifyTitle] = useState('');
   const [notifyBody, setNotifyBody] = useState('');
@@ -108,14 +106,6 @@ export default function AdminNotificationsPage() {
     }
   };
 
-  const openCompose = () => {
-    setNotifyTitle('');
-    setNotifyBody('');
-    setNotifySms(false);
-    setNotifyTarget('customers');
-    setComposeOpen(true);
-  };
-
   const sendNewNotification = async () => {
     if (!notifyTitle.trim() || !notifyBody.trim()) {
       setMsg('عنوان و متن اعلان الزامی است');
@@ -127,7 +117,6 @@ export default function AdminNotificationsPage() {
       const filters: Record<string, unknown> = { accountType: 'customer' };
       if (notifyTarget === 'never_notified') filters.neverNotified = true;
       if (notifyTarget === 'has_paid') filters.hasPaid = true;
-
       const res = await adminNotifyByFilter({
         title: notifyTitle.trim(),
         body: notifyBody.trim(),
@@ -161,15 +150,21 @@ export default function AdminNotificationsPage() {
         </div>
         <button
           type="button"
-          className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow hover:opacity-90"
-          onClick={openCompose}
+          className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-emerald-700"
+          onClick={() => {
+            setNotifyTitle('');
+            setNotifyBody('');
+            setNotifySms(false);
+            setNotifyTarget('customers');
+            setComposeOpen(true);
+          }}
         >
           ارسال اعلان جدید
         </button>
       </div>
 
       {msg && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm">
           {msg}
           <button type="button" className="mr-3 text-xs underline" onClick={() => setMsg(null)}>
             بستن
@@ -190,7 +185,7 @@ export default function AdminNotificationsPage() {
         </div>
         <button
           type="button"
-          className="rounded-lg bg-primary px-4 py-2 text-sm text-white"
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white"
           onClick={() => {
             setPage(1);
             load();
@@ -222,7 +217,6 @@ export default function AdminNotificationsPage() {
                   <td className="p-3">
                     <div className="font-medium">{c.title}</div>
                     <div className="mt-0.5 max-w-xs truncate text-xs text-gray">{c.body}</div>
-                    <div className="mt-0.5 font-mono text-[10px] text-gray">{c.campaignId}</div>
                   </td>
                   <td className="p-3 whitespace-nowrap">{formatDate(c.createdAt)}</td>
                   <td className="p-3">{c.total}</td>
@@ -255,36 +249,21 @@ export default function AdminNotificationsPage() {
 
       {meta.totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 text-sm">
-          <button
-            type="button"
-            className="rounded border px-3 py-1 disabled:opacity-40"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
+          <button type="button" className="rounded border px-3 py-1 disabled:opacity-40" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             قبلی
           </button>
           <span>
             صفحه {page} از {meta.totalPages}
           </span>
-          <button
-            type="button"
-            className="rounded border px-3 py-1 disabled:opacity-40"
-            disabled={page >= meta.totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
+          <button type="button" className="rounded border px-3 py-1 disabled:opacity-40" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>
             بعدی
           </button>
         </div>
       )}
 
-      {/* Compose modal */}
       {composeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComposeOpen(false)}>
-          <div
-            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-            dir="rtl"
-          >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} dir="rtl">
             <h3 className="mb-4 text-lg font-bold">ارسال اعلان جدید</h3>
             <div className="space-y-3">
               <div>
@@ -298,9 +277,6 @@ export default function AdminNotificationsPage() {
                   <option value="never_notified">مشتریانی که هرگز اعلان نگرفته‌اند</option>
                   <option value="has_paid">مشتریان دارای پرداخت</option>
                 </select>
-                <p className="mt-1 text-[11px] text-gray">
-                  برای فیلتر دقیق‌تر از صفحه «مشتریان» استفاده کنید.
-                </p>
               </div>
               <div>
                 <label className="mb-1 block text-xs text-gray">عنوان</label>
@@ -325,17 +301,25 @@ export default function AdminNotificationsPage() {
                 <input type="checkbox" checked={notifySms} onChange={(e) => setNotifySms(e.target.checked)} />
                 ارسال پیامک هم
               </label>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="rounded border px-4 py-2 text-sm" onClick={() => setComposeOpen(false)}>
-                  انصراف
+              <div className="flex flex-col gap-2 pt-3">
+                <button
+                  type="button"
+                  className="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void sendNewNotification();
+                  }}
+                >
+                  {busy ? 'در حال ارسال...' : 'تأیید و ارسال اعلان'}
                 </button>
                 <button
                   type="button"
-                  className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                  disabled={busy}
-                  onClick={sendNewNotification}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  onClick={() => setComposeOpen(false)}
                 >
-                  {busy ? 'در حال ارسال...' : 'ارسال اعلان'}
+                  انصراف
                 </button>
               </div>
             </div>
@@ -345,11 +329,7 @@ export default function AdminNotificationsPage() {
 
       {activeCampaign && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={() => setActiveCampaign(null)}>
-          <div
-            className="h-full w-full max-w-lg overflow-y-auto bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-            dir="rtl"
-          >
+          <div className="h-full w-full max-w-lg overflow-y-auto bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} dir="rtl">
             <div className="mb-4 flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-bold">{activeCampaign.title}</h2>
@@ -357,29 +337,6 @@ export default function AdminNotificationsPage() {
               </div>
               <button type="button" className="text-sm underline" onClick={() => setActiveCampaign(null)}>
                 بستن
-              </button>
-            </div>
-            <div className="mb-3 flex flex-wrap gap-2 text-xs">
-              <button
-                type="button"
-                className={`rounded-full border px-3 py-1 ${recStatus === '' ? 'bg-primary text-white' : ''}`}
-                onClick={() => openCampaign(activeCampaign, '')}
-              >
-                همه
-              </button>
-              <button
-                type="button"
-                className={`rounded-full border px-3 py-1 ${recStatus === 'sent' ? 'bg-green-600 text-white' : ''}`}
-                onClick={() => openCampaign(activeCampaign, 'sent')}
-              >
-                ارسال‌شده
-              </button>
-              <button
-                type="button"
-                className={`rounded-full border px-3 py-1 ${recStatus === 'failed' ? 'bg-red-600 text-white' : ''}`}
-                onClick={() => openCampaign(activeCampaign, 'failed')}
-              >
-                ناموفق
               </button>
             </div>
             {recLoading ? (
@@ -395,9 +352,6 @@ export default function AdminNotificationsPage() {
                       <span className={`text-xs ${r.status === 'failed' ? 'text-red-700' : 'text-green-700'}`}>
                         {r.status === 'failed' ? 'ناموفق' : 'ارسال‌شده'}
                       </span>
-                    </div>
-                    <div className="mt-1 text-xs text-gray" dir="ltr">
-                      {r.phone || '—'}
                     </div>
                   </li>
                 ))}
