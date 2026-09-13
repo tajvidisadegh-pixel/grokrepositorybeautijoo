@@ -100,7 +100,8 @@ export default function AdminSiteBuilderPage() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'hero' | 'sections' | 'texts' | 'features'>('hero');
+  const [tab, setTab] = useState<'hero' | 'sections' | 'texts' | 'features' | 'preview'>('hero');
+  const [dirty, setDirty] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -112,8 +113,11 @@ export default function AdminSiteBuilderPage() {
     setSections((builder.draft?.sections || []).slice().sort((a, b) => a.sortOrder - b.sortOrder));
     setHasUnpublished(!!(cms.hasUnpublishedChanges || builder.hasUnpublishedChanges));
     setPublishedAt(
-      (cms.published as CmsContent | null | undefined)?.publishedAt || cms.published?.updatedAt || null,
+      (cms.published as CmsContent | null | undefined)?.publishedAt ||
+        cms.published?.updatedAt ||
+        null,
     );
+    setDirty(false);
   }, []);
 
   useEffect(() => {
@@ -124,17 +128,26 @@ export default function AdminSiteBuilderPage() {
   const texts = content.texts || {};
   const features = content.features || {};
 
+  function markDirty() {
+    setDirty(true);
+    setHasUnpublished(true);
+  }
+
   function patchHero(patch: Partial<Hero>) {
+    markDirty();
     setContent((c) => ({ ...c, hero: { ...(c.hero || {}), ...patch } }));
   }
   function patchTexts(patch: Partial<Texts>) {
+    markDirty();
     setContent((c) => ({ ...c, texts: { ...(c.texts || {}), ...patch } }));
   }
   function patchFeatures(patch: Partial<Features>) {
+    markDirty();
     setContent((c) => ({ ...c, features: { ...(c.features || {}), ...patch } }));
   }
 
   function moveSection(index: number, dir: -1 | 1) {
+    markDirty();
     setSections((prev) => {
       const next = prev.slice();
       const j = index + dir;
@@ -155,7 +168,7 @@ export default function AdminSiteBuilderPage() {
       if (!url) throw new Error('آدرس تصویر برنگشت');
       if (slot === 'desktop') patchHero({ desktopImageUrl: url });
       else patchHero({ mobileImageUrl: url });
-      setMessage('تصویر آپلود شد — حتماً پیش‌نویس را ذخیره کنید');
+      setMessage('تصویر آپلود شد — حتماً پیش‌نویس را ذخیره یا منتشر کنید');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'آپلود ناموفق بود');
     } finally {
@@ -177,8 +190,9 @@ export default function AdminSiteBuilderPage() {
         apiClient.put('/admin/site-builder', sections),
       ]);
       setMessage('پیش‌نویس ذخیره شد');
-      setHasUnpublished(true);
       await load();
+      setHasUnpublished(true);
+      setDirty(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'ذخیره ناموفق بود');
     } finally {
@@ -200,11 +214,18 @@ export default function AdminSiteBuilderPage() {
         }),
         apiClient.put('/admin/site-builder', sections),
       ]);
-      await apiClient.post('/admin/site-cms/publish', {});
+      const result = await apiClient.post<{
+        success?: boolean;
+        publishedAt?: string;
+        hasUnpublishedChanges?: boolean;
+      }>('/admin/site-cms/publish', {});
       await triggerRevalidate();
-      setMessage('منتشر شد — کش صفحه اصلی بازسازی شد');
+      setMessage('منتشر شد — صفحه اصلی با نسخه جدید به‌روز می‌شود');
       setHasUnpublished(false);
+      setDirty(false);
+      if (result?.publishedAt) setPublishedAt(result.publishedAt);
       await load();
+      setHasUnpublished(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'انتشار ناموفق بود');
     } finally {
@@ -219,9 +240,15 @@ export default function AdminSiteBuilderPage() {
         { id: 'sections' as const, label: 'بخش‌ها و ترتیب' },
         { id: 'texts' as const, label: 'متن‌ها' },
         { id: 'features' as const, label: 'قابلیت‌ها' },
+        { id: 'preview' as const, label: 'پیش‌نمایش' },
       ] as const,
     [],
   );
+
+  const orderedSections = sections
+    .filter((s) => s.enabled !== false)
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6" dir="rtl">
@@ -229,7 +256,7 @@ export default function AdminSiteBuilderPage() {
         <div>
           <h1 className="text-xl font-bold text-[#0B2C4A]">طراحی سایت</h1>
           <p className="mt-1 text-sm text-gray-500">
-            ویرایش محتوای صفحه اصلی — ذخیره پیش‌نویس، سپس انتشار
+            ویرایش محتوای صفحه اصلی — ذخیره پیش‌نویس، پیش‌نمایش، سپس انتشار
           </p>
           {publishedAt && (
             <p className="mt-1 text-xs text-gray-400">
@@ -238,6 +265,13 @@ export default function AdminSiteBuilderPage() {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            disabled={busy}
+            onClick={() => setTab('preview')}
+            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+          >
+            پیش‌نمایش
+          </button>
           <button
             disabled={busy}
             onClick={() => void saveDraft()}
@@ -255,7 +289,7 @@ export default function AdminSiteBuilderPage() {
         </div>
       </div>
 
-      {hasUnpublished && (
+      {(hasUnpublished || dirty) && (
         <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
           تغییرات پیش‌نویس هنوز منتشر نشده‌اند.
         </div>
@@ -358,11 +392,12 @@ export default function AdminSiteBuilderPage() {
                     <input
                       type="checkbox"
                       checked={s.enabled}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        markDirty();
                         setSections((prev) =>
                           prev.map((x) => (x.id === s.id ? { ...x, enabled: e.target.checked } : x)),
-                        )
-                      }
+                        );
+                      }}
                     />
                     فعال
                   </label>
@@ -415,6 +450,141 @@ export default function AdminSiteBuilderPage() {
               {label}
             </label>
           ))}
+        </section>
+      )}
+
+      {tab === 'preview' && (
+        <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b bg-gray-50 px-4 py-2 text-xs text-gray-500">
+            پیش‌نمایش زنده از پیش‌نویس فعلی (قبل از انتشار روی سایت عمومی)
+            {dirty && ' · تغییرات ذخیره‌نشده در فرم لحاظ شده‌اند'}
+          </div>
+          <div className="max-h-[70vh] overflow-y-auto" dir="rtl">
+            {(orderedSections.length
+              ? orderedSections.map((s) => s.id)
+              : ['hero', 'categories', 'featured', 'cta']
+            ).map((id) => {
+              if (id === 'hero' && hero.enabled !== false) {
+                return (
+                  <div
+                    key="hero"
+                    className="relative bg-gradient-to-b from-sky-50 via-white to-orange-50 px-6 py-10 text-center"
+                  >
+                    {hero.desktopImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={hero.desktopImageUrl}
+                        alt=""
+                        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-15"
+                      />
+                    ) : null}
+                    <div className="relative">
+                      {hero.badge ? (
+                        <p className="mb-2 text-xs font-semibold text-[#FF6F61]">{hero.badge}</p>
+                      ) : null}
+                      <h2 className="text-2xl font-bold text-[#0B2C4A] sm:text-3xl">
+                        {hero.title || 'عنوان Hero'}
+                        {hero.subtitle ? (
+                          <span className="mt-1 block text-lg text-gray-800">{hero.subtitle}</span>
+                        ) : null}
+                      </h2>
+                      {hero.description ? (
+                        <p className="mx-auto mt-3 max-w-lg text-sm text-gray-600">{hero.description}</p>
+                      ) : null}
+                      {features.showSearchInHero !== false && (
+                        <div className="mx-auto mt-5 flex max-w-md gap-2">
+                          <div className="h-10 flex-1 rounded-xl border bg-white px-3 text-right text-sm leading-10 text-gray-400">
+                            جستجوی خدمت یا زیباگر...
+                          </div>
+                          <div className="flex h-10 items-center rounded-xl bg-[#FF6F61] px-4 text-sm text-white">
+                            {hero.ctaText || 'جستجو'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+              if (id === 'categories' && features.showCategories !== false) {
+                return (
+                  <div key="categories" className="px-6 py-8">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h3 className="font-bold text-[#0B2C4A]">
+                        {texts.categoriesTitle || 'دسته‌بندی‌های محبوب'}
+                      </h3>
+                      <span className="text-sm text-[#FF6F61]">
+                        {texts.categoriesLinkText || 'همه خدمات'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                      {['۱', '۲', '۳', '۴', '۵', '۶'].map((n) => (
+                        <div
+                          key={n}
+                          className="rounded-xl border bg-gray-50 py-4 text-center text-xs text-gray-500"
+                        >
+                          دسته {n}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              if (id === 'featured' && features.showFeaturedProfessionals !== false) {
+                return (
+                  <div key="featured" className="px-6 py-8">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h3 className="font-bold text-[#0B2C4A]">
+                        {texts.featuredTitle || 'زیباگرهای برتر هفته'}
+                      </h3>
+                      <span className="text-sm text-[#FF6F61]">
+                        {texts.featuredLinkText || 'مشاهده همه'}
+                      </span>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2">
+                      {[1, 2, 3].map((n) => (
+                        <div
+                          key={n}
+                          className="h-28 w-40 shrink-0 rounded-xl border bg-gray-50 text-center text-xs leading-[7rem] text-gray-400"
+                        >
+                          کارت زیباگر
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              if (id === 'cta' && features.showBottomCta !== false) {
+                return (
+                  <div key="cta" className="bg-[#0B2C4A] px-6 py-10 text-center text-white">
+                    <h3 className="text-xl font-bold">{texts.ctaTitle || 'آماده رزرو هستید؟'}</h3>
+                    <p className="mt-2 text-sm text-white/80">
+                      {texts.ctaDescription ||
+                        'زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.'}
+                    </p>
+                    <div className="mt-5 flex flex-wrap justify-center gap-2">
+                      <span className="rounded-xl bg-[#FF6F61] px-4 py-2 text-sm">
+                        {texts.ctaPrimaryText || 'شروع جستجو'}
+                      </span>
+                      <span className="rounded-xl border border-white/40 px-4 py-2 text-sm">
+                        {texts.ctaSecondaryText || 'ثبت‌نام رایگان'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })}
+          </div>
+          <div className="border-t bg-gray-50 px-4 py-3 text-center">
+            <a
+              href="/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-medium text-[#2D6CDF] hover:underline"
+            >
+              باز کردن صفحه اصلی سایت (نسخه منتشرشده)
+            </a>
+          </div>
         </section>
       )}
     </div>
