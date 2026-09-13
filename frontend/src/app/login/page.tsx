@@ -78,10 +78,8 @@ function LoginForm() {
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center gap-6 px-4 py-12">
       <div className="text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-coral to-coral-dark text-lg font-bold text-white shadow-sm">
-          ب
-        </div>
-        <h1 className="text-xl font-bold text-foreground sm:text-2xl">ورود به Beautijoo</h1>
+        <div className="logo-mark mx-auto mb-4 size-14 text-lg">B</div>
+        <h1 className="text-xl font-bold text-blue sm:text-2xl">ورود به بیوتی‌جو</h1>
         <p className="mt-2 text-sm text-gray">ورود به حساب کاربری با شماره موبایل و رمز عبور</p>
       </div>
 
