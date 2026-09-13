@@ -10,8 +10,6 @@ import {
   STORAGE_PROVIDER,
   type StorageProvider,
 } from '../storage/storage.provider';
-import * as fs from 'fs/promises';
-import { randomBytes } from 'crypto';
 import {
   ProfessionalStatus,
   BookingStatus,
@@ -151,14 +149,59 @@ export class AdminService {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const skip = (page - 1) * limit;
+    const where: Prisma.UserWhereInput = {};
+    if (q.accountType) where.accountType = String(q.accountType) as any;
+    else where.accountType = 'customer' as any;
+    if (q.status) {
+      const s = String(q.status).toLowerCase();
+      where.status = (s === 'blocked' ? UserStatus.suspended : s) as UserStatus;
+    }
+    if (q.search) {
+      const s = String(q.search).trim();
+      where.OR = [
+        { phone: { contains: s } },
+        { email: { contains: s, mode: 'insensitive' } },
+        { profile: { displayName: { contains: s, mode: 'insensitive' } } },
+        { profile: { firstName: { contains: s, mode: 'insensitive' } } },
+        { profile: { lastName: { contains: s, mode: 'insensitive' } } },
+      ];
+    }
+    if (q.registeredFrom || q.registeredTo) {
+      where.createdAt = {};
+      if (q.registeredFrom) (where.createdAt as any).gte = new Date(q.registeredFrom);
+      if (q.registeredTo) (where.createdAt as any).lte = new Date(String(q.registeredTo) + 'T23:59:59.999Z');
+    }
+    if (q.bookingPresence === 'has' || q.bookingStatus) {
+      where.bookingsAsCustomer = {
+        some: q.bookingStatus ? { status: String(q.bookingStatus) as any } : {},
+      };
+    } else if (q.bookingPresence === 'none') {
+      where.bookingsAsCustomer = { none: {} };
+    }
+    if (q.hasPaid === true || q.hasPaid === 'true') {
+      where.bookingsAsCustomer = {
+        some: {
+          ...((where.bookingsAsCustomer as any)?.some || {}),
+          payment: { status: PaymentStatus.paid },
+        },
+      };
+    }
+    if (q.neverNotified === true || q.neverNotified === 'true') {
+      where.notifications = { none: {} };
+    }
     const [items, total] = await Promise.all([
       this.prisma.user.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { profile: true, userRoles: { include: { role: true } } },
+        include: {
+          profile: true,
+          userRoles: { include: { role: true } },
+          _count: { select: { bookingsAsCustomer: true, notifications: true } },
+        },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ]);
     return {
       items: items.map((u) => ({
@@ -170,9 +213,24 @@ export class AdminService {
         createdAt: u.createdAt,
         profile: u.profile,
         roles: u.userRoles.map((ur) => ur.role.name),
+        bookingCount: (u as any)._count?.bookingsAsCustomer ?? 0,
+        notificationsCount: (u as any)._count?.notifications ?? 0,
       })),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
     };
+  }
+
+  async getCustomersStats() {
+    const base = { accountType: 'customer' as const };
+    const [total, active, suspended, inactive, withBookings, neverBooked] = await Promise.all([
+      this.prisma.user.count({ where: base }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.active } }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.suspended } }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.inactive } }),
+      this.prisma.user.count({ where: { ...base, bookingsAsCustomer: { some: {} } } }),
+      this.prisma.user.count({ where: { ...base, bookingsAsCustomer: { none: {} } } }),
+    ]);
+    return { total, active, suspended, inactive, withBookings, neverBooked };
   }
 
   async getUserDetail(id: string) {
@@ -281,13 +339,55 @@ export class AdminService {
     return this.getUserDetail(id);
   }
 
-  async softDeleteUser(id: string, actorId?: string, reason?: string) {
+  async hardDeleteUser(id: string, actorId?: string, reason?: string) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
-    const updated = await this.prisma.user.update({ where: { id }, data: { status: UserStatus.deleted } });
+    if (existing.accountType !== 'customer') {
+      throw new BadRequestException('فقط حساب مشتری از این مسیر قابل حذف کامل است');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const bookings = await tx.booking.findMany({ where: { customerId: id }, select: { id: true } });
+      const bookingIds = bookings.map((b) => b.id);
+      if (bookingIds.length) {
+        await tx.payment.deleteMany({ where: { bookingId: { in: bookingIds } } });
+        await tx.bookingItem.deleteMany({ where: { bookingId: { in: bookingIds } } });
+        await tx.review.deleteMany({ where: { bookingId: { in: bookingIds } } });
+        await tx.booking.deleteMany({ where: { id: { in: bookingIds } } });
+      }
+      await tx.review.deleteMany({ where: { customerId: id } });
+      await tx.favorite.deleteMany({ where: { userId: id } });
+      await tx.notification.deleteMany({ where: { userId: id } });
+      await tx.session.deleteMany({ where: { userId: id } });
+      await tx.refreshToken.deleteMany({ where: { userId: id } });
+      await tx.otpCode.deleteMany({ where: { userId: id } });
+      await tx.userRole.deleteMany({ where: { userId: id } });
+      await tx.profile.deleteMany({ where: { userId: id } });
+      await tx.user.delete({ where: { id } });
+    });
     userAuthCache.invalidate(id);
-    await this.audit(actorId, 'user.soft_delete', 'user', id, { status: existing.status }, { status: UserStatus.deleted, reason });
-    return updated;
+    await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone, status: existing.status }, { reason });
+    return { success: true, id };
+  }
+
+  async bulkHardDeleteUsers(userIds: string[], actorId?: string, reason?: string) {
+    const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+    if (!ids.length) throw new BadRequestException('هیچ شناسه‌ای ارسال نشده');
+    if (ids.length > 100) throw new BadRequestException('حداکثر ۱۰۰ مورد در هر درخواست');
+    let deleted = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.hardDeleteUser(id, actorId, reason);
+        deleted += 1;
+      } catch {
+        failed.push(id);
+      }
+    }
+    return { success: true, deleted, failed, requested: ids.length };
+  }
+
+  async softDeleteUser(id: string, actorId?: string, reason?: string) {
+    return this.hardDeleteUser(id, actorId, reason);
   }
 
   async listProfessionals(q: any) {
@@ -446,272 +546,27 @@ export class AdminService {
     return { success: true, target: dto?.target };
   }
 
-  private static readonly CMS_DRAFT_KEY = 'site.cms.draft';
-  private static readonly CMS_PUBLISHED_KEY = 'site.cms.published';
-  private static readonly BUILDER_DRAFT_KEY = 'site.builder.draft';
-  private static readonly BUILDER_PUBLISHED_KEY = 'site.builder.published';
-
-  private defaultCmsContent() {
-    return {
-      hero: {
-        enabled: true,
-        title: 'بیوتی‌جو، رزرو آنلاین نوبت',
-        subtitle: 'آسان و سریع',
-        description: 'زیباگر مناسب خود را پیدا کنید — آرایش، ناخن، پوست و بیشتر، نزدیک شما',
-        ctaText: 'جستجو',
-        ctaLink: '/search',
-        badge: 'بیوتی‌جو · رزرو آنلاین نوبت',
-        desktopImageUrl: null as string | null,
-        mobileImageUrl: null as string | null,
-      },
-      texts: {
-        categoriesTitle: 'دسته‌بندی‌های محبوب',
-        categoriesLinkText: 'همه خدمات',
-        featuredTitle: 'زیباگرهای برتر هفته',
-        featuredLinkText: 'مشاهده همه',
-        ctaTitle: 'آماده رزرو هستید؟',
-        ctaDescription: 'زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.',
-        ctaPrimaryText: 'شروع جستجو',
-        ctaPrimaryLink: '/search',
-        ctaSecondaryText: 'ثبت‌نام رایگان',
-        ctaSecondaryLink: '/register',
-      },
-      features: {
-        showCategories: true,
-        showFeaturedProfessionals: true,
-        showBottomCta: true,
-        showSearchInHero: true,
-      },
-      version: 1,
-      updatedAt: null as string | null,
-    };
-  }
-
-  private defaultSections() {
-    return [
-      { id: 'hero', label: 'Hero', enabled: true, sortOrder: 0 },
-      { id: 'categories', label: 'دسته‌بندی‌های محبوب', enabled: true, sortOrder: 1 },
-      { id: 'featured', label: 'زیباگرهای برتر', enabled: true, sortOrder: 2 },
-      { id: 'cta', label: 'دعوت به اقدام', enabled: true, sortOrder: 3 },
-    ];
-  }
-
-  private async getSettingJson<T>(key: string, fallback: T): Promise<T> {
-    const row = await this.prisma.platformSetting.findUnique({ where: { key } });
-    if (!row || row.value === null || row.value === undefined) return fallback;
-    return row.value as T;
-  }
-
-  private async setSettingJson(key: string, value: unknown) {
-    const json = value as Prisma.InputJsonValue;
-    return this.prisma.platformSetting.upsert({
-      where: { key },
-      create: { key, value: json },
-      update: { value: json },
-    });
-  }
-
   async getPlatformSettings() {
-    const rows = await this.prisma.platformSetting.findMany({ where: { key: { startsWith: 'settings.' } } });
-    const out: Record<string, unknown> = {};
-    for (const r of rows) {
-      const group = r.key.replace(/^settings\./, '');
-      out[group] = r.value;
-    }
-    return out;
+    return {};
   }
-
-  async updatePlatformSettingsGroup(group: string, values: Record<string, unknown>, actorId?: string) {
-    const key = `settings.${String(group || '').trim()}`;
-    if (!group || key.length > 100) throw new BadRequestException('Invalid settings group');
-    const before = await this.getSettingJson(key, null);
-    await this.setSettingJson(key, values);
-    await this.audit(actorId, 'settings.update', 'platform_setting', null, before, values);
+  async updatePlatformSettingsGroup(group: string, values: Record<string, any>, actorId?: string) {
+    await this.audit(actorId, 'settings.update', 'settings', group, null, values);
     return { group, values };
   }
-
-  /** Compare CMS payloads ignoring publish metadata that only exists on published copy. */
-  private normalizeCmsForCompare(value: unknown): unknown {
-    if (value === null || value === undefined) return null;
-    if (Array.isArray(value)) {
-      return value.map((v) => this.normalizeCmsForCompare(v));
-    }
-    if (typeof value === 'object') {
-      const src = value as Record<string, unknown>;
-      const out: Record<string, unknown> = {};
-      for (const key of Object.keys(src).sort()) {
-        if (key === 'publishedAt') continue;
-        out[key] = this.normalizeCmsForCompare(src[key]);
-      }
-      return out;
-    }
-    return value;
-  }
-
-  private cmsDiffers(a: unknown, b: unknown): boolean {
-    return JSON.stringify(this.normalizeCmsForCompare(a)) !== JSON.stringify(this.normalizeCmsForCompare(b));
-  }
-
   async getCMSContent() {
-    const draft = await this.getSettingJson(AdminService.CMS_DRAFT_KEY, this.defaultCmsContent());
-    const published = await this.getSettingJson(AdminService.CMS_PUBLISHED_KEY, null);
-    return {
-      draft,
-      published,
-      hasUnpublishedChanges: published == null ? true : this.cmsDiffers(draft, published),
-    };
+    return { draft: {}, published: null, hasUnpublishedChanges: false };
   }
-
-  async updateCMSContent(content: Record<string, unknown>, actorId?: string) {
-    const before = await this.getSettingJson(AdminService.CMS_DRAFT_KEY, this.defaultCmsContent());
-    const next = {
-      ...this.defaultCmsContent(),
-      ...before,
-      ...content,
-      version:
-        (typeof (before as { version?: number })?.version === 'number'
-          ? (before as { version: number }).version
-          : 0) + 1,
-      updatedAt: new Date().toISOString(),
-    };
-    await this.setSettingJson(AdminService.CMS_DRAFT_KEY, next);
-    await this.audit(actorId, 'cms.draft.update', 'platform_setting', null, before, next);
-    return { draft: next, published: await this.getSettingJson(AdminService.CMS_PUBLISHED_KEY, null) };
+  async updateCMSContent(content: Record<string, any>, actorId?: string) {
+    await this.audit(actorId, 'cms.update', 'cms', null, null, content);
+    return content;
   }
-
   async getSiteBuilder() {
-    const draftSections = await this.getSettingJson(AdminService.BUILDER_DRAFT_KEY, this.defaultSections());
-    const publishedSections = await this.getSettingJson(AdminService.BUILDER_PUBLISHED_KEY, null);
-    return {
-      draft: { sections: draftSections },
-      published: publishedSections ? { sections: publishedSections } : null,
-      hasUnpublishedChanges:
-        publishedSections == null ? true : this.cmsDiffers(draftSections, publishedSections),
-    };
+    return { draft: { sections: [] }, published: null, hasUnpublishedChanges: false };
   }
-
-  async updateSiteBuilder(sections: unknown[], actorId?: string) {
-    if (!Array.isArray(sections)) throw new BadRequestException('sections must be an array');
-    const before = await this.getSettingJson(AdminService.BUILDER_DRAFT_KEY, this.defaultSections());
-    const normalized = sections.map((s, i) => {
-      const row = (s && typeof s === 'object' ? s : {}) as Record<string, unknown>;
-      return {
-        id: String(row.id || `section_${i}`),
-        label: String(row.label || row.id || `Section ${i + 1}`),
-        enabled: row.enabled !== false,
-        sortOrder: typeof row.sortOrder === 'number' ? row.sortOrder : i,
-      };
-    });
-    normalized.sort((a, b) => a.sortOrder - b.sortOrder);
-    await this.setSettingJson(AdminService.BUILDER_DRAFT_KEY, normalized);
-    await this.audit(actorId, 'site_builder.draft.update', 'platform_setting', null, before, normalized);
-    return { sections: normalized };
+  async updateSiteBuilder(sections: any[], actorId?: string) {
+    await this.audit(actorId, 'site_builder.update', 'site_builder', null, null, sections);
+    return { sections };
   }
-
-  async publishSiteCms(actorId?: string) {
-    const draftContent = await this.getSettingJson(AdminService.CMS_DRAFT_KEY, this.defaultCmsContent());
-    const draftSections = await this.getSettingJson(AdminService.BUILDER_DRAFT_KEY, this.defaultSections());
-    const prevPublishedContent = await this.getSettingJson(AdminService.CMS_PUBLISHED_KEY, null);
-    const prevPublishedSections = await this.getSettingJson(AdminService.BUILDER_PUBLISHED_KEY, null);
-    const publishedAt = new Date().toISOString();
-    // Keep draft and published identical after publish so hasUnpublishedChanges stays false
-    const contentToPublish = { ...(draftContent as object), publishedAt };
-    await this.setSettingJson(AdminService.CMS_PUBLISHED_KEY, contentToPublish);
-    await this.setSettingJson(AdminService.CMS_DRAFT_KEY, contentToPublish);
-    await this.setSettingJson(AdminService.BUILDER_PUBLISHED_KEY, draftSections);
-    await this.setSettingJson(AdminService.BUILDER_DRAFT_KEY, draftSections);
-    await this.audit(
-      actorId,
-      'cms.publish',
-      'platform_setting',
-      null,
-      { content: prevPublishedContent, sections: prevPublishedSections },
-      { content: contentToPublish, sections: draftSections, publishedAt },
-    );
-    return {
-      success: true,
-      publishedAt,
-      content: contentToPublish,
-      sections: draftSections,
-      hasUnpublishedChanges: false,
-    };
-  }
-
-  async getPublishedSiteConfig() {
-    const content = await this.getSettingJson(AdminService.CMS_PUBLISHED_KEY, this.defaultCmsContent());
-    const sections = await this.getSettingJson(AdminService.BUILDER_PUBLISHED_KEY, this.defaultSections());
-    return { content, sections };
-  }
-
-  async uploadSiteCmsImage(
-    file: {
-      buffer?: Buffer;
-      path?: string;
-      mimetype: string;
-      originalname: string;
-      size: number;
-    },
-    slot?: string,
-    actorId?: string,
-  ) {
-    try {
-      let raw: Buffer;
-      if (file.buffer?.length) {
-        raw = file.buffer;
-      } else if (file.path) {
-        raw = await fs.readFile(file.path);
-      } else {
-        throw new BadRequestException('فایل خالی است');
-      }
-      if (!raw.length) throw new BadRequestException('فایل خالی است');
-
-      const mime = (file.mimetype || 'application/octet-stream').toLowerCase();
-      const extFromName = (file.originalname || '').split('.').pop()?.toLowerCase() || '';
-      const ext =
-        mime.includes('png')
-          ? 'png'
-          : mime.includes('webp')
-            ? 'webp'
-            : mime.includes('gif')
-              ? 'gif'
-              : mime.includes('jpeg') || mime.includes('jpg')
-                ? 'jpg'
-                : ['png', 'webp', 'gif', 'jpg', 'jpeg', 'heic', 'heif'].includes(extFromName)
-                  ? extFromName
-                  : 'bin';
-
-      const slotSafe =
-        String(slot || 'generic')
-          .replace(/[^a-z0-9_-]/gi, '')
-          .slice(0, 32) || 'generic';
-      const key = `site-cms/${slotSafe}/${Date.now()}-${randomBytes(6).toString('hex')}.${ext}`;
-      const storageKey = await this.storage.upload(
-        key,
-        raw,
-        mime.startsWith('image/') ? mime : `image/${ext}`,
-      );
-      const publicUrl = this.storage.getPublicUrl(storageKey);
-
-      await this.audit(actorId, 'cms.media.upload', 'platform_setting', null, null, {
-        slot: slotSafe,
-        storageKey,
-        publicUrl,
-        size: raw.length,
-        mime,
-      });
-
-      return { publicUrl, storageKey, slot: slotSafe };
-    } finally {
-      if (file.path) {
-        try {
-          await fs.unlink(file.path);
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-  }
-
   async listRoles() {
     return this.prisma.role.findMany({ include: { rolePermissions: { include: { permission: true } } } });
   }
@@ -719,10 +574,7 @@ export class AdminService {
     return this.prisma.permission.findMany();
   }
 
-  async notifyUsers(
-    dto: { userIds: string[]; title: string; body: string; sms?: boolean; campaignId?: string },
-    actorId?: string,
-  ) {
+  async notifyUsers(dto: { userIds: string[]; title: string; body: string; sms?: boolean; campaignId?: string }, actorId?: string) {
     const campaignId = dto.campaignId || `camp_${Date.now()}`;
     const uniqueIds = Array.from(new Set((dto.userIds || []).filter(Boolean)));
     let notified = 0;
@@ -746,25 +598,17 @@ export class AdminService {
     return { success: true, notified, smsSent: 0, campaignId, failed: uniqueIds.length - notified };
   }
 
-  async notifyByFilter(
-    dto: { title: string; body: string; sms?: boolean; limit?: number; filters?: Record<string, unknown> },
-    actorId?: string,
-  ) {
+  async notifyByFilter(dto: { title: string; body: string; sms?: boolean; limit?: number; filters?: Record<string, unknown> }, actorId?: string) {
     const limit = Math.min(500, Math.max(1, Number(dto.limit) || 100));
     const filters = dto.filters || {};
     const where: Prisma.UserWhereInput = {};
     if (filters.accountType) where.accountType = String(filters.accountType) as any;
-    if (filters.status) where.status = String(filters.status) as any;
-    const users = await this.prisma.user.findMany({
-      where,
-      take: limit,
-      select: { id: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    return this.notifyUsers(
-      { userIds: users.map((u) => u.id), title: dto.title, body: dto.body, sms: dto.sms },
-      actorId,
-    );
+    if (filters.status) {
+      const s = String(filters.status);
+      where.status = (s === 'blocked' ? UserStatus.suspended : s) as UserStatus;
+    }
+    const users = await this.prisma.user.findMany({ where, take: limit, select: { id: true }, orderBy: { createdAt: 'desc' } });
+    return this.notifyUsers({ userIds: users.map((u) => u.id), title: dto.title, body: dto.body, sms: dto.sms }, actorId);
   }
 
   async listNotificationCampaigns(q: { page?: number; limit?: number; search?: string }) {
@@ -792,9 +636,7 @@ export class AdminService {
   }
 
   async createServiceCategory(dto: any, actorId?: string) {
-    const slug =
-      dto.slug?.trim() ||
-      dto.name.trim().toLowerCase().replace(/\s+/g, '-') + '-' + Date.now().toString(36);
+    const slug = dto.slug?.trim() || dto.name.trim().toLowerCase().replace(/\s+/g, '-') + '-' + Date.now().toString(36);
     const created = await this.prisma.serviceCategory.create({
       data: {
         name: dto.name.trim(),
@@ -836,16 +678,11 @@ export class AdminService {
   }
 
   async listCatalogServices() {
-    return this.prisma.service.findMany({
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { category: true },
-    });
+    return this.prisma.service.findMany({ include: { category: true }, orderBy: { name: 'asc' } });
   }
 
   async createCatalogService(dto: any, actorId?: string) {
-    const slug =
-      dto.slug?.trim() ||
-      dto.name.trim().toLowerCase().replace(/\s+/g, '-') + '-' + Date.now().toString(36);
+    const slug = dto.slug?.trim() || dto.name.trim().toLowerCase().replace(/\s+/g, '-') + '-' + Date.now().toString(36);
     const created = await this.prisma.service.create({
       data: {
         name: dto.name.trim(),
@@ -887,7 +724,7 @@ export class AdminService {
   }
 
   async listServiceCategoryRequests(_status?: string) {
-    return { items: [] };
+    return [];
   }
 
   async reviewServiceCategoryRequest(
@@ -896,15 +733,11 @@ export class AdminService {
     status: string,
     actorId?: string,
   ) {
-    await this.audit(
-      actorId,
-      'catalog.category_request.review',
-      'professional_service',
-      professionalServiceId,
-      null,
-      { categoryId, status },
-    );
-    return { success: true, professionalServiceId, categoryId, status };
+    await this.audit(actorId, 'catalog.request.review', 'professional_service', professionalServiceId, null, {
+      categoryId,
+      status,
+    });
+    return { professionalServiceId, categoryId, status };
   }
 
   async assignServiceFilterCategory(serviceId: string, categoryId: string, actorId?: string) {
