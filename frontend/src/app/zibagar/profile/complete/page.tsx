@@ -253,7 +253,6 @@ export default function ProfileCompletePage() {
     }
   }
 
-  /** BUG2 fix: persist specialty to DB immediately on toggle so refresh keeps selection */
   async function toggleRootCategory(id: string) {
     const next = selectedRootIds.includes(id)
       ? selectedRootIds.filter((x) => x !== id)
@@ -449,16 +448,80 @@ export default function ProfileCompletePage() {
           <div className="space-y-2">
             <p className="text-sm font-medium">موقعیت روی نقشه (اختیاری)</p>
             <LocationMapPicker
-              latitude={locLat}
-              longitude={locLng}
-              onChange={(pos: MapPosition) => {
-                setLocLat(pos.lat);
-                setLocLng(pos.lng);
-                setMapSelected(true);
-              }}
+              position={locLat != null && locLng != null ? { lat: locLat, lng: locLng } : null}
+              onPositionChange={(pos: MapPosition) => { setLocLat(pos.lat); setLocLng(pos.lng); setMapSelected(true); }}
+              height="280px"
             />
           </div>
         </Card>
+      )}
+      {step === 4 && (
+        <Card className="space-y-4">
+          <h2 className="font-semibold text-[#0B2C4A]">تخصص خودت را انتخاب کن</h2>
+          {!rootCategories.length ? (
+            <p className="text-sm text-gray">در حال بارگذاری تخصص‌ها…</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {featuredRootCategories.map((c) => {
+                const on = selectedRootIds.includes(c.id);
+                return (
+                  <button key={c.id} type="button" onClick={() => void toggleRootCategory(c.id)}
+                    className={`rounded-full border px-3 py-1.5 text-sm ${on ? 'border-coral bg-coral text-white' : 'border-border bg-white'}`}>
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده</p>
+        </Card>
+      )}
+      {step === 5 && (
+        <Card className="space-y-4">
+          <h2 className="font-semibold">ساعات کاری</h2>
+          <div className="flex flex-wrap gap-2">
+            {WEEK_DAYS.map((d) => (
+              <button key={d.value} type="button" onClick={() => toggleHourDay(d.value)}
+                className={`rounded-full border px-3 py-1.5 text-sm ${hourDays.includes(d.value) ? 'border-coral bg-coral text-white' : 'border-border'}`}>
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block space-y-1 text-sm">از ساعت
+              <Input type="time" value={hourStart} onChange={(e) => setHourStart(e.target.value)} dir="ltr" /></label>
+            <label className="block space-y-1 text-sm">تا ساعت
+              <Input type="time" value={hourEnd} onChange={(e) => setHourEnd(e.target.value)} dir="ltr" /></label>
+          </div>
+        </Card>
+      )}
+      {step === 6 && (
+        <Card className="space-y-4">
+          <h2 className="font-semibold">بررسی نهایی</h2>
+          <p className="text-sm text-gray">پیشرفت: {percent}٪ {isPublished ? '· منتشر شده' : ''}</p>
+          {!completion?.complete && <p className="text-sm text-coral">برخی موارد هنوز کامل نیست؛ می‌توانید بعداً تکمیل کنید.</p>}
+          <Button onClick={() => setConfirmPublish(true)} disabled={publishing}>انتشار پروفایل</Button>
+        </Card>
+      )}
+
+      <div className="flex items-center justify-between gap-2 pt-2">
+        <Button variant="outline" size="sm" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>قبلی</Button>
+        <div className="flex gap-2">
+          <Link href="/zibagar"><Button variant="outline" size="sm">خروج</Button></Link>
+          {step < STEPS.length - 1 && <Button size="sm" loading={saving} onClick={onNext}>بعدی</Button>}
+        </div>
+      </div>
+      {confirmPublish && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <Card className="max-w-md space-y-4">
+            <h3 className="text-lg font-bold">تأیید انتشار</h3>
+            <p className="text-sm text-gray">پروفایل شما آماده انتشار است.</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setConfirmPublish(false)}>انصراف</Button>
+              <Button size="sm" loading={publishing} onClick={onPublish}>تأیید و انتشار</Button>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
