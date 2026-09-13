@@ -56,14 +56,14 @@ export default function ZibagarDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">پنل زیباگر</h1>
-        <p className="mt-1 text-sm text-gray">{title}</p>
+      <div className="overflow-hidden rounded-2xl bg-coral px-5 py-6 text-white shadow-sm sm:rounded-3xl sm:px-6">
+        <h1 className="text-xl font-bold sm:text-2xl">پنل زیباگر</h1>
+        <p className="mt-1 text-sm text-white/85">{title}</p>
       </div>
 
       {published ? (
         <Card className="space-y-3">
-          <h2 className="font-semibold text-[#0B2C4A]">پروفایل منتشر شده</h2>
+          <h2 className="font-semibold text-blue">پروفایل منتشر شده</h2>
           <div className="flex flex-wrap gap-2">
             {slug && (
               <Link href={`/professionals/${slug}`}>
@@ -77,7 +77,7 @@ export default function ZibagarDashboard() {
         </Card>
       ) : complete || percent >= 100 ? (
         <Card className="space-y-3">
-          <h2 className="font-semibold text-[#0B2C4A]">آماده انتشار</h2>
+          <h2 className="font-semibold text-blue">آماده انتشار</h2>
           <div className="flex flex-wrap gap-2">
             <Link href="/zibagar/profile/preview">
               <Button variant="secondary" size="sm">پیش‌نمایش</Button>
