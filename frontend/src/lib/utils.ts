@@ -78,7 +78,8 @@ export function priceToWords(amount: number): string {
 
 /**
  * Canonical site-wide Jalali (Solar Hijri) date formatter.
- * Uses fa-IR calendar so year/month/day are always شمسی across the product.
+ * Uses fa-IR calendar so year/month/day are always شمسی.
+ * Time is always 24-hour (e.g. ۱۳:۰۰ not ۱ PM).
  */
 export function formatDate(
   iso?: string | Date | null,
@@ -93,10 +94,12 @@ export function formatDate(
       year: 'numeric',
       month: style === 'short' ? 'short' : 'long',
       day: 'numeric',
+      hourCycle: 'h23',
     };
     if (opts?.includeTime) {
       options.hour = '2-digit';
       options.minute = '2-digit';
+      options.hour12 = false;
     }
     return new Intl.DateTimeFormat('fa-IR', options).format(d);
   } catch {
@@ -104,7 +107,24 @@ export function formatDate(
   }
 }
 
-/** Shortcut: Jalali date + time. */
+/** Shortcut: Jalali date + 24h time. */
 export function formatDateTime(iso?: string | Date | null): string {
   return formatDate(iso, { style: 'short', includeTime: true });
+}
+
+/** Format time only in 24h (e.g. ۱۳:۳۰). */
+export function formatTime24(iso?: string | Date | null): string {
+  if (iso == null || iso === '') return '—';
+  try {
+    const d = typeof iso === 'string' || typeof iso === 'number' ? new Date(iso) : iso;
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return new Intl.DateTimeFormat('fa-IR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      hourCycle: 'h23',
+    }).format(d);
+  } catch {
+    return String(iso);
+  }
 }
