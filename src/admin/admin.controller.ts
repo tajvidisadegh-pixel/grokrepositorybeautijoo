@@ -37,13 +37,14 @@ import {
   IsString,
   IsBoolean,
   IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
 } from 'class-validator';
 
 class StatusDto {
   @ApiProperty({ enum: ProfessionalStatus })
   @IsEnum(ProfessionalStatus)
   status: ProfessionalStatus;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -54,7 +55,6 @@ class UserStatusDto {
   @ApiProperty({ enum: UserStatus })
   @IsEnum(UserStatus)
   status: UserStatus;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -71,7 +71,6 @@ class BookingStatusDto {
   @ApiProperty({ enum: BookingStatus })
   @IsEnum(BookingStatus)
   status: BookingStatus;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -82,7 +81,6 @@ class ReviewVisibilityDto {
   @ApiProperty()
   @IsBoolean()
   isPublished: boolean;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -105,18 +103,60 @@ class BroadcastNotificationDto {
   @ApiProperty()
   @IsString()
   title: string;
-
   @ApiProperty()
   @IsString()
   body: string;
-
   @ApiProperty({ enum: ['all', 'professionals', 'customers'] })
   @IsString()
   target: 'all' | 'professionals' | 'customers';
 }
 
+class NotifyUsersDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  userIds: string[];
+  @ApiProperty()
+  @IsString()
+  title: string;
+  @ApiProperty()
+  @IsString()
+  body: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sms?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  campaignId?: string;
+}
+
+class NotifyByFilterDto {
+  @ApiProperty()
+  @IsString()
+  title: string;
+  @ApiProperty()
+  @IsString()
+  body: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sms?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  filters?: Record<string, unknown>;
+}
+
 class UpdateCommissionRateDto {
-  @ApiProperty({ description: 'نرخ جدید کارمزد پلتفرم (بین ۰ تا ۱۰۰)', example: 10.0 })
+  @ApiProperty({ example: 10.0 })
   @IsNumber()
   @Min(0)
   @Max(100)
@@ -124,7 +164,7 @@ class UpdateCommissionRateDto {
 }
 
 class UpdateFailedThresholdDto {
-  @ApiProperty({ description: 'آستانه تعداد تراکنش‌های ناموفق در یک ساعت اخیر جهت فعال شدن هشدار', example: 3 })
+  @ApiProperty({ example: 3 })
   @IsNumber()
   @Min(1)
   @Max(1000)
@@ -135,43 +175,137 @@ class FinancialQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   page?: string;
-
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   limit?: string;
-
   @ApiPropertyOptional({ enum: PaymentStatus })
   @IsOptional()
   @IsEnum(PaymentStatus)
   status?: PaymentStatus;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   provider?: string;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   search?: string;
-
-  @ApiPropertyOptional({ description: 'YYYY-MM-DD' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   startDate?: string;
-
-  @ApiPropertyOptional({ description: 'YYYY-MM-DD' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   endDate?: string;
-
   @ApiPropertyOptional({ enum: ['createdAt', 'paidAt', 'amount'] })
   @IsOptional()
   sortBy?: 'createdAt' | 'paidAt' | 'amount';
-
   @ApiPropertyOptional({ enum: ['asc', 'desc'] })
   @IsOptional()
   sortOrder?: 'asc' | 'desc';
+}
+
+class CatalogCategoryDto {
+  @ApiProperty()
+  @IsString()
+  name: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  parentId?: string | null;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  slug?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+class CatalogCategoryPatchDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  parentId?: string | null;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  slug?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  description?: string | null;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+class CatalogServiceDto {
+  @ApiProperty()
+  @IsString()
+  name: string;
+  @ApiProperty()
+  @IsString()
+  categoryId: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  slug?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+class CatalogServicePatchDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  slug?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  description?: string | null;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 @ApiTags('admin')
@@ -182,13 +316,11 @@ export class AdminController {
   constructor(private readonly service: AdminService) {}
 
   @Get('stats')
-  @ApiOperation({ summary: 'آمار کلی پلتفرم' })
   stats() {
     return this.service.stats();
   }
 
   @Get('dashboard')
-  @ApiOperation({ summary: 'داشبورد کامل Super Admin' })
   dashboard() {
     return this.service.dashboard();
   }
@@ -239,6 +371,7 @@ export class AdminController {
   }
 
   @Get('users')
+  @ApiOperation({ summary: 'Customer list with advanced filters' })
   listUsers(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -260,7 +393,7 @@ export class AdminController {
       search,
       status,
       role,
-      accountType,
+      accountType: accountType || 'customer',
       city,
       bookingPresence,
       bookingStatus,
@@ -446,6 +579,48 @@ export class AdminController {
     return this.service.broadcastNotification(dto, actorId);
   }
 
+  @Post('notifications/notify')
+  notifyUsers(@Body() dto: NotifyUsersDto, @CurrentUser('id') actorId?: string) {
+    return this.service.notifyUsers(dto, actorId);
+  }
+
+  @Post('notifications/notify-by-filter')
+  notifyByFilter(@Body() dto: NotifyByFilterDto, @CurrentUser('id') actorId?: string) {
+    return this.service.notifyByFilter(dto, actorId);
+  }
+
+  @Get('notifications/campaigns')
+  listCampaigns(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.service.listNotificationCampaigns({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+    });
+  }
+
+  @Get('notifications/campaigns/:campaignId')
+  campaignRecipients(
+    @Param('campaignId') campaignId: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.getCampaignRecipients(campaignId, {
+      status,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+    });
+  }
+
+  @Post('notifications/campaigns/:campaignId/retry-failed')
+  retryFailed(@Param('campaignId') campaignId: string, @CurrentUser('id') actorId?: string) {
+    return this.service.retryFailedCampaign(campaignId, actorId);
+  }
+
   @Get('settings')
   getSettings() {
     return this.service.getPlatformSettings();
@@ -484,5 +659,84 @@ export class AdminController {
   @Get('permissions')
   listPermissions() {
     return this.service.listPermissions();
+  }
+
+  // ---- Catalog (#55) ----
+  @Get('service-categories')
+  @ApiOperation({ summary: 'List all service categories (admin)' })
+  listServiceCategories() {
+    return this.service.listServiceCategories();
+  }
+
+  @Post('service-categories')
+  createServiceCategory(@Body() dto: CatalogCategoryDto, @CurrentUser('id') actorId?: string) {
+    return this.service.createServiceCategory(dto, actorId);
+  }
+
+  @Patch('service-categories/:id')
+  updateServiceCategory(
+    @Param('id') id: string,
+    @Body() dto: CatalogCategoryPatchDto,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.updateServiceCategory(id, dto, actorId);
+  }
+
+  @Delete('service-categories/:id')
+  deleteServiceCategory(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    return this.service.deleteServiceCategory(id, actorId);
+  }
+
+  @Get('catalog-services')
+  listCatalogServices() {
+    return this.service.listCatalogServices();
+  }
+
+  @Post('catalog-services')
+  createCatalogService(@Body() dto: CatalogServiceDto, @CurrentUser('id') actorId?: string) {
+    return this.service.createCatalogService(dto, actorId);
+  }
+
+  @Patch('catalog-services/:id')
+  updateCatalogService(
+    @Param('id') id: string,
+    @Body() dto: CatalogServicePatchDto,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.updateCatalogService(id, dto, actorId);
+  }
+
+  @Delete('catalog-services/:id')
+  deleteCatalogService(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    return this.service.deleteCatalogService(id, actorId);
+  }
+
+  @Get('service-category-requests')
+  listServiceCategoryRequests(@Query('status') status?: string) {
+    return this.service.listServiceCategoryRequests(status);
+  }
+
+  @Patch('service-category-requests/:professionalServiceId/:categoryId')
+  reviewServiceCategoryRequest(
+    @Param('professionalServiceId') professionalServiceId: string,
+    @Param('categoryId') categoryId: string,
+    @Body() dto: { status: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.reviewServiceCategoryRequest(
+      professionalServiceId,
+      categoryId,
+      dto.status,
+      actorId,
+    );
+  }
+
+  @Post('services/:serviceId/filter-categories')
+  assignFilterCategory(
+    @Param('serviceId') serviceId: string,
+    @Body() dto: { categoryId: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.assignServiceFilterCategory(serviceId, dto.categoryId, actorId);
   }
 }
