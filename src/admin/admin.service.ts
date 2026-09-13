@@ -688,7 +688,7 @@ export class AdminService {
   }
 
   async assignServiceFilterCategory(serviceId: string, categoryId: string, actorId?: string) {
-    const service = await this.prisma.service.findUnique({ where: { id: serviceId });
+    const service = await this.prisma.service.findUnique({ where: { id: serviceId } });
     if (!service) throw new NotFoundException('Service not found');
     const updated = await this.prisma.service.update({ where: { id: serviceId }, data: { categoryId } });
     await this.audit(actorId, 'catalog.service.assign_category', 'service', serviceId, service, updated);
