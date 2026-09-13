@@ -12,8 +12,7 @@ const ITEMS = [
   { href: '/admin/bookings', label: 'رزروها' },
   { href: '/admin/reviews', label: 'نظرات و امتیازها', disabled: true },
   { href: '/admin/media', label: 'رسانه‌ها', disabled: true },
-  { href: '/admin/content', label: 'محتوا', disabled: true },
-  { href: '/admin/site-builder', label: 'طراحی سایت', disabled: true },
+  { href: '/admin/site-builder', label: 'طراحی سایت' },
   { href: '/admin/settings', label: 'تنظیمات', disabled: true },
   { href: '/admin/audit', label: 'لاگ فعالیت‌ها' },
 ];
