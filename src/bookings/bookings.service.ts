@@ -14,10 +14,8 @@ import { tehranDateStr, tehranHHMM } from '../common/timezone';
 export type ProBookingListQuery = {
   page?: number;
   limit?: number;
-  /** free-text: customer phone or display name */
   q?: string;
   status?: string;
-  /** ISO date YYYY-MM-DD (Tehran calendar day filter on startAt) */
   from?: string;
   to?: string;
   serviceId?: string;
@@ -168,7 +166,8 @@ export class BookingsService {
     };
     const want = normalizeHhmm(startHHMM);
     const slotOk = avail.slots.some(
-      (s: { start: string; end: string }) => normalizeHhmm(s.start) === want,
+      (s: { start: string; end: string; available?: boolean }) =>
+        normalizeHhmm(s.start) === want && s.available !== false,
     );
     if (!slotOk) {
       throw new ConflictException('این بازه زمانی در دسترس نیست');
@@ -216,7 +215,6 @@ export class BookingsService {
             throw new ConflictException('این بازه زمانی در دسترس نیست');
           }
 
-          // Default: registered as confirmed — no pro approval required (#52)
           const b = await tx.booking.create({
             data: {
               customerId,
@@ -351,8 +349,7 @@ export class BookingsService {
       if (query.to) {
         const d = new Date(query.to);
         if (!isNaN(d.getTime())) {
-          // inclusive end-of-day if date-only
-          if (/^\d{4}-\d{2}-\d{2}$/.test(query.to.trim())) {
+          if (/^\\d{4}-\\d{2}-\\d{2}$/.test(query.to.trim())) {
             d.setHours(23, 59, 59, 999);
           }
           (where.startAt as Prisma.DateTimeFilter).lte = d;
@@ -438,7 +435,6 @@ export class BookingsService {
 
     if (action === 'confirm' || action === 'reject') {
       if (!isAdmin && !isPro) throw new ForbiddenException();
-      // Allow reject from confirmed as well (pro can still decline after auto-confirm)
       const allowedForReject: BookingStatus[] = [
         BookingStatus.pending,
         BookingStatus.confirmed,
@@ -518,7 +514,6 @@ export class BookingsService {
 
     if (action === 'complete') {
       if (!isAdmin && !isPro) throw new ForbiddenException();
-      // Allow complete from confirmed, pending, or expired (auto-confirm era)
       const allowedForComplete: BookingStatus[] = [
         BookingStatus.confirmed,
         BookingStatus.pending,
@@ -535,7 +530,7 @@ export class BookingsService {
         userId: b.customerId,
         type: NotificationType.booking_completed,
         title: 'رزرو تکمیل شد',
-        body: 'رزرو شما به‌عنوان تکمیل‌شده ثبت شد.',
+        body: 'رزرو شما تکمیل شد. می‌توانید نظر بدهید.',
         data: { bookingId: id },
         sms: false,
       });
@@ -545,81 +540,37 @@ export class BookingsService {
     throw new BadRequestException('عملیات نامعتبر');
   }
 
-  /**
-   * Professional reports a problem on a booking → in-app notification to all SUPER_ADMIN
-   * (+ audit log). No separate Ticket table required.
-   */
-  async reportToAdmin(
-    bookingId: string,
-    userId: string,
-    roles: string[],
-    message: string,
-  ) {
-    const text = (message || '').trim();
-    if (text.length < 5) {
-      throw new BadRequestException('متن گزارش حداقل ۵ کاراکتر باشد');
-    }
-    if (text.length > 2000) {
-      throw new BadRequestException('متن گزارش بیش از حد طولانی است');
-    }
-
-    const b = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        customer: { select: { phone: true, profile: { select: { displayName: true } } } },
-        professional: { select: { id: true, userId: true, title: true } },
-      },
-    });
+  async reportIssue(id: string, userId: string, message: string) {
+    const b = await this.prisma.booking.findUnique({ where: { id } });
     if (!b) throw new NotFoundException();
-
-    const isAdmin = roles.some((r) => ['admin', 'SUPER_ADMIN'].includes(r));
-    const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    const isPro = pro && b.professionalId === pro.id;
-    if (!isAdmin && !isPro) throw new ForbiddenException();
-
+    if (b.customerId !== userId && b.professionalId !== userId) {
+      const pro = await this.prisma.professional.findUnique({ where: { userId } });
+      if (!pro || pro.id !== b.professionalId) throw new ForbiddenException();
+    }
     await this.prisma.auditLog.create({
       data: {
         actorId: userId,
-        action: 'booking.report_to_admin',
+        action: 'booking.report_issue',
         entityType: 'booking',
-        entityId: bookingId,
-        after: {
-          message: text,
-          customerPhone: b.customer?.phone ?? null,
-          professionalId: b.professionalId,
-        } as Prisma.InputJsonValue,
+        entityId: id,
+        after: { message } as Prisma.InputJsonValue,
       },
     });
-
     const admins = await this.prisma.user.findMany({
-      where: {
-        status: 'active',
-        userRoles: { some: { role: { name: { in: ['SUPER_ADMIN', 'admin'] } } } },
-      },
+      where: { userRoles: { some: { role: { name: 'SUPER_ADMIN' } } } },
       select: { id: true },
-      take: 50,
+      take: 20,
     });
-
-    const title = 'گزارش مشکل رزرو از زیباگر';
-    const body = `رزرو ${bookingId.slice(0, 8)}… — ${text}`;
-    await Promise.all(
-      admins.map((a) =>
-        this.notifications.notify({
-          userId: a.id,
-          type: NotificationType.system,
-          title,
-          body,
-          data: {
-            bookingId,
-            professionalId: b.professionalId,
-            reporterId: userId,
-            message: text,
-          },
-          sms: false,
-        }),
-      ),
-    );
-
+    for (const a of admins) {
+      await this.notifications.notify({
+        userId: a.id,
+        type: NotificationType.system,
+        title: 'گزارش مشکل رزرو',
+        body: message.slice(0, 200),
+        data: { bookingId: id },
+        sms: false,
+      });
+    }
     return { message: 'گزارش برای سوپرادمین ارسال شد', notified: admins.length };
   }
 }
