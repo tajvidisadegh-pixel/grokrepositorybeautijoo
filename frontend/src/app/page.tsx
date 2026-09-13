@@ -16,12 +16,20 @@ export const metadata: Metadata = {
     'بیوتی‌جو — رزرو آنلاین نوبت زیبایی، آسان و سریع. زیباگر مناسب خود را پیدا کنید.',
 };
 
-/** ISR fallback; on-demand via revalidateTag('site-cms') after publish */
 export const revalidate = 60;
 
 const CATEGORY_ICONS = [Scissors, Sparkles, Hand, Eye, Smile, Heart, Scissors, Sparkles];
 
-const DEFAULT_CONTENT: PublishedSiteConfig['content'] = {
+type HeroCfg = NonNullable<PublishedSiteConfig['content']['hero']> & {
+  layout?: 'image-background' | 'image-side' | 'gradient-only';
+  overlayOpacity?: number;
+  minHeight?: number;
+  textAlign?: 'center' | 'right' | 'left';
+  textColor?: 'auto' | 'light' | 'dark';
+  searchPlaceholder?: string;
+};
+
+const DEFAULT_CONTENT: PublishedSiteConfig['content'] & { hero?: HeroCfg } = {
   hero: {
     enabled: true,
     title: 'بیوتی‌جو، رزرو آنلاین نوبت',
@@ -32,6 +40,12 @@ const DEFAULT_CONTENT: PublishedSiteConfig['content'] = {
     badge: 'بیوتی‌جو · رزرو آنلاین نوبت',
     desktopImageUrl: null,
     mobileImageUrl: null,
+    layout: 'image-background',
+    overlayOpacity: 40,
+    minHeight: 420,
+    textAlign: 'center',
+    textColor: 'auto',
+    searchPlaceholder: 'جستجوی خدمت یا زیباگر...',
   },
   texts: {
     categoriesTitle: 'دسته‌بندی‌های محبوب',
@@ -91,7 +105,7 @@ export default async function HomePage() {
     loadError = true;
   }
 
-  const hero = content.hero || DEFAULT_CONTENT.hero!;
+  const hero = (content.hero || DEFAULT_CONTENT.hero!) as HeroCfg;
   const texts = content.texts || DEFAULT_CONTENT.texts!;
   const features = content.features || DEFAULT_CONTENT.features!;
 
@@ -102,48 +116,142 @@ export default async function HomePage() {
   };
 
   const ordered = sections.filter((s) => s.enabled !== false).map((s) => s.id);
+  const hasBanner = Boolean(hero.desktopImageUrl || hero.mobileImageUrl);
+  const layout = hero.layout || (hasBanner ? 'image-background' : 'gradient-only');
+  const overlayPct = Math.min(90, Math.max(0, Number(hero.overlayOpacity ?? (hasBanner ? 40 : 0))));
+  const minH = Math.min(800, Math.max(280, Number(hero.minHeight ?? 420)));
+  const align =
+    hero.textAlign === 'right'
+      ? 'text-right items-end'
+      : hero.textAlign === 'left'
+        ? 'text-left items-start'
+        : 'text-center items-center';
+  const forceLight =
+    hero.textColor === 'light' ||
+    (hero.textColor !== 'dark' && hasBanner && layout === 'image-background');
+  const titleCls = forceLight ? 'text-white' : 'text-blue';
+  const subCls = forceLight ? 'text-white/95' : 'text-foreground';
+  const descCls = forceLight ? 'text-white/85' : 'text-gray';
+  const badgeCls = forceLight ? 'text-coral-soft' : 'text-coral';
 
   function renderSection(id: string) {
     switch (id) {
-      case 'hero':
+      case 'hero': {
         if (!sectionEnabled('hero') || hero.enabled === false) return null;
+
+        if (layout === 'image-side' && hasBanner) {
+          return (
+            <section key="hero" className="bg-white">
+              <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 py-10 md:grid-cols-2 md:gap-10 md:py-14">
+                <div className={`flex flex-col ${align}`}>
+                  {hero.badge ? (
+                    <p className="mb-3 text-xs font-semibold tracking-wide text-coral sm:text-sm">
+                      {hero.badge}
+                    </p>
+                  ) : null}
+                  <h1 className="text-2xl font-bold leading-snug text-blue sm:text-3xl md:text-4xl">
+                    {hero.title}
+                    {hero.subtitle ? (
+                      <span className="mt-1 block text-foreground">{hero.subtitle}</span>
+                    ) : null}
+                  </h1>
+                  {hero.description ? (
+                    <p className="mt-3 text-sm leading-7 text-gray sm:text-base">{hero.description}</p>
+                  ) : null}
+                  {features.showSearchInHero !== false && (
+                    <form
+                      action={hero.ctaLink || '/search'}
+                      method="get"
+                      className="mt-6 flex w-full max-w-md flex-col gap-2.5 sm:flex-row"
+                    >
+                      <div className="relative flex-1">
+                        <Search className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-gray-muted" />
+                        <input
+                          name="q"
+                          type="search"
+                          placeholder={hero.searchPlaceholder || 'جستجوی خدمت یا زیباگر...'}
+                          className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="h-12 shrink-0 rounded-2xl bg-coral px-8 text-sm font-medium text-white hover:bg-coral-dark"
+                      >
+                        {hero.ctaText || 'جستجو'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+                <div className="relative overflow-hidden rounded-3xl shadow-md">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={(hero.desktopImageUrl || hero.mobileImageUrl)!}
+                    alt=""
+                    className="hidden h-full min-h-[280px] w-full object-cover md:block"
+                    style={{ maxHeight: minH }}
+                  />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={(hero.mobileImageUrl || hero.desktopImageUrl)!}
+                    alt=""
+                    className="h-full min-h-[220px] w-full object-cover md:hidden"
+                    style={{ maxHeight: minH }}
+                  />
+                </div>
+              </div>
+            </section>
+          );
+        }
+
         return (
           <section
             key="hero"
-            className="relative overflow-hidden bg-gradient-to-b from-blue-soft via-white to-coral-soft/30"
+            className="relative overflow-hidden"
+            style={{ minHeight: hasBanner && layout === 'image-background' ? minH : undefined }}
           >
-            {hero.desktopImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={hero.desktopImageUrl}
-                alt=""
-                className="pointer-events-none absolute inset-0 hidden h-full w-full object-cover opacity-20 md:block"
-              />
-            ) : null}
-            {hero.mobileImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={hero.mobileImageUrl}
-                alt=""
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20 md:hidden"
-              />
-            ) : null}
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-blue/5 to-transparent" />
-            <div className="relative mx-auto max-w-6xl px-4 py-12 sm:py-16 md:py-20">
-              <div className="mx-auto max-w-2xl text-center">
+            {hasBanner && layout === 'image-background' ? (
+              <>
+                {hero.desktopImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={hero.desktopImageUrl}
+                    alt=""
+                    className="absolute inset-0 hidden h-full w-full object-cover md:block"
+                  />
+                ) : null}
+                {hero.mobileImageUrl || hero.desktopImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={(hero.mobileImageUrl || hero.desktopImageUrl)!}
+                    alt=""
+                    className={`absolute inset-0 h-full w-full object-cover ${hero.desktopImageUrl ? 'md:hidden' : ''}`}
+                  />
+                ) : null}
+                <div
+                  className="absolute inset-0 bg-black"
+                  style={{ opacity: overlayPct / 100 }}
+                  aria-hidden
+                />
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-b from-blue-soft via-white to-coral-soft/30" />
+            )}
+
+            <div className="relative mx-auto flex max-w-6xl flex-col justify-center px-4 py-12 sm:py-16 md:py-20">
+              <div className={`mx-auto flex w-full max-w-2xl flex-col ${align}`}>
                 {hero.badge ? (
-                  <p className="mb-3 text-xs font-semibold tracking-wide text-coral sm:text-sm">
+                  <p className={`mb-3 text-xs font-semibold tracking-wide sm:text-sm ${badgeCls}`}>
                     {hero.badge}
                   </p>
                 ) : null}
-                <h1 className="text-2xl font-bold leading-snug text-blue sm:text-3xl sm:leading-tight md:text-4xl lg:text-5xl">
+                <h1
+                  className={`text-2xl font-bold leading-snug sm:text-3xl sm:leading-tight md:text-4xl lg:text-5xl ${titleCls}`}
+                >
                   {hero.title}
-                  {hero.subtitle ? (
-                    <span className="block text-foreground">{hero.subtitle}</span>
-                  ) : null}
+                  {hero.subtitle ? <span className={`block ${subCls}`}>{hero.subtitle}</span> : null}
                 </h1>
                 {hero.description ? (
-                  <p className="mt-3 text-sm leading-7 text-gray sm:mt-4 sm:text-base md:text-lg">
+                  <p className={`mt-3 text-sm leading-7 sm:mt-4 sm:text-base md:text-lg ${descCls}`}>
                     {hero.description}
                   </p>
                 ) : null}
@@ -151,15 +259,17 @@ export default async function HomePage() {
                   <form
                     action={hero.ctaLink || '/search'}
                     method="get"
-                    className="mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3"
+                    className={`mt-6 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3 ${
+                      hero.textAlign === 'center' ? 'mx-auto max-w-xl' : 'max-w-xl'
+                    }`}
                   >
                     <div className="relative flex-1">
                       <Search className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-gray-muted" />
                       <input
                         name="q"
                         type="search"
-                        placeholder="جستجوی خدمت یا زیباگر..."
-                        className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none transition-colors placeholder:text-gray-muted focus:border-coral focus:ring-2 focus:ring-coral/20"
+                        placeholder={hero.searchPlaceholder || 'جستجوی خدمت یا زیباگر...'}
+                        className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
                       />
                     </div>
                     <button
@@ -174,6 +284,7 @@ export default async function HomePage() {
             </div>
           </section>
         );
+      }
       case 'categories':
         if (features.showCategories === false || !sectionEnabled('categories')) return null;
         if (categories.length === 0) return null;
@@ -183,10 +294,7 @@ export default async function HomePage() {
               <h2 className="text-lg font-bold text-foreground sm:text-xl">
                 {texts.categoriesTitle || 'دسته‌بندی‌های محبوب'}
               </h2>
-              <Link
-                href="/services"
-                className="text-sm font-medium text-coral transition-colors hover:text-coral-dark"
-              >
+              <Link href="/services" className="text-sm font-medium text-coral transition-colors hover:text-coral-dark">
                 {texts.categoriesLinkText || 'همه خدمات'}
               </Link>
             </div>
@@ -202,9 +310,7 @@ export default async function HomePage() {
                     <span className="flex size-11 items-center justify-center rounded-xl bg-coral-soft text-coral sm:size-12">
                       <Icon className="size-5 sm:size-6" strokeWidth={1.75} />
                     </span>
-                    <span className="block text-xs font-medium text-foreground sm:text-sm line-clamp-1">
-                      {c.name}
-                    </span>
+                    <span className="block text-xs font-medium text-foreground sm:text-sm line-clamp-1">{c.name}</span>
                   </Link>
                 );
               })}
@@ -219,10 +325,7 @@ export default async function HomePage() {
               <h2 className="text-lg font-bold text-foreground sm:text-xl">
                 {texts.featuredTitle || 'زیباگرهای برتر هفته'}
               </h2>
-              <Link
-                href="/professionals"
-                className="text-sm font-medium text-coral transition-colors hover:text-coral-dark"
-              >
+              <Link href="/professionals" className="text-sm font-medium text-coral transition-colors hover:text-coral-dark">
                 {texts.featuredLinkText || 'مشاهده همه'}
               </Link>
             </div>
@@ -235,10 +338,7 @@ export default async function HomePage() {
               <p className="text-center text-sm text-gray">هنوز زیباگر تأییدشده‌ای ثبت نشده است.</p>
             )}
             {featured && featured.items.length > 0 && (
-              <div
-                className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory scroll-smooth sm:gap-4 [scrollbar-width:thin]"
-                dir="rtl"
-              >
+              <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory scroll-smooth sm:gap-4 [scrollbar-width:thin]" dir="rtl">
                 {featured.items.map((pro) => (
                   <div key={pro.id} className="w-[min(280px,78vw)] shrink-0 snap-start sm:w-[300px]">
                     <ProfessionalCard pro={pro} />
@@ -253,24 +353,15 @@ export default async function HomePage() {
         return (
           <section key="cta" className="bg-blue">
             <div className="mx-auto max-w-6xl px-4 py-12 text-center sm:py-14">
-              <h2 className="text-xl font-bold text-white sm:text-2xl">
-                {texts.ctaTitle || 'آماده رزرو هستید؟'}
-              </h2>
+              <h2 className="text-xl font-bold text-white sm:text-2xl">{texts.ctaTitle || 'آماده رزرو هستید؟'}</h2>
               <p className="mt-2 text-sm text-white/80 sm:text-base">
-                {texts.ctaDescription ||
-                  'زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.'}
+                {texts.ctaDescription || 'زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.'}
               </p>
               <div className="mt-6 flex flex-col items-stretch justify-center gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                <Link
-                  href={texts.ctaPrimaryLink || '/search'}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-coral px-6 text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark"
-                >
+                <Link href={texts.ctaPrimaryLink || '/search'} className="inline-flex h-11 items-center justify-center rounded-2xl bg-coral px-6 text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark">
                   {texts.ctaPrimaryText || 'شروع جستجو'}
                 </Link>
-                <Link
-                  href={texts.ctaSecondaryLink || '/register'}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/30 bg-transparent px-6 text-sm font-medium text-white transition-colors hover:bg-white/10"
-                >
+                <Link href={texts.ctaSecondaryLink || '/register'} className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/30 bg-transparent px-6 text-sm font-medium text-white transition-colors hover:bg-white/10">
                   {texts.ctaSecondaryText || 'ثبت‌نام رایگان'}
                 </Link>
               </div>
@@ -282,8 +373,6 @@ export default async function HomePage() {
     }
   }
 
-  const ids =
-    ordered.length > 0 ? ordered : (['hero', 'categories', 'featured', 'cta'] as const);
-
+  const ids = ordered.length > 0 ? ordered : (['hero', 'categories', 'featured', 'cta'] as const);
   return <div>{ids.map((id) => renderSection(id))}</div>;
 }
