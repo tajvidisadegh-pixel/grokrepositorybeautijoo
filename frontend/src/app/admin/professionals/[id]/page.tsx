@@ -12,11 +12,11 @@ import {
   adminSetMediaStatus,
   adminUpdateProfessional,
   type AdminProfessionalDetail,
+  resolveMediaUrl,
 } from '@/lib/panel-api';
 import { persianProfessionalStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatDate } from '@/lib/utils';
-import { resolveMediaUrl } from '@/lib/panel-api';
 
 function money(n?: number | null) {
   if (n == null) return '—';
@@ -31,13 +31,19 @@ export default function AdminProfessionalDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setError(null);
     try {
-      setData(await fetchAdminProfessionalDetail(id));
+      const d = await fetchAdminProfessionalDetail(id);
+      setData(d);
+      setEditTitle(d.title || '');
+      setEditBio(d.bio || '');
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -88,6 +94,21 @@ export default function AdminProfessionalDetailPage() {
     }
   }
 
+  async function saveProfile() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminUpdateProfessional(id, { title: editTitle.trim(), bio: editBio });
+      setMsg('پروفایل زیباگر به‌روز شد');
+      setEditing(false);
+      await load();
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <PanelLoading />;
   if (error && !data) return <PanelError message={error} onRetry={load} />;
   if (!data) return <PanelError message="یافت نشد" onRetry={load} />;
@@ -124,9 +145,30 @@ export default function AdminProfessionalDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="space-y-2 p-4">
-          <h2 className="font-semibold">پروفایل</h2>
-          <p>عنوان: {data.title || '—'}</p>
-          <p>بیو: {data.bio || '—'}</p>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">پروفایل</h2>
+            <button type="button" className="text-xs underline" onClick={() => setEditing((v) => !v)}>
+              {editing ? 'انصراف' : 'ویرایش'}
+            </button>
+          </div>
+          {editing ? (
+            <div className="space-y-2">
+              <div>
+                <label className="mb-1 block text-xs text-gray">عنوان</label>
+                <input className="w-full rounded-lg border px-3 py-2 text-sm" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray">بیو</label>
+                <textarea className="w-full rounded-lg border px-3 py-2 text-sm" rows={3} value={editBio} onChange={(e) => setEditBio(e.target.value)} />
+              </div>
+              <button type="button" className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white" disabled={busy} onClick={saveProfile}>ذخیره</button>
+            </div>
+          ) : (
+            <>
+              <p>عنوان: {data.title || '—'}</p>
+              <p>بیو: {data.bio || '—'}</p>
+            </>
+          )}
           <p>شهر: {data.city || data.locations?.[0]?.location?.city || '—'}</p>
           <p>ثبت‌نام: {data.createdAt ? formatDate(data.createdAt) : '—'}</p>
         </Card>
