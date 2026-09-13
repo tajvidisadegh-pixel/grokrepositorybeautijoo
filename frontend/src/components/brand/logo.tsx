@@ -11,28 +11,15 @@ type LogoProps = {
   href?: string | null;
 };
 
-/** Coral ribbon-style B mark inspired by Beautijoo mockups */
-export function LogoMark({ className = 'size-8 text-sm' }: { className?: string }) {
+/** Full-coral rounded mark with white stylized B (Beautijoo mockups) */
+export function LogoMark({ className = 'size-8' }: { className?: string }) {
   return (
     <span className={`logo-mark ${className}`} aria-hidden>
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Stylized B with soft ribbon curves */}
         <path
-          d="M10 6.5h7.2c3.35 0 5.55 1.7 5.55 4.35 0 1.85-1 3.2-2.65 3.9 2.05.75 3.25 2.25 3.25 4.45 0 3-2.4 4.8-6.1 4.8H10V6.5z"
+          d="M11 7h7.4c3.55 0 5.85 1.85 5.85 4.55 0 1.7-.85 3.05-2.35 3.8 1.95.8 3.15 2.35 3.15 4.55 0 3.15-2.55 5.1-6.45 5.1H11V7zm3.2 2.65v4.35h3.95c1.6 0 2.5-.8 2.5-2.15 0-1.4-.95-2.2-2.55-2.2H14.2zm0 6.9v5.15h4.35c1.8 0 2.85-.9 2.85-2.5 0-1.55-1.05-2.65-2.9-2.65H14.2z"
           fill="white"
-          fillOpacity="0.95"
         />
-        <path
-          d="M13.15 9.15v4.55h3.85c1.55 0 2.45-.75 2.45-2.25s-.9-2.3-2.5-2.3h-3.8zm0 7.1v5.1h4.2c1.75 0 2.75-.85 2.75-2.5s-1-2.6-2.8-2.6h-4.15z"
-          fill="url(#coralB)"
-        />
-        <defs>
-          <linearGradient id="coralB" x1="10" y1="6" x2="24" y2="26" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#ff9a9d" />
-            <stop offset="0.45" stopColor="#fc7074" />
-            <stop offset="1" stopColor="#e85a5f" />
-          </linearGradient>
-        </defs>
       </svg>
     </span>
   );
