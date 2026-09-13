@@ -223,7 +223,7 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     const uniqueNames = Array.from(new Set((roles || []).map((r) => String(r).trim()).filter(Boolean)));
     if (uniqueNames.length === 0) throw new BadRequestException('At least one role required');
-    const roleRows = await this.prisma.role.findMany({ where: { name: { in: uniqueNames } });
+    const roleRows = await this.prisma.role.findMany({ where: { name: { in: uniqueNames } } });
     await this.prisma.userRole.deleteMany({ where: { userId: id } });
     if (roleRows.length) {
       await this.prisma.userRole.createMany({
@@ -750,16 +750,12 @@ export class AdminService {
     );
   }
 
-  async listNotificationCampaigns(q: { page?: number; limit?: number; search?: string }) {
-    const page = Math.max(1, Number(q.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
-    return { items: [], meta: { page, limit, total: 0, totalPages: 0 } };
+  async listNotificationCampaigns(_q: { page?: number; limit?: number; search?: string }) {
+    return { items: [], meta: { page: 1, limit: 20, total: 0, totalPages: 0 } };
   }
 
   async getCampaignRecipients(campaignId: string, opts?: { status?: string; page?: number; limit?: number }) {
-    const page = Math.max(1, Number(opts?.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(opts?.limit) || 50));
-    return { campaignId, items: [], meta: { page, limit, total: 0, totalPages: 0 } };
+    return { campaignId, items: [], meta: { page: 1, limit: 50, total: 0, totalPages: 0 } };
   }
 
   async retryFailedCampaign(campaignId: string, actorId?: string) {
