@@ -100,36 +100,39 @@ export default async function ProfessionalProfilePage({ params }: Props) {
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <header className="flex flex-col gap-4 rounded-3xl border border-border bg-white p-6 shadow-sm sm:flex-row sm:items-start">
-            <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-soft text-2xl font-bold text-coral">
-              {avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatar} alt={name} className="size-full object-cover" />
-              ) : (
-                name.charAt(0)
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-2xl font-bold">{name}</h1>
-              {pro.title && pro.title !== name && (
-                <p className="mt-1 text-gray">{pro.title}</p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-3 text-sm text-gray">
-                {rating && (pro.ratingCount ?? 0) > 0 && (
-                  <span>
-                    ★ {rating} ({pro.ratingCount} نظر)
-                  </span>
+          <header className="flex flex-col gap-4 overflow-hidden rounded-3xl border border-border/90 bg-white shadow-[0_1px_3px_rgba(31,41,55,0.05)] sm:flex-row sm:items-start">
+            <div className="flex w-full items-center gap-4 bg-gradient-to-l from-coral-soft/80 to-white p-6 sm:flex-1">
+              <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-soft text-2xl font-bold text-coral ring-2 ring-coral/20 sm:size-24">
+                {avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatar} alt={name} className="size-full object-cover" />
+                ) : (
+                  name.charAt(0)
                 )}
-                {pro.locations?.[0]?.location?.city && (
-                  <span>{pro.locations[0].location.city}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-xl font-bold text-blue sm:text-2xl">{name}</h1>
+                {pro.title && pro.title !== name && (
+                  <p className="mt-1 text-sm text-gray">{pro.title}</p>
                 )}
+                <div className="mt-3 flex flex-wrap gap-3 text-sm text-gray">
+                  {rating && (pro.ratingCount ?? 0) > 0 && (
+                    <span className="text-amber-500">
+                      ★ {rating}{' '}
+                      <span className="text-gray">({pro.ratingCount} نظر)</span>
+                    </span>
+                  )}
+                  {pro.locations?.[0]?.location?.city && (
+                    <span>{pro.locations[0].location.city}</span>
+                  )}
+                </div>
               </div>
             </div>
           </header>
 
           {pro.bio && (
-            <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-bold">درباره زیباگر</h2>
+            <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-foreground">درباره زیباگر</h2>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-gray">
                 {pro.bio}
               </p>
@@ -141,8 +144,8 @@ export default async function ProfessionalProfilePage({ params }: Props) {
             services={(pro.professionalServices || []) as ProfessionalServiceItem[]}
           />
 
-          <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold">خدمات و قیمت</h2>
+          <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-bold text-foreground">خدمات و قیمت</h2>
             {(!pro.professionalServices ||
               pro.professionalServices.length === 0) && (
               <p className="mt-3 text-sm text-gray">خدمتی ثبت نشده است.</p>
@@ -159,8 +162,8 @@ export default async function ProfessionalProfilePage({ params }: Props) {
           </section>
 
           {pro.reviews && pro.reviews.length > 0 && (
-            <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-bold">نظرات</h2>
+            <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-foreground">نظرات</h2>
               <ul className="mt-4 space-y-4">
                 {pro.reviews.map((r) => (
                   <li key={r.id} className="rounded-2xl bg-gray-light/60 p-4">
@@ -168,7 +171,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                       <span className="font-medium">
                         {r.customer?.profile?.displayName || 'کاربر'}
                       </span>
-                      <span className="text-coral">★ {r.rating}</span>
+                      <span className="text-amber-500">★ {r.rating}</span>
                     </div>
                     {r.comment && (
                       <p className="mt-2 text-sm text-gray">{r.comment}</p>
@@ -180,26 +183,26 @@ export default async function ProfessionalProfilePage({ params }: Props) {
           )}
         </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
-            <h2 className="font-bold">رزرو نوبت</h2>
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
+            <h2 className="font-bold text-foreground">رزرو نوبت</h2>
             <p className="mt-2 text-sm text-gray">
               برای انتخاب زمان و ثبت نوبت وارد جریان رزرو شوید.
             </p>
             <Link
               href={`/booking/${pro.slug}`}
-              className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl bg-coral text-sm font-medium text-white hover:bg-[#e85a4c]"
+              className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl bg-coral text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark"
             >
               رزرو نوبت
             </Link>
-            <p className="mt-2 text-xs text-gray">
+            <p className="mt-2 text-xs text-gray-muted">
               انتخاب خدمت، تاریخ و ساعت آزاد از سرور
             </p>
           </div>
 
           {pro.locations && pro.locations.length > 0 && (
-            <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
-              <h2 className="font-bold">مکان‌ها</h2>
+            <div className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
+              <h2 className="font-bold text-foreground">مکان‌ها</h2>
               <ul className="mt-3 space-y-3 text-sm">
                 {pro.locations.map((pl) => (
                   <li key={pl.location.id}>
@@ -208,10 +211,10 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                       {pl.location.city}
                       {pl.location.province ? `، ${pl.location.province}` : ''}
                     </p>
-                    <p className="text-xs text-gray">{pl.location.address}</p>
+                    <p className="text-xs text-gray-muted">{pl.location.address}</p>
                     <Link
                       href={`/locations/${encodeURIComponent(pl.location.city)}`}
-                      className="mt-1 inline-block text-xs text-coral hover:underline"
+                      className="mt-1 inline-block text-xs text-coral hover:text-coral-dark"
                     >
                       زیباگران در {pl.location.city}
                     </Link>
@@ -224,8 +227,8 @@ export default async function ProfessionalProfilePage({ params }: Props) {
       </div>
 
       {pro.workingHours && pro.workingHours.length > 0 && (
-        <section className="mt-8 rounded-3xl border border-border bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold">ساعات کاری هفتگی</h2>
+        <section className="mt-8 rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-foreground">ساعات کاری هفتگی</h2>
           <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {pro.workingHours.map((wh) => (
               <li

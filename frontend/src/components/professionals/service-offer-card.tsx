@@ -91,19 +91,19 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
       : formatPrice(finalPrice);
 
   return (
-    <li className="rounded-2xl border border-gray-200 bg-white p-4">
+    <li className="rounded-2xl border border-border/90 bg-white p-4 shadow-[0_1px_2px_rgba(31,41,55,0.04)] transition-colors hover:border-coral/25">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-medium text-gray-900">{ps.service.name}</p>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <p className="font-medium text-foreground">{ps.service.name}</p>
+          <p className="mt-0.5 text-xs text-gray">
             {finalDuration ? `${finalDuration} دقیقه` : ''}
           </p>
         </div>
-        <p className="font-semibold tabular-nums text-[#0B2C4A]">{displayPriceLabel}</p>
+        <p className="font-semibold tabular-nums text-blue">{displayPriceLabel}</p>
       </div>
 
       {priceRules.length > 0 && (
-        <ul className="mt-3 space-y-1 border-r border-gray-200 pr-2.5">
+        <ul className="mt-3 space-y-1 border-r border-border pr-2.5">
           {priceRules.map((r) => {
             const on = priceRuleId === r.id;
             const dur =
@@ -114,13 +114,13 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
                   type="button"
                   onClick={() => selectPriceRule(r.id)}
                   className={`flex w-full items-center justify-between py-1.5 text-right text-sm ${
-                    on ? 'font-medium text-gray-900' : 'text-gray-600'
+                    on ? 'font-medium text-coral' : 'text-gray'
                   }`}
                 >
                   <span>
                     {on ? '● ' : '○ '}
                     {r.label}
-                    {dur ? <span className="mr-1 text-xs text-gray-400">· {dur}د</span> : null}
+                    {dur ? <span className="mr-1 text-xs text-gray-muted">· {dur}د</span> : null}
                   </span>
                   <span className="tabular-nums">{formatPrice(r.price)}</span>
                 </button>
@@ -155,12 +155,12 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
       )}
 
       {addOns.length > 0 && (
-        <div className="mt-3 border-t border-gray-100 pt-2">
+        <div className="mt-3 border-t border-border/80 pt-2">
           {!showAddOns ? (
             <button
               type="button"
               onClick={() => setShowAddOns(true)}
-              className="text-xs font-medium text-[#0B2C4A]"
+              className="text-xs font-medium text-coral hover:text-coral-dark"
             >
               ＋ گزینه‌های اضافی
             </button>
@@ -173,20 +173,20 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
                     <button
                       type="button"
                       onClick={() => toggle(a.id)}
-                      className="flex w-full items-center justify-between py-1.5 text-right text-sm text-gray-700"
+                      className="flex w-full items-center justify-between py-1.5 text-right text-sm text-foreground"
                     >
                       <span>
                         {on ? '☑ ' : '☐ '}
                         {a.name}
                       </span>
-                      <span className="tabular-nums">{formatPrice(a.price)}</span>
+                      <span className="tabular-nums text-gray">{formatPrice(a.price)}</span>
                     </button>
                   </li>
                 );
               })}
               <div className="flex justify-between pt-1 text-sm">
-                <span className="text-gray-500">جمع</span>
-                <span className="font-semibold tabular-nums text-[#0B2C4A]">
+                <span className="text-gray">جمع</span>
+                <span className="font-semibold tabular-nums text-blue">
                   {formatPrice(finalPrice)}
                 </span>
               </div>
@@ -198,7 +198,7 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
       {bookHref && (
         <Link
           href={bookHref}
-          className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-[#0B2C4A] text-sm font-medium text-white"
+          className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-coral text-sm font-medium text-white transition-colors hover:bg-coral-dark"
         >
           رزرو
         </Link>
