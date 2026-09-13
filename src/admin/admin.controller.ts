@@ -52,9 +52,9 @@ class StatusDto {
 }
 
 class UserStatusDto {
-  @ApiProperty({ enum: UserStatus })
-  @IsEnum(UserStatus)
-  status: UserStatus;
+  @ApiProperty({ description: 'active | inactive | suspended | deleted (blocked maps to suspended)' })
+  @IsString()
+  status: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -419,6 +419,33 @@ export class AdminController {
     return this.service.setUserRoles(id, dto.roles, actorId);
   }
 
+  @Post('users')
+  @ApiOperation({ summary: 'Create customer' })
+  createCustomer(
+    @Body() dto: { phone: string; displayName?: string; firstName?: string; lastName?: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.createCustomer(dto, actorId);
+  }
+
+  @Patch('users/:id/profile')
+  updateUserProfile(
+    @Param('id') id: string,
+    @Body() dto: { displayName?: string; firstName?: string; lastName?: string; phone?: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.updateUserProfile(id, dto, actorId);
+  }
+
+  @Delete('users/:id')
+  softDeleteUser(
+    @Param('id') id: string,
+    @Body() dto: { reason?: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.softDeleteUser(id, actorId, dto?.reason);
+  }
+
   @Get('professionals')
   listPros(
     @Query('page') page?: string,
@@ -439,6 +466,15 @@ export class AdminController {
   @Get('professionals/:id')
   getProDetail(@Param('id') id: string) {
     return this.service.getProfessionalDetail(id);
+  }
+
+  @Patch('professionals/:id/profile')
+  updateProProfile(
+    @Param('id') id: string,
+    @Body() dto: { title?: string; bio?: string; isFeatured?: boolean },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.updateProfessional(id, dto, actorId);
   }
 
   @Patch('professionals/:id/status')
@@ -661,7 +697,6 @@ export class AdminController {
     return this.service.listPermissions();
   }
 
-  // ---- Catalog (#55) ----
   @Get('service-categories')
   @ApiOperation({ summary: 'List all service categories (admin)' })
   listServiceCategories() {
