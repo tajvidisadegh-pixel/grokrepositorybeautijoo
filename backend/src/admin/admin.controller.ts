@@ -52,7 +52,7 @@ class StatusDto {
 }
 
 class UserStatusDto {
-  @ApiProperty({ description: 'active | inactive | suspended | deleted (blocked maps to suspended)' })
+  @ApiProperty()
   @IsString()
   status: string;
   @ApiPropertyOptional()
@@ -156,7 +156,7 @@ class NotifyByFilterDto {
 }
 
 class UpdateCommissionRateDto {
-  @ApiProperty({ example: 10.0 })
+  @ApiProperty()
   @IsNumber()
   @Min(0)
   @Max(100)
@@ -164,7 +164,7 @@ class UpdateCommissionRateDto {
 }
 
 class UpdateFailedThresholdDto {
-  @ApiProperty({ example: 3 })
+  @ApiProperty()
   @IsNumber()
   @Min(1)
   @Max(1000)
@@ -172,10 +172,10 @@ class UpdateFailedThresholdDto {
 }
 
 class FinancialQueryDto {
-  @ApiPropertyOptional({ default: 1 })
+  @ApiPropertyOptional()
   @IsOptional()
   page?: string;
-  @ApiPropertyOptional({ default: 20 })
+  @ApiPropertyOptional()
   @IsOptional()
   limit?: string;
   @ApiPropertyOptional({ enum: PaymentStatus })
@@ -198,10 +198,10 @@ class FinancialQueryDto {
   @IsOptional()
   @IsString()
   endDate?: string;
-  @ApiPropertyOptional({ enum: ['createdAt', 'paidAt', 'amount'] })
+  @ApiPropertyOptional()
   @IsOptional()
   sortBy?: 'createdAt' | 'paidAt' | 'amount';
-  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
+  @ApiPropertyOptional()
   @IsOptional()
   sortOrder?: 'asc' | 'desc';
 }
@@ -371,7 +371,6 @@ export class AdminController {
   }
 
   @Get('users')
-  @ApiOperation({ summary: 'Customer list with advanced filters' })
   listUsers(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -405,7 +404,6 @@ export class AdminController {
   }
 
   @Get('customers/stats')
-  @ApiOperation({ summary: 'Customer dashboard stats cards' })
   customersStats() {
     return this.service.getCustomersStats();
   }
@@ -426,7 +424,6 @@ export class AdminController {
   }
 
   @Post('users')
-  @ApiOperation({ summary: 'Create customer' })
   createCustomer(
     @Body() dto: { phone: string; displayName?: string; firstName?: string; lastName?: string },
     @CurrentUser('id') actorId?: string,
@@ -444,7 +441,6 @@ export class AdminController {
   }
 
   @Delete('users/:id')
-  @ApiOperation({ summary: 'Hard-delete customer' })
   hardDeleteUser(
     @Param('id') id: string,
     @Body() dto: { reason?: string },
@@ -454,7 +450,6 @@ export class AdminController {
   }
 
   @Post('users/bulk-delete')
-  @ApiOperation({ summary: 'Hard-delete multiple customers' })
   bulkHardDeleteUsers(
     @Body() dto: { userIds: string[]; reason?: string },
     @CurrentUser('id') actorId?: string,
@@ -503,6 +498,12 @@ export class AdminController {
     return this.service.setProfessionalFeatured(id, dto.isFeatured, actorId);
   }
 
+  @Get('bookings-stats')
+  @ApiOperation({ summary: 'Booking KPI cards' })
+  bookingsStats() {
+    return this.service.getBookingsStats();
+  }
+
   @Get('bookings')
   listBookings(
     @Query('page') page?: string,
@@ -511,6 +512,7 @@ export class AdminController {
     @Query('status') status?: BookingStatus,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('paymentStatus') paymentStatus?: PaymentStatus,
   ) {
     return this.service.listBookings({
       page: page ? parseInt(page, 10) : 1,
@@ -519,6 +521,7 @@ export class AdminController {
       status,
       startDate,
       endDate,
+      paymentStatus,
     });
   }
 
