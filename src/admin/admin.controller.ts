@@ -404,6 +404,12 @@ export class AdminController {
     });
   }
 
+  @Get('customers/stats')
+  @ApiOperation({ summary: 'Customer dashboard stats cards' })
+  customersStats() {
+    return this.service.getCustomersStats();
+  }
+
   @Get('users/:id')
   getUserDetail(@Param('id') id: string) {
     return this.service.getUserDetail(id);
@@ -438,12 +444,22 @@ export class AdminController {
   }
 
   @Delete('users/:id')
-  softDeleteUser(
+  @ApiOperation({ summary: 'Hard-delete customer' })
+  hardDeleteUser(
     @Param('id') id: string,
     @Body() dto: { reason?: string },
     @CurrentUser('id') actorId?: string,
   ) {
-    return this.service.softDeleteUser(id, actorId, dto?.reason);
+    return this.service.hardDeleteUser(id, actorId, dto?.reason);
+  }
+
+  @Post('users/bulk-delete')
+  @ApiOperation({ summary: 'Hard-delete multiple customers' })
+  bulkHardDeleteUsers(
+    @Body() dto: { userIds: string[]; reason?: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.bulkHardDeleteUsers(dto.userIds || [], actorId, dto.reason);
   }
 
   @Get('professionals')
@@ -698,7 +714,6 @@ export class AdminController {
   }
 
   @Get('service-categories')
-  @ApiOperation({ summary: 'List all service categories (admin)' })
   listServiceCategories() {
     return this.service.listServiceCategories();
   }
@@ -758,12 +773,7 @@ export class AdminController {
     @Body() dto: { status: string },
     @CurrentUser('id') actorId?: string,
   ) {
-    return this.service.reviewServiceCategoryRequest(
-      professionalServiceId,
-      categoryId,
-      dto.status,
-      actorId,
-    );
+    return this.service.reviewServiceCategoryRequest(professionalServiceId, categoryId, dto.status, actorId);
   }
 
   @Post('services/:serviceId/filter-categories')
