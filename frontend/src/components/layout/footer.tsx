@@ -2,62 +2,63 @@ import Link from 'next/link';
 
 export function Footer() {
   return (
-    <footer className="mt-auto border-t border-border bg-gray-light">
+    <footer className="mt-auto bg-blue text-white">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-3 sm:py-12">
         <div className="sm:col-span-1">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-coral to-coral-dark text-sm font-bold text-white shadow-sm">
-              ب
-            </span>
-            <span className="font-bold text-foreground">Beautijoo</span>
+          <div className="mb-3 flex items-center gap-2.5">
+            <span className="logo-mark size-8 text-sm">B</span>
+            <div className="flex flex-col leading-none">
+              <span className="font-bold text-white">BEAUTIJOO</span>
+              <span className="text-xs font-medium text-coral-light">بیوتی‌جو</span>
+            </div>
           </div>
-          <p className="text-sm leading-7 text-gray">
-            پلتفرم رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای در سراسر ایران.
+          <p className="text-sm leading-7 text-white/75">
+            پلتفرم رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای — آسان، سریع و مطمئن.
           </p>
         </div>
         <div>
-          <h3 className="mb-3 text-sm font-bold text-foreground">دسترسی سریع</h3>
-          <ul className="space-y-2.5 text-sm text-gray">
+          <h3 className="mb-3 text-sm font-bold text-white">دسترسی سریع</h3>
+          <ul className="space-y-2.5 text-sm text-white/75">
             <li>
-              <Link href="/professionals" className="transition-colors hover:text-blue">
+              <Link href="/professionals" className="transition-colors hover:text-coral-light">
                 زیباگران
               </Link>
             </li>
             <li>
-              <Link href="/search" className="transition-colors hover:text-blue">
+              <Link href="/search" className="transition-colors hover:text-coral-light">
                 جستجو
               </Link>
             </li>
             <li>
-              <Link href="/services" className="transition-colors hover:text-blue">
+              <Link href="/services" className="transition-colors hover:text-coral-light">
                 خدمات
               </Link>
             </li>
           </ul>
         </div>
         <div>
-          <h3 className="mb-3 text-sm font-bold text-foreground">حساب کاربری</h3>
-          <ul className="space-y-2.5 text-sm text-gray">
+          <h3 className="mb-3 text-sm font-bold text-white">حساب کاربری</h3>
+          <ul className="space-y-2.5 text-sm text-white/75">
             <li>
-              <Link href="/login" className="transition-colors hover:text-blue">
+              <Link href="/login" className="transition-colors hover:text-coral-light">
                 ورود
               </Link>
             </li>
             <li>
-              <Link href="/register" className="transition-colors hover:text-blue">
+              <Link href="/register" className="transition-colors hover:text-coral-light">
                 ثبت‌نام
               </Link>
             </li>
             <li>
-              <Link href="/panel" className="transition-colors hover:text-blue">
+              <Link href="/panel" className="transition-colors hover:text-coral-light">
                 پنل مشتری
               </Link>
             </li>
           </ul>
         </div>
       </div>
-      <div className="border-t border-border/80 bg-white/60 py-4 text-center text-xs text-gray-muted">
-        © {new Date().getFullYear()} Beautijoo — همه حقوق محفوظ است
+      <div className="border-t border-white/10 bg-blue-dark/40 py-4 text-center text-xs text-white/60">
+        © {new Date().getFullYear()} Beautijoo — بیوتی‌جو · همه حقوق محفوظ است
       </div>
     </footer>
   );

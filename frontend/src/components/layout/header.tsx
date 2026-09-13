@@ -14,15 +14,16 @@ export function Header() {
     user?.profile?.displayName || user?.phone || 'کاربر';
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/80 bg-white/95 backdrop-blur-md shadow-[0_1px_0_0_rgba(11,110,153,0.04)]">
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-white/95 backdrop-blur-md shadow-[0_1px_0_0_rgba(55,73,137,0.06)]">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:h-16 sm:gap-4">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-coral to-coral-dark text-base font-bold text-white shadow-sm sm:size-9 sm:text-lg">
-            ب
-          </span>
-          <span className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-            Beautijoo
-          </span>
+        <Link href="/" className="flex items-center gap-2.5 shrink-0">
+          <span className="logo-mark size-8 text-sm sm:size-9 sm:text-base">B</span>
+          <div className="flex flex-col leading-none">
+            <span className="text-[15px] font-bold tracking-tight text-blue sm:text-base">
+              BEAUTIJOO
+            </span>
+            <span className="text-[11px] font-semibold text-coral sm:text-xs">بیوتی‌جو</span>
+          </div>
         </Link>
 
         <nav className="hidden items-center gap-1 text-sm font-medium text-gray md:flex">
@@ -60,7 +61,7 @@ export function Header() {
               {hasRole('SUPER_ADMIN') && (
                 <Link
                   href="/admin"
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-soft border border-blue/40 px-3 py-1.5 text-xs sm:text-sm font-bold text-blue hover:bg-blue hover:text-white transition-all shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-soft border border-blue/30 px-3 py-1.5 text-xs sm:text-sm font-bold text-blue hover:bg-blue hover:text-white transition-all shadow-sm"
                 >
                   <span>👑</span>
                   <span>پنل سوپر ادمین</span>
@@ -176,7 +177,7 @@ export function Header() {
                   <Link
                     href="/admin"
                     onClick={() => setOpen(false)}
-                    className="flex items-center gap-2 rounded-xl bg-blue-soft border border-blue/40 px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
+                    className="flex items-center gap-2 rounded-xl bg-blue-soft border border-blue/30 px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
                   >
                     <span>👑</span>
                     <span>پنل سوپر ادمین</span>

@@ -10,7 +10,7 @@ const variants: Record<Variant, string> = {
   secondary:
     'bg-blue text-white shadow-sm hover:bg-blue-dark disabled:bg-blue-light disabled:text-blue',
   outline:
-    'border border-border bg-white text-foreground hover:border-blue/30 hover:bg-blue-soft',
+    'border border-border bg-white text-foreground hover:border-coral/40 hover:bg-coral-soft',
   ghost: 'bg-transparent text-foreground hover:bg-gray-light',
   danger: 'bg-red-600 text-white hover:bg-red-700',
 };
@@ -44,7 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/30 disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex items-center justify-center gap-2 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral/35 disabled:cursor-not-allowed disabled:opacity-60',
         variants[variant],
         sizes[size],
         className,
