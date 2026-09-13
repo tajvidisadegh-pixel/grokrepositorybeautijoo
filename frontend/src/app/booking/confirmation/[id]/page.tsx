@@ -79,10 +79,7 @@ function ConfirmationBody() {
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">شروع</span>
-          <span dir="ltr">
-            {formatDate(booking.startAt)}{' '}
-            {new Date(booking.startAt).toISOString().slice(11, 16)} UTC
-          </span>
+          <span>{formatDate(booking.startAt, { style: 'long', includeTime: true })}</span>
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">مبلغ</span>
@@ -104,7 +101,7 @@ function ConfirmationBody() {
         )}
         {booking.payment && (
           <div className="flex justify-between gap-2 border-t border-border pt-3">
-            <span className="text-gray">وضعیت پرداخت (از سرور)</span>
+            <span className="text-gray">وضعیت پرداخت</span>
             <span>{booking.payment.status}</span>
           </div>
         )}

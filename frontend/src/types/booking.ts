@@ -1,6 +1,8 @@
 export type AvailabilitySlot = {
   start: string; // HH:MM
   end: string;
+  /** false = booked / blocked / break — shown but not selectable (#69) */
+  available?: boolean;
 };
 
 export type AvailabilityResponse = {
@@ -8,6 +10,7 @@ export type AvailabilityResponse = {
   professionalId: string;
   durationMin: number;
   slots: AvailabilitySlot[];
+  timezone?: string;
 };
 
 export type CreateBookingPayload = {
