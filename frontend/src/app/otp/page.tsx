@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { LogoMark } from '@/components/brand/logo';
 import type { AccountType } from '@/types/auth';
 
 function OtpForm() {
@@ -74,8 +75,8 @@ function OtpForm() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-12">
       <div className="text-center">
-        <div className="logo-mark mx-auto mb-4 size-14 text-lg">B</div>
-        <h1 className="text-xl font-bold text-blue sm:text-2xl">ورود با کد یک‌بارمصرف</h1>
+        <LogoMark className="mx-auto mb-4 size-14" />
+        <h1 className="text-xl font-bold text-coral sm:text-2xl">ورود با کد یک‌بارمصرف</h1>
         <p className="mt-2 text-sm text-gray">
           {step === 'phone'
             ? 'شماره موبایل و نوع حساب را انتخاب کنید'
