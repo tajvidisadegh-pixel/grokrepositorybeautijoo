@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Search } from 'lucide-react';
+import { Search, Scissors, Sparkles, Hand, Eye, Smile, Heart } from 'lucide-react';
 import type { Metadata } from 'next';
 import {
   listCategories,
@@ -11,8 +11,10 @@ import { siteName } from '@/lib/seo';
 export const metadata: Metadata = {
   title: { absolute: `${siteName()} | رزرو آنلاین خدمات زیبایی` },
   description:
-    'زیباگر مناسب خود را پیدا کنید — رزرو آنلاین آرایش، ناخن، پوست و خدمات زیبایی در سراسر ایران.',
+    'بیوتی‌جو — رزرو آنلاین نوبت زیبایی، آسان و سریع. زیباگر مناسب خود را پیدا کنید.',
 };
+
+const CATEGORY_ICONS = [Scissors, Sparkles, Hand, Eye, Smile, Heart, Scissors, Sparkles];
 
 export default async function HomePage() {
   let categories: Awaited<ReturnType<typeof listCategories>> = [];
@@ -32,18 +34,20 @@ export default async function HomePage() {
 
   return (
     <div>
-      <section className="relative overflow-hidden bg-gradient-to-b from-coral-soft via-white to-blue-soft/40">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-blue-soft/50 to-transparent" />
-        <div className="relative mx-auto max-w-6xl px-4 py-12 sm:py-16 md:py-24">
+      {/* Hero — matches mockup messaging */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-blue-soft via-white to-coral-soft/30">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-blue/5 to-transparent" />
+        <div className="relative mx-auto max-w-6xl px-4 py-12 sm:py-16 md:py-20">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="mb-3 text-xs font-medium tracking-wide text-blue sm:text-sm">
-              رزرو آنلاین زیبایی
+            <p className="mb-3 text-xs font-semibold tracking-wide text-coral sm:text-sm">
+              بیوتی‌جو · رزرو آنلاین نوبت
             </p>
-            <h1 className="text-2xl font-bold leading-snug text-foreground sm:text-3xl sm:leading-tight md:text-5xl">
-              زیباگر مناسب خود را پیدا کنید
+            <h1 className="text-2xl font-bold leading-snug text-blue sm:text-3xl sm:leading-tight md:text-4xl lg:text-5xl">
+              بیوتی‌جو، رزرو آنلاین نوبت
+              <span className="block text-foreground">آسان و سریع</span>
             </h1>
             <p className="mt-3 text-sm leading-7 text-gray sm:mt-4 sm:text-base md:text-lg">
-              رزرو آنلاین خدمات زیبایی — آرایش، ناخن، پوست و بیشتر، نزدیک شما
+              زیباگر مناسب خود را پیدا کنید — آرایش، ناخن، پوست و بیشتر، نزدیک شما
             </p>
             <form
               action="/search"
@@ -56,7 +60,7 @@ export default async function HomePage() {
                   name="q"
                   type="search"
                   placeholder="جستجوی خدمت یا زیباگر..."
-                  className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none transition-colors placeholder:text-gray-muted focus:border-blue focus:ring-2 focus:ring-blue/15"
+                  className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none transition-colors placeholder:text-gray-muted focus:border-coral focus:ring-2 focus:ring-coral/20"
                 />
               </div>
               <button
@@ -70,10 +74,11 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* Popular categories — icon style like mockup */}
       {categories.length > 0 && (
         <section className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
           <div className="mb-5 flex items-end justify-between gap-4 sm:mb-6">
-            <h2 className="text-lg font-bold text-foreground sm:text-xl">دسته‌بندی خدمات</h2>
+            <h2 className="text-lg font-bold text-foreground sm:text-xl">دسته‌بندی‌های محبوب</h2>
             <Link
               href="/services"
               className="text-sm font-medium text-coral transition-colors hover:text-coral-dark"
@@ -81,30 +86,32 @@ export default async function HomePage() {
               همه خدمات
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {categories.slice(0, 8).map((c) => (
-              <Link
-                key={c.id}
-                href={`/categories/${c.slug}`}
-                className="rounded-2xl border border-border/90 bg-white p-3.5 text-center shadow-[0_1px_2px_rgba(31,41,55,0.04)] transition-colors hover:border-blue/25 hover:bg-blue-soft/60 sm:p-4"
-              >
-                <span className="block text-sm font-medium text-foreground sm:text-base">
-                  {c.name}
-                </span>
-                {c.services && (
-                  <span className="mt-1 block text-xs text-gray-muted">
-                    {c.services.length} خدمت
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3 sm:grid-cols-4 md:grid-cols-6">
+            {categories.slice(0, 6).map((c, i) => {
+              const Icon = CATEGORY_ICONS[i % CATEGORY_ICONS.length];
+              return (
+                <Link
+                  key={c.id}
+                  href={`/categories/${c.slug}`}
+                  className="flex flex-col items-center gap-2 rounded-2xl border border-border/80 bg-white p-3 text-center shadow-[0_1px_2px_rgba(31,41,55,0.04)] transition-all hover:border-coral/30 hover:bg-coral-soft/50 sm:p-4"
+                >
+                  <span className="flex size-11 items-center justify-center rounded-xl bg-coral-soft text-coral sm:size-12">
+                    <Icon className="size-5 sm:size-6" strokeWidth={1.75} />
                   </span>
-                )}
-              </Link>
-            ))}
+                  <span className="block text-xs font-medium text-foreground sm:text-sm line-clamp-1">
+                    {c.name}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </section>
       )}
 
+      {/* Top professionals / salons of the week */}
       <section className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
         <div className="mb-5 flex items-end justify-between gap-4 sm:mb-6">
-          <h2 className="text-lg font-bold text-foreground sm:text-xl">زیباگران برتر</h2>
+          <h2 className="text-lg font-bold text-foreground sm:text-xl">سالن‌های برتر هفته</h2>
           <Link
             href="/professionals"
             className="text-sm font-medium text-coral transition-colors hover:text-coral-dark"
@@ -131,12 +138,13 @@ export default async function HomePage() {
         )}
       </section>
 
-      <section className="border-t border-border bg-gradient-to-b from-blue-soft/70 to-blue-light/50">
+      {/* Bottom CTA — navy band style */}
+      <section className="bg-blue">
         <div className="mx-auto max-w-6xl px-4 py-12 text-center sm:py-14">
-          <h2 className="text-xl font-bold text-foreground sm:text-2xl">
+          <h2 className="text-xl font-bold text-white sm:text-2xl">
             آماده رزرو هستید؟
           </h2>
-          <p className="mt-2 text-sm text-gray sm:text-base">
+          <p className="mt-2 text-sm text-white/80 sm:text-base">
             زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.
           </p>
           <div className="mt-6 flex flex-col items-stretch justify-center gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -148,7 +156,7 @@ export default async function HomePage() {
             </Link>
             <Link
               href="/register"
-              className="inline-flex h-11 items-center justify-center rounded-2xl border border-border bg-white px-6 text-sm font-medium text-foreground transition-colors hover:border-blue/25 hover:bg-blue-soft"
+              className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/30 bg-transparent px-6 text-sm font-medium text-white transition-colors hover:bg-white/10"
             >
               ثبت‌نام رایگان
             </Link>

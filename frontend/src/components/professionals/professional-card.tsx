@@ -21,7 +21,7 @@ export function ProfessionalCard({ pro, className }: Props) {
     <Link
       href={`/professionals/${pro.slug}`}
       className={cn(
-        'group flex flex-col overflow-hidden rounded-2xl border border-border/90 bg-white shadow-[0_1px_3px_rgba(31,41,55,0.04)] transition-colors hover:border-blue/25 hover:shadow-[0_2px_8px_rgba(11,110,153,0.08)] sm:rounded-3xl',
+        'group flex flex-col overflow-hidden rounded-2xl border border-border/90 bg-white shadow-[0_1px_3px_rgba(31,41,55,0.05)] transition-all hover:border-coral/25 hover:shadow-[0_4px_14px_rgba(252,112,116,0.12)] sm:rounded-3xl',
         className,
       )}
     >
@@ -44,7 +44,7 @@ export function ProfessionalCard({ pro, className }: Props) {
               {name}
             </h3>
             {pro.isFeatured && (
-              <span className="shrink-0 rounded-full bg-blue-light px-2 py-0.5 text-[11px] font-medium text-blue sm:text-xs">
+              <span className="shrink-0 rounded-full bg-coral-soft px-2 py-0.5 text-[11px] font-medium text-coral sm:text-xs">
                 ویژه
               </span>
             )}
@@ -54,7 +54,7 @@ export function ProfessionalCard({ pro, className }: Props) {
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-muted sm:mt-2">
             {rating && count > 0 && (
-              <span className="text-gray">
+              <span className="text-amber-500">
                 ★ {rating}{' '}
                 <span className="text-gray-muted">({count} نظر)</span>
               </span>
@@ -68,7 +68,7 @@ export function ProfessionalCard({ pro, className }: Props) {
           )}
         </div>
       </div>
-      <div className="mt-auto border-t border-border/80 bg-gray-light/40 px-4 py-2.5 sm:px-5 sm:py-3">
+      <div className="mt-auto border-t border-border/80 bg-coral-soft/40 px-4 py-2.5 sm:px-5 sm:py-3">
         <span className="text-sm font-medium text-coral transition-colors group-hover:text-coral-dark">
           مشاهده پروفایل و رزرو
         </span>
