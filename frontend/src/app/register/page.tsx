@@ -69,7 +69,8 @@ function RegisterForm() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-12">
       <div className="text-center">
-        <h1 className="text-2xl font-bold">ثبت‌نام در Beautijoo</h1>
+        <div className="logo-mark mx-auto mb-4 size-14 text-lg">B</div>
+        <h1 className="text-xl font-bold text-blue sm:text-2xl">ثبت‌نام در بیوتی‌جو</h1>
         <p className="mt-2 text-sm text-gray">ایجاد حساب کاربری</p>
       </div>
 
@@ -160,7 +161,7 @@ function RegisterForm() {
 
         <div className="mt-6 border-t border-border pt-4 text-center text-sm text-gray">
           قبلاً ثبت‌نام کرده‌اید؟{' '}
-          <Link href={`/login?as=${role}`} className="font-medium text-coral hover:underline">
+          <Link href={`/login?as=${role}`} className="font-medium text-coral hover:text-coral-dark">
             ورود
           </Link>
         </div>
