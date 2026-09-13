@@ -61,7 +61,6 @@ export default function ProfileCompletePage() {
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [coverImageUrl, setCoverImageUrl] = useState('');
-  const [logoUrl, setLogoUrl] = useState('');
   const [uploading, setUploading] = useState<string | null>(null);
   const [locName, setLocName] = useState('');
   const [locAddress, setLocAddress] = useState('');
@@ -69,7 +68,6 @@ export default function ProfileCompletePage() {
   const [locProvince, setLocProvince] = useState('');
   const [locLat, setLocLat] = useState<number | null>(null);
   const [locLng, setLocLng] = useState<number | null>(null);
-  const [citySearch, setCitySearch] = useState('');
   const [mapSelected, setMapSelected] = useState(false);
   const [cityOptions, setCityOptions] = useState<IranCity[]>([]);
   const [rootCategories, setRootCategories] = useState<CatalogCategory[]>([]);
@@ -102,7 +100,6 @@ export default function ProfileCompletePage() {
       setBio(data.bio || data.user?.profile?.bio || '');
       setAvatarUrl(resolveMediaUrl(data.user?.profile?.avatarUrl || ''));
       setCoverImageUrl(resolveMediaUrl(data.coverImageUrl || ''));
-      setLogoUrl(resolveMediaUrl((data as { logoUrl?: string }).logoUrl || ''));
       if (Array.isArray(data.selectedCategoryIds) && data.selectedCategoryIds.length) {
         setSelectedRootIds(data.selectedCategoryIds as string[]);
       }
@@ -364,25 +361,29 @@ export default function ProfileCompletePage() {
       {step === 2 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">تصاویر پروفایل</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             {([
-              { kind: 'avatar' as const, label: 'آواتار', url: avatarUrl },
+              { kind: 'avatar' as const, label: 'پروفایل', url: avatarUrl },
               { kind: 'cover' as const, label: 'کاور', url: coverImageUrl },
-              { kind: 'logo' as const, label: 'لوگو', url: logoUrl },
             ] as const).map(({ kind, label, url }) => (
               <div key={kind} className="flex flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
                 <div className="relative h-28 bg-gray-light">
                   {url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={url} alt={label} className="h-full w-full object-cover" />
+                    <img src={url} alt={label} className={`h-full w-full object-cover ${uploading === kind ? 'opacity-40' : ''}`} />
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs text-gray">بدون تصویر</div>
+                  )}
+                  {uploading === kind && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" aria-label="در حال آپلود" />
+                    </div>
                   )}
                 </div>
                 <div className="flex items-center justify-between px-3 pb-3">
                   <span className="text-sm font-medium">{label}</span>
-                  <label className="cursor-pointer rounded-lg bg-coral px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
-                    {uploading === kind ? '...' : url ? 'تعویض' : 'آپلود'}
+                  <label className={`cursor-pointer rounded-lg bg-coral px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
+                    {uploading === kind ? 'آپلود…' : url ? 'تعویض' : 'آپلود'}
                     <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" disabled={!!uploading}
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
@@ -392,7 +393,6 @@ export default function ProfileCompletePage() {
                           const asset = await uploadMyMedia(file, kind);
                           if (kind === 'avatar') setAvatarUrl(asset.publicUrl);
                           if (kind === 'cover') setCoverImageUrl(asset.publicUrl);
-                          if (kind === 'logo') setLogoUrl(asset.publicUrl);
                           setMsg('تصویر آپلود شد');
                         } catch (err) {
                           setError(friendlyApiError(err));
@@ -420,7 +420,7 @@ export default function ProfileCompletePage() {
                   const name = e.target.value;
                   setLocProvince(name);
                   setCityOptions(citiesOf(name));
-                  setLocCity(''); setCitySearch('');
+                  setLocCity('');
                   setLocLat(null); setLocLng(null); setMapSelected(false);
                 }}>
                 <option value="">انتخاب استان</option>
@@ -428,8 +428,6 @@ export default function ProfileCompletePage() {
               </select>
             </label>
             <label className="block space-y-1 text-sm">شهر *
-              <input type="text" className="mb-1 w-full rounded-xl border border-border p-2 text-sm" placeholder="جستجوی شهر…"
-                value={citySearch} disabled={!locProvince} onChange={(e) => setCitySearch(e.target.value)} />
               <select className="w-full rounded-xl border border-border p-3 text-sm" value={locCity} disabled={!locProvince}
                 onChange={(e) => {
                   const name = e.target.value;
@@ -438,161 +436,29 @@ export default function ProfileCompletePage() {
                   if (c) { setLocLat(c.lat); setLocLng(c.lng); setMapSelected(false); }
                 }}>
                 <option value="">انتخاب شهر</option>
-                {cityOptions.filter((c) => !citySearch.trim() || c.name.includes(citySearch.trim())).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                {cityOptions.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
               </select>
             </label>
           </div>
-          <label className="block space-y-1 text-sm">آدرس (اختیاری)
-            <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} /></label>
-          <label className="block space-y-1 text-sm">نام محل (اختیاری)
-            <Input value={locName} onChange={(e) => setLocName(e.target.value)} /></label>
-          {locCity && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">موقعیت روی نقشه</p>
-              <LocationMapPicker
-                position={locLat != null && locLng != null ? { lat: locLat, lng: locLng } : null}
-                onPositionChange={(pos: MapPosition) => { setLocLat(pos.lat); setLocLng(pos.lng); setMapSelected(true); }}
-                height="280px"
-              />
-            </div>
-          )}
-        </Card>
-      )}
-      {step === 4 && (
-        <Card className="space-y-4">
-          <h2 className="font-semibold text-[#0B2C4A]">تخصص خودت را انتخاب کن</h2>
-          {!rootCategories.length ? (
-            <p className="text-sm text-gray">در حال بارگذاری…</p>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {featuredRootCategories.map((c) => {
-                  const on = selectedRootIds.includes(c.id);
-                  return (
-                    <button key={c.id} type="button" onClick={() => toggleRootCategory(c.id)}
-                      className={`rounded-2xl border px-3 py-3.5 text-right text-sm font-medium transition ${
-                        on ? 'border-[#0B2C4A] bg-[#0B2C4A] text-white' : 'border-gray-200 bg-white text-gray-800 hover:border-[#0B2C4A]/40'
-                      }`}>{on ? '✓ ' : ''}{c.name}</button>
-                  );
-                })}
-                <button type="button" onClick={() => setSpecialtyMoreOpen((v) => !v)}
-                  className="rounded-2xl border border-dashed border-gray-200 px-3 py-3.5 text-sm font-medium text-gray-600">بیشتر…</button>
-              </div>
-              {specialtyMoreOpen && (
-                <div className="space-y-2">
-                  <Input value={specialtySearch} onChange={(e) => setSpecialtySearch(e.target.value)} placeholder="جستجوی تخصص…" autoFocus />
-                  {specialtySearch.trim() && (
-                    <ul className="max-h-52 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1">
-                      {specialtySearchResults.map((c) => {
-                        const on = selectedRootIds.includes(c.id);
-                        return (
-                          <li key={c.id}>
-                            <button type="button" onClick={() => toggleRootCategory(c.id)}
-                              className={`w-full rounded-xl px-3 py-2.5 text-right text-sm ${on ? 'bg-[#0B2C4A] text-white' : 'hover:bg-[#F3F6F9]'}`}>
-                              {on ? '✓ ' : ''}{c.name}
-                            </button>
-                          </li>
-                        );
-                      })}
-                      {!specialtySearchResults.some((c) => c.name === specialtySearch.trim()) && (
-                        <li>
-                          <button type="button" disabled={saving}
-                            onClick={async () => {
-                              setSaving(true); setError(null);
-                              try {
-                                const created = await createCategoryNode({ name: specialtySearch.trim() });
-                                setRootCategories((prev) => [...prev, created]);
-                                const nextIds = Array.from(new Set([...selectedRootIds, created.id]));
-                                setSelectedRootIds(nextIds);
-                                const data = await setMySelectedCategories(nextIds);
-                                setPro(data); setCompletion(data.completion || null);
-                                setSpecialtySearch('');
-                                setMsg(`تخصص «${created.name}» اضافه و ذخیره شد`);
-                              } catch (e) {
-                                setError(friendlyApiError(e));
-                              } finally {
-                                setSaving(false);
-                              }
-                            }}
-                            className="w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold text-[#0B2C4A] hover:bg-[#F3F6F9]">
-                            ＋ افزودن «{specialtySearch.trim()}»
-                          </button>
-                        </li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              )}
-              {selectedRootIds.length > 0 && (
-                <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده (ذخیره در سرور)</p>
-              )}
-            </>
-          )}
-        </Card>
-      )}
-      {step === 5 && (
-        <Card className="space-y-4">
-          <h2 className="font-semibold">ساعات کاری</h2>
-          <div className="flex flex-wrap gap-2">
-            {WEEK_DAYS.map((d) => (
-              <button key={d.value} type="button" onClick={() => toggleHourDay(d.value)}
-                className={`rounded-full px-3 py-1.5 text-sm border ${
-                  hourDays.includes(d.value) ? 'border-coral bg-coral text-white' : 'border-border bg-white text-gray'
-                }`}>{d.label}</button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1 text-sm">ساعت شروع
-              <Input type="time" value={hourStart} onChange={(e) => setHourStart(e.target.value)} /></label>
-            <label className="block space-y-1 text-sm">ساعت پایان
-              <Input type="time" value={hourEnd} onChange={(e) => setHourEnd(e.target.value)} /></label>
+          <label className="block space-y-1 text-sm">نام مکان (اختیاری)
+            <Input value={locName} onChange={(e) => setLocName(e.target.value)} placeholder="مثلاً سالن زیبایی" />
+          </label>
+          <label className="block space-y-1 text-sm">آدرس
+            <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} placeholder="آدرس کامل" />
+          </label>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">موقعیت روی نقشه (اختیاری)</p>
+            <LocationMapPicker
+              latitude={locLat}
+              longitude={locLng}
+              onChange={(pos: MapPosition) => {
+                setLocLat(pos.lat);
+                setLocLng(pos.lng);
+                setMapSelected(true);
+              }}
+            />
           </div>
         </Card>
-      )}
-      {step === 6 && (
-        <Card className="space-y-4">
-          <h2 className="font-semibold">بررسی نهایی</h2>
-          <CompletionBar percent={percent} />
-          {completion?.fields && (
-            <ul className="space-y-1 text-sm">
-              {completion.fields.map((f) => (
-                <li key={f.key} className="flex items-center justify-between rounded-xl bg-gray-light px-3 py-2">
-                  <span>{f.label}</span>
-                  <span className={f.done ? 'text-blue' : 'text-coral'}>{f.done ? '✓' : 'ناقص'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Link href="/zibagar/profile/preview"><Button variant="secondary" size="sm">مشاهده پیش‌نمایش</Button></Link>
-            {percent === 100 && !isPublished && (
-              <Button size="sm" onClick={() => setConfirmPublish(true)}>انتشار پروفایل</Button>
-            )}
-            {isPublished && pro?.slug && (
-              <Link href={`/professionals/${pro.slug}`}><Button size="sm">مشاهده صفحه عمومی</Button></Link>
-            )}
-          </div>
-        </Card>
-      )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button variant="outline" size="sm" disabled={step === 0 || saving}
-          onClick={() => { setError(null); setStep((s) => Math.max(0, s - 1)); }}>قبلی</Button>
-        <div className="flex gap-2">
-          <Link href="/zibagar"><Button variant="ghost" size="sm">ذخیره و خروج</Button></Link>
-          {step < STEPS.length - 1 && <Button size="sm" loading={saving} onClick={onNext}>بعدی</Button>}
-        </div>
-      </div>
-      {confirmPublish && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="max-w-md space-y-4">
-            <h3 className="text-lg font-bold">تأیید انتشار</h3>
-            <p className="text-sm text-gray">پروفایل شما آماده انتشار است.</p>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setConfirmPublish(false)}>انصراف</Button>
-              <Button size="sm" loading={publishing} onClick={onPublish}>تأیید و انتشار</Button>
-            </div>
-          </Card>
-        </div>
       )}
     </div>
   );
