@@ -139,14 +139,29 @@ export class AdminService {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const skip = (page - 1) * limit;
+    const where: Prisma.UserWhereInput = {};
+    if (q.status) {
+      const s = String(q.status);
+      if (s === 'blocked') where.status = UserStatus.suspended;
+      else where.status = s as UserStatus;
+    }
+    if (q.accountType) where.accountType = String(q.accountType) as any;
+    if (q.search) {
+      const s = String(q.search).trim();
+      where.OR = [
+        { phone: { contains: s } },
+        { profile: { displayName: { contains: s, mode: 'insensitive' } } },
+      ];
+    }
     const [items, total] = await Promise.all([
       this.prisma.user.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: { profile: true, userRoles: { include: { role: true } } },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ]);
     return {
       items: items.map((u) => ({
@@ -172,12 +187,14 @@ export class AdminService {
     return { ...user, roles: user.userRoles.map((ur) => ur.role.name), stats: {}, bookings: [], reviews: [], auditLogs: [] };
   }
 
-  async setUserStatus(id: string, status: UserStatus, actorId?: string, reason?: string) {
+  async setUserStatus(id: string, status: UserStatus | string, actorId?: string, reason?: string) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
-    const updated = await this.prisma.user.update({ where: { id }, data: { status } });
+    let next = status as UserStatus;
+    if (String(status) === 'blocked') next = UserStatus.suspended;
+    const updated = await this.prisma.user.update({ where: { id }, data: { status: next } });
     userAuthCache.invalidate(id);
-    await this.audit(actorId, 'user.status_change', 'user', id, { status: existing.status }, { status, reason });
+    await this.audit(actorId, 'user.status_change', 'user', id, { status: existing.status }, { status: next, reason });
     return updated;
   }
 
@@ -198,12 +215,110 @@ export class AdminService {
     return this.getUserDetail(id);
   }
 
+  async createCustomer(
+    dto: { phone: string; displayName?: string; firstName?: string; lastName?: string },
+    actorId?: string,
+  ) {
+    const phone = String(dto.phone || '').trim();
+    if (!phone || phone.length < 10) throw new BadRequestException('شماره موبایل معتبر نیست');
+    const existing = await this.prisma.user.findFirst({ where: { phone, accountType: 'customer' } });
+    if (existing) throw new BadRequestException('این شماره قبلاً به‌عنوان مشتری ثبت شده');
+    const displayName = (dto.displayName || dto.firstName || phone).trim().slice(0, 120);
+    const created = await this.prisma.user.create({
+      data: {
+        phone,
+        accountType: 'customer',
+        status: UserStatus.active,
+        phoneVerified: false,
+        profile: {
+          create: {
+            displayName,
+            firstName: dto.firstName?.trim() || null,
+            lastName: dto.lastName?.trim() || null,
+          },
+        },
+      },
+      include: { profile: true },
+    });
+    const role = await this.prisma.role.findFirst({ where: { name: 'CUSTOMER' } });
+    if (role) {
+      await this.prisma.userRole.create({
+        data: { userId: created.id, roleId: role.id, assignedBy: actorId ?? null },
+      });
+    }
+    userAuthCache.invalidate(created.id);
+    await this.audit(actorId, 'user.create', 'user', created.id, null, { phone, displayName });
+    return this.getUserDetail(created.id);
+  }
+
+  async updateUserProfile(
+    id: string,
+    dto: { displayName?: string; firstName?: string; lastName?: string; phone?: string },
+    actorId?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id }, include: { profile: true } });
+    if (!user) throw new NotFoundException('User not found');
+    if (dto.phone !== undefined) {
+      const phone = String(dto.phone).trim();
+      if (phone.length < 10) throw new BadRequestException('شماره موبایل معتبر نیست');
+      const clash = await this.prisma.user.findFirst({
+        where: { phone, accountType: user.accountType, NOT: { id } },
+      });
+      if (clash) throw new BadRequestException('این شماره قبلاً استفاده شده');
+      await this.prisma.user.update({ where: { id }, data: { phone } });
+    }
+    if (user.profile) {
+      await this.prisma.profile.update({
+        where: { userId: id },
+        data: {
+          ...(dto.displayName !== undefined ? { displayName: dto.displayName.trim().slice(0, 120) } : {}),
+          ...(dto.firstName !== undefined ? { firstName: dto.firstName?.trim() || null } : {}),
+          ...(dto.lastName !== undefined ? { lastName: dto.lastName?.trim() || null } : {}),
+        },
+      });
+    } else if (dto.displayName || dto.firstName || dto.lastName) {
+      await this.prisma.profile.create({
+        data: {
+          userId: id,
+          displayName: (dto.displayName || dto.firstName || user.phone || 'کاربر').trim().slice(0, 120),
+          firstName: dto.firstName?.trim() || null,
+          lastName: dto.lastName?.trim() || null,
+        },
+      });
+    }
+    userAuthCache.invalidate(id);
+    await this.audit(actorId, 'user.profile_update', 'user', id, null, dto);
+    return this.getUserDetail(id);
+  }
+
+  async softDeleteUser(id: string, actorId?: string, reason?: string) {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('User not found');
+    if (existing.status === UserStatus.deleted) return existing;
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { status: UserStatus.deleted },
+    });
+    userAuthCache.invalidate(id);
+    await this.audit(actorId, 'user.soft_delete', 'user', id, { status: existing.status }, { status: 'deleted', reason });
+    return updated;
+  }
+
   async listProfessionals(q: any) {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const skip = (page - 1) * limit;
     const where: Prisma.ProfessionalWhereInput = {};
     if (q.status) where.status = q.status;
+    if (q.search) {
+      const s = String(q.search).trim();
+      where.OR = [
+        { title: { contains: s, mode: 'insensitive' } },
+        { slug: { contains: s, mode: 'insensitive' } },
+        { user: { phone: { contains: s } } },
+        { user: { profile: { displayName: { contains: s, mode: 'insensitive' } } } },
+      ];
+    }
     const [items, total] = await Promise.all([
       this.prisma.professional.findMany({
         where,
@@ -224,28 +339,31 @@ export class AdminService {
       this.prisma.professional.count({ where: { status: ProfessionalStatus.draft } }),
       this.prisma.professional.count({ where: { status: ProfessionalStatus.suspended } }),
     ]);
-    return {
-      pendingProfessionals,
-      pendingMedia,
-      incompleteProfiles: 0,
-      draftProfessionals,
-      suspendedProfessionals,
-    };
+    return { pendingProfessionals, pendingMedia, incompleteProfiles: 0, draftProfessionals, suspendedProfessionals };
   }
 
   async getProfessionalDetail(id: string) {
     const pro = await this.prisma.professional.findUnique({
       where: { id },
-      include: { user: { include: { profile: true } }, professionalServices: true, mediaAssets: true },
+      include: {
+        user: { include: { profile: true } },
+        professionalServices: { include: { service: true } },
+        mediaAssets: true,
+        locations: { include: { location: true }, take: 5 },
+      },
     });
     if (!pro) throw new NotFoundException('Professional not found');
     return pro;
   }
 
-  async updateProfessional(id: string, data: any, actorId?: string) {
+  async updateProfessional(id: string, data: { title?: string; bio?: string; isFeatured?: boolean }, actorId?: string) {
     const existing = await this.prisma.professional.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Professional not found');
-    const updated = await this.prisma.professional.update({ where: { id }, data });
+    const update: Prisma.ProfessionalUpdateInput = {};
+    if (data.title !== undefined) update.title = data.title.trim();
+    if (data.bio !== undefined) update.bio = data.bio;
+    if (data.isFeatured !== undefined) update.isFeatured = data.isFeatured;
+    const updated = await this.prisma.professional.update({ where: { id }, data: update });
     await this.audit(actorId, 'professional.update', 'professional', id, existing, updated);
     return this.getProfessionalDetail(id);
   }
@@ -400,7 +518,7 @@ export class AdminService {
             type: NotificationType.system,
             title: dto.title,
             body: dto.body,
-            data: { campaignId, sms: !!dto.sms } as any,
+            data: { campaignId, sms: !!dto.sms } as Prisma.InputJsonValue,
           },
         });
         notified += 1;
@@ -417,7 +535,10 @@ export class AdminService {
     const filters = dto.filters || {};
     const where: Prisma.UserWhereInput = {};
     if (filters.accountType) where.accountType = String(filters.accountType) as any;
-    if (filters.status) where.status = String(filters.status) as any;
+    if (filters.status) {
+      const s = String(filters.status);
+      where.status = (s === 'blocked' ? UserStatus.suspended : s) as UserStatus;
+    }
     const users = await this.prisma.user.findMany({ where, take: limit, select: { id: true }, orderBy: { createdAt: 'desc' } });
     return this.notifyUsers({ userIds: users.map((u) => u.id), title: dto.title, body: dto.body, sms: dto.sms }, actorId);
   }
@@ -489,10 +610,7 @@ export class AdminService {
   }
 
   async listCatalogServices() {
-    return this.prisma.service.findMany({
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { category: true },
-    });
+    return this.prisma.service.findMany({ include: { category: true }, orderBy: { name: 'asc' } });
   }
 
   async createCatalogService(dto: any, actorId?: string) {
@@ -538,19 +656,27 @@ export class AdminService {
   }
 
   async listServiceCategoryRequests(_status?: string) {
-    return { items: [] };
+    return [];
   }
 
-  async reviewServiceCategoryRequest(professionalServiceId: string, categoryId: string, status: string, actorId?: string) {
-    await this.audit(actorId, 'catalog.category_request.review', 'professional_service', professionalServiceId, null, { categoryId, status });
-    return { success: true, professionalServiceId, categoryId, status };
+  async reviewServiceCategoryRequest(
+    professionalServiceId: string,
+    categoryId: string,
+    status: string,
+    actorId?: string,
+  ) {
+    await this.audit(actorId, 'catalog.request.review', 'professional_service', professionalServiceId, null, {
+      categoryId,
+      status,
+    });
+    return { professionalServiceId, categoryId, status };
   }
 
   async assignServiceFilterCategory(serviceId: string, categoryId: string, actorId?: string) {
     const service = await this.prisma.service.findUnique({ where: { id: serviceId } });
     if (!service) throw new NotFoundException('Service not found');
     const updated = await this.prisma.service.update({ where: { id: serviceId }, data: { categoryId } });
-    await this.audit(actorId, 'catalog.service.assign_category', 'service', serviceId, service, updated);
+    await this.audit(actorId, 'catalog.service.filter_category', 'service', serviceId, service, updated);
     return updated;
   }
 }
