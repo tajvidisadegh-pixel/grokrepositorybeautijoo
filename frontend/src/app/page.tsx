@@ -1,5 +1,19 @@
 import Link from 'next/link';
-import { Search, Scissors, Sparkles, Hand, Eye, Smile, Heart } from 'lucide-react';
+import {
+  Search,
+  Scissors,
+  Sparkles,
+  Hand,
+  Eye,
+  Smile,
+  Heart,
+  Droplets,
+  Brush,
+  User,
+  Flower2,
+  Wand2,
+  type LucideIcon,
+} from 'lucide-react';
 import type { Metadata } from 'next';
 import {
   listCategories,
@@ -18,7 +32,25 @@ export const metadata: Metadata = {
 
 export const revalidate = 60;
 
-const CATEGORY_ICONS = [Scissors, Sparkles, Hand, Eye, Smile, Heart, Scissors, Sparkles];
+/** Map category name keywords → relevant icon (issue #73) */
+function iconForCategory(name: string): LucideIcon {
+  const n = (name || '').trim();
+  if (/کوتاه|قیچی|اصلاح|اصلا/.test(n)) return Scissors;
+  if (/رنگ|لایت|هایلایت|بالیاژ/.test(n)) return Sparkles;
+  if (/ناخن|مانیکور|پدیکور/.test(n)) return Hand;
+  if (/پوست|اسکین|فیشیال|جوانسازی/.test(n)) return Droplets;
+  if (/مژه|ابرو|لیفت/.test(n)) return Eye;
+  if (/میکاپ|آرایش|میک.?اپ/.test(n)) return Smile;
+  if (/شینیون|براشینگ|شنیون/.test(n)) return Brush;
+  if (/بافت|اکستنشن|اکستنشن/.test(n)) return Wand2;
+  if (/کراتین|احیا|فر/.test(n)) return Flower2;
+  if (/ماساژ|اسپا/.test(n)) return Heart;
+  if (/مردانه|آقایان/.test(n)) return User;
+  if (/تتو|تاتو/.test(n)) return Sparkles;
+  if (/عروس/.test(n)) return Heart;
+  if (/اپیلاسیون|اپیل/.test(n)) return Scissors;
+  return Sparkles;
+}
 
 type HeroCfg = NonNullable<PublishedSiteConfig['content']['hero']> & {
   layout?: 'image-background' | 'image-side' | 'gradient-only';
@@ -299,8 +331,8 @@ export default async function HomePage() {
               </Link>
             </div>
             <div className="grid grid-cols-3 gap-2.5 sm:gap-3 sm:grid-cols-4 md:grid-cols-6">
-              {categories.slice(0, 6).map((c, i) => {
-                const Icon = CATEGORY_ICONS[i % CATEGORY_ICONS.length];
+              {categories.slice(0, 6).map((c) => {
+                const Icon = iconForCategory(c.name);
                 return (
                   <Link
                     key={c.id}
