@@ -15,6 +15,7 @@ const RESOLVE_APPLIED = [
   '20260911120000_align_missing_columns',
   '20260911140000_full_schema_align',
   '20260911150000_media_assets_url',
+  '20260913100000_working_hours_timestamps',
 ];
 
 const candidates = [
