@@ -1,21 +1,25 @@
-# Controlled release only.
-# - Automatic runs: only on Git tags matching v* (e.g. v1.2.0)
-# - Manual runs (workflow_dispatch): require an explicit ref/tag input
-# - Force-push is performed ONLY to beautijoo-backend-export
-# - Never runs on ordinary push/merge to main
-# - Never force-pushes main or any other branch
+# Keeps Liara deploy branch in sync with backend code.
+# - Automatic: push to main when backend/** changes
+# - Automatic: Git tags matching v*
+# - Manual: workflow_dispatch with explicit ref
+# - Force-push ONLY to beautijoo-backend-export (never main)
 name: Sync backend deployment branch
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Exact Git ref or tag to export from (e.g. v1.2.0 or a full commit SHA). Required for manual runs.'
+        description: 'Exact Git ref or tag to export from (e.g. main, v1.2.0, or commit SHA).'
         required: true
         type: string
+        default: 'main'
 
 permissions:
   contents: write
@@ -34,9 +38,11 @@ jobs:
               exit 1
             fi
             echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          else
-            # Tag push event
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_type }}" = "tag" ]; then
             echo "ref=${{ github.ref }}" >> "$GITHUB_OUTPUT"
+          else
+            # push to main (backend/**)
+            echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout the exact target ref
@@ -60,3 +66,4 @@ jobs:
       - name: Update backend deployment branch (force-push ONLY to beautijoo-backend-export)
         run: |
           git push origin backend-deploy-sync:beautijoo-backend-export --force
+          echo "beautijoo-backend-export updated from $(git rev-parse HEAD)"

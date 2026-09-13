@@ -1,67 +1,44 @@
-# Liara: «ناسازگاری موقت دیتابیس» (Prisma P2022)
+# Liara: «ناسازگاری موقت دیتابیس» (Prisma P2022) — Prevention
 
 ## Symptom
 
-On production (Liara), actions such as:
-
-- Opening **ادامه تکمیل پروفایل** (`/zibagar/profile/complete`)
-- Loading `/api/v1/professionals/me` or public professional by slug
-- Media upload / selected categories
-
-show:
-
 > ناسازگاری موقت دیتابیس. لطفاً چند لحظه دیگر تلاش کنید.
 
-## Known case (2026-09-13)
+Maps to **Prisma `P2022`** (missing column).
 
-```
-Prisma P2022 missing column model=Professional column=working_hours.created_at
-The column `working_hours.created_at` does not exist in the current database.
-```
+## Root causes we hit
 
-**Fix shipped in repo:**
+1. Production DB missing columns (e.g. `working_hours.created_at`)
+2. Liara deploying from **`beautijoo-backend-export`** while fixes lived only on `main`
 
-- `backend/prisma/sql/ensure-runtime.sql` adds `working_hours.created_at` / `updated_at`
-- Migration `20260913100000_working_hours_timestamps`
+## Prevention (in repo now)
 
-**Operator:** Redeploy **Backend** on Liara so boot scripts run.
+| Layer | What |
+|-------|------|
+| Auto-sync | GitHub Action syncs `beautijoo-backend-export` on every **push to `main` that touches `backend/**`** |
+| Boot heal | `scripts/prisma-migrate-deploy.cjs`: ensure-runtime.sql → critical columns → `db push` → migrate |
+| Runtime heal | `PrismaService.onModuleInit` re-applies critical `ADD COLUMN IF NOT EXISTS` |
+| Migrations | Idempotent SQL under `prisma/migrations/` |
 
-## Cause
+## Operator checklist
 
-Backend maps this to **Prisma `P2022`**: the running Prisma Client expects a **column** that is **missing** in the PostgreSQL database (schema drift).
+1. Keep Liara Backend bound to branch **`beautijoo-backend-export`** with Auto Deploy **on**.
+2. After merging backend changes to `main`, wait for workflow **“Sync backend deployment branch”** to finish (or run it manually with `ref=main`).
+3. Confirm Liara redeploy logs include `boot alignment finished` and `critical schema heal pass completed`.
 
-This is **not** caused by frontend color/logo commits.
+## Manual emergency
 
-## Fix (required on Liara)
-
-The backend Docker image heals schema on boot:
-
-1. `backend/prisma/sql/ensure-runtime.sql`
-2. `prisma db push`
-3. `prisma migrate deploy`
-
-See `backend/scripts/prisma-migrate-deploy.cjs` and `backend/Dockerfile` `CMD`.
-
-### Operator steps
-
-1. **Redeploy the Backend service** on Liara with the **latest backend code** from `main`.
-2. Watch deploy logs for:
-   - `[prisma-migrate] ensure-runtime.sql OK`
-   - `[prisma-migrate] db push OK`
-   - `[prisma-migrate] boot alignment finished`
-3. Confirm API health: `GET /api/v1/health`
-4. Retry professional profile complete / public profile.
-
-### Verify from logs
-
-```text
-Prisma P2022 missing column model=... column=...
+```bash
+# From backend root with production DATABASE_URL
+npx prisma db execute --file prisma/sql/ensure-runtime.sql
+npx prisma db push --accept-data-loss
 ```
 
-## Related files
+Or Redeploy Backend on Liara (boot script runs automatically).
 
-- `backend/prisma/sql/ensure-runtime.sql`
-- `backend/prisma/migrations/20260913100000_working_hours_timestamps/`
+## Related
+
+- `.github/workflows/sync-backend-deploy-branch.yml`
 - `backend/scripts/prisma-migrate-deploy.cjs`
-- `backend/Dockerfile`
-- `backend/src/common/filters/http-exception.filter.ts`
+- `backend/prisma/sql/ensure-runtime.sql`
+- `backend/src/prisma/prisma.service.ts`
