@@ -48,14 +48,14 @@ export default async function ProfessionalsPage({ searchParams }: Props) {
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">زیباگران</h1>
+          <h1 className="text-2xl font-bold text-blue">زیباگران</h1>
           <p className="mt-1 text-sm text-gray">
             پروفایل‌های تأییدشده — مرتب‌سازی بر اساس ویژه و امتیاز
           </p>
         </div>
         <Link
           href="/search"
-          className="text-sm font-medium text-coral hover:underline"
+          className="text-sm font-medium text-coral hover:text-coral-dark"
         >
           جستجوی پیشرفته
         </Link>
