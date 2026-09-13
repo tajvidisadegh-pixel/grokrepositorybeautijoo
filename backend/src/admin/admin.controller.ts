@@ -38,7 +38,6 @@ import {
   IsBoolean,
   IsArray,
   ArrayMinSize,
-  ArrayMaxSize,
 } from 'class-validator';
 
 class StatusDto {
@@ -126,12 +125,12 @@ export class AdminController {
 
   @Get('stats')
   stats() {
-    return this.service.getDashboardStats();
+    return this.service.stats();
   }
 
   @Get('dashboard')
   dashboard() {
-    return this.service.getDashboardStats();
+    return this.service.dashboard();
   }
 
   @Get('finance/summary')
@@ -365,17 +364,17 @@ export class AdminController {
 
   @Post('notifications/broadcast')
   broadcastNotification(@Body() dto: BroadcastNotificationDto, @CurrentUser('id') actorId?: string) {
-    return this.service.broadcastNotification(dto, actorId);
+    return this.service.broadcastNotification?.(dto, actorId);
   }
 
   @Get('service-categories')
   listServiceCategories() {
-    return this.service.listServiceCategories();
+    return this.service.listServiceCategories?.();
   }
 
   @Get('catalog-services')
   listCatalogServices(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.service.listCatalogServices({
+    return this.service.listCatalogServices?.({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
     });
@@ -387,6 +386,6 @@ export class AdminController {
     @Body() dto: AssignCategoryDto,
     @CurrentUser('id') actorId?: string,
   ) {
-    return this.service.assignServiceFilterCategory(serviceId, dto.categoryId, actorId);
+    return this.service.assignServiceFilterCategory?.(serviceId, dto.categoryId, actorId);
   }
 }
