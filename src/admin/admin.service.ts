@@ -397,14 +397,18 @@ export class AdminService {
     if (q.paymentStatus) where.payment = { status: q.paymentStatus as PaymentStatus };
     if (q.search) {
       const s = String(q.search).trim();
-      where.OR = [
-        { id: { contains: s } },
+      const or: Prisma.BookingWhereInput[] = [
         { customer: { phone: { contains: s } } },
         { customer: { profile: { displayName: { contains: s, mode: 'insensitive' } } } },
         { professional: { title: { contains: s, mode: 'insensitive' } } },
         { professional: { user: { phone: { contains: s } } } },
         { professional: { user: { profile: { displayName: { contains: s, mode: 'insensitive' } } } } },
       ];
+      // Booking.id is UUID — only exact match when query looks like a UUID
+      if (/^[0-9a-fA-F-]{8,36}$/.test(s)) {
+        or.unshift({ id: s });
+      }
+      where.OR = or;
     }
     const [items, total] = await Promise.all([
       this.prisma.booking.findMany({
