@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiClient } from '@/lib/api';
+import { apiClient, API_URL } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth-storage';
 
 type Hero = {
   enabled?: boolean;
@@ -44,12 +45,7 @@ type CmsContent = {
   publishedAt?: string | null;
 };
 
-type Section = {
-  id: string;
-  label: string;
-  enabled: boolean;
-  sortOrder: number;
-};
+type Section = { id: string; label: string; enabled: boolean; sortOrder: number };
 
 type CmsPayload = {
   draft?: CmsContent;
@@ -63,12 +59,45 @@ type BuilderPayload = {
   hasUnpublishedChanges?: boolean;
 };
 
+async function uploadCmsImage(file: File, slot: string): Promise<string> {
+  const token = getAccessToken();
+  const form = new FormData();
+  form.append('file', file);
+  form.append('slot', slot);
+  const res = await fetch(`${API_URL}/admin/site-cms/upload`, {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: form,
+    credentials: 'include',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data?.message === 'string' ? data.message : 'آپلود ناموفق بود');
+  }
+  return String(data.publicUrl || '');
+}
+
+async function triggerRevalidate() {
+  try {
+    const secret =
+      (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_REVALIDATE_SECRET) || '';
+    await fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret, path: '/' }),
+    });
+  } catch {
+    /* non-blocking */
+  }
+}
+
 export default function AdminSiteBuilderPage() {
   const [content, setContent] = useState<CmsContent>({});
   const [sections, setSections] = useState<Section[]>([]);
   const [hasUnpublished, setHasUnpublished] = useState(false);
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'hero' | 'sections' | 'texts' | 'features'>('hero');
@@ -80,21 +109,15 @@ export default function AdminSiteBuilderPage() {
       apiClient.get<BuilderPayload>('/admin/site-builder'),
     ]);
     setContent(cms.draft || {});
-    setSections(
-      (builder.draft?.sections || []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
-    );
+    setSections((builder.draft?.sections || []).slice().sort((a, b) => a.sortOrder - b.sortOrder));
     setHasUnpublished(!!(cms.hasUnpublishedChanges || builder.hasUnpublishedChanges));
     setPublishedAt(
-      (cms.published as CmsContent | null | undefined)?.publishedAt ||
-        cms.published?.updatedAt ||
-        null,
+      (cms.published as CmsContent | null | undefined)?.publishedAt || cms.published?.updatedAt || null,
     );
   }, []);
 
   useEffect(() => {
-    void load().catch((e) => {
-      setError(e instanceof Error ? e.message : 'بارگذاری ناموفق بود');
-    });
+    void load().catch((e) => setError(e instanceof Error ? e.message : 'بارگذاری ناموفق بود'));
   }, [load]);
 
   const hero = content.hero || {};
@@ -121,6 +144,23 @@ export default function AdminSiteBuilderPage() {
       next[j] = tmp;
       return next.map((s, i) => ({ ...s, sortOrder: i }));
     });
+  }
+
+  async function onUpload(slot: 'desktop' | 'mobile', file: File | null) {
+    if (!file) return;
+    setUploading(slot);
+    setError(null);
+    try {
+      const url = await uploadCmsImage(file, slot);
+      if (!url) throw new Error('آدرس تصویر برنگشت');
+      if (slot === 'desktop') patchHero({ desktopImageUrl: url });
+      else patchHero({ mobileImageUrl: url });
+      setMessage('تصویر آپلود شد — حتماً پیش‌نویس را ذخیره کنید');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'آپلود ناموفق بود');
+    } finally {
+      setUploading(null);
+    }
   }
 
   async function saveDraft() {
@@ -161,7 +201,8 @@ export default function AdminSiteBuilderPage() {
         apiClient.put('/admin/site-builder', sections),
       ]);
       await apiClient.post('/admin/site-cms/publish', {});
-      setMessage('منتشر شد — سایت عمومی از نسخه جدید استفاده می‌کند');
+      await triggerRevalidate();
+      setMessage('منتشر شد — کش صفحه اصلی بازسازی شد');
       setHasUnpublished(false);
       await load();
     } catch (e) {
@@ -188,10 +229,12 @@ export default function AdminSiteBuilderPage() {
         <div>
           <h1 className="text-xl font-bold text-[#0B2C4A]">طراحی سایت</h1>
           <p className="mt-1 text-sm text-gray-500">
-            ویرایش محتوای صفحه اصلی — ذخیره پیش‌نویس، سپس انتشار روی beautijoo.ir
+            ویرایش محتوای صفحه اصلی — ذخیره پیش‌نویس، سپس انتشار
           </p>
           {publishedAt && (
-            <p className="mt-1 text-xs text-gray-400">آخرین انتشار: {new Date(publishedAt).toLocaleString('fa-IR')}</p>
+            <p className="mt-1 text-xs text-gray-400">
+              آخرین انتشار: {new Date(publishedAt).toLocaleString('fa-IR')}
+            </p>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -260,18 +303,43 @@ export default function AdminSiteBuilderPage() {
             <Field label="لینک دکمه" value={hero.ctaLink || ''} onChange={(v) => patchHero({ ctaLink: v })} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field
-              label="URL تصویر دسکتاپ"
-              value={hero.desktopImageUrl || ''}
-              onChange={(v) => patchHero({ desktopImageUrl: v || null })}
-            />
-            <Field
-              label="URL تصویر موبایل"
-              value={hero.mobileImageUrl || ''}
-              onChange={(v) => patchHero({ mobileImageUrl: v || null })}
-            />
+            <div>
+              <Field
+                label="URL تصویر دسکتاپ"
+                value={hero.desktopImageUrl || ''}
+                onChange={(v) => patchHero({ desktopImageUrl: v || null })}
+              />
+              <label className="mt-2 block text-xs text-gray-500">
+                یا آپلود فایل
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={!!uploading}
+                  className="mt-1 block w-full text-xs"
+                  onChange={(e) => void onUpload('desktop', e.target.files?.[0] || null)}
+                />
+                {uploading === 'desktop' && <span className="text-[#2D6CDF]">در حال آپلود…</span>}
+              </label>
+            </div>
+            <div>
+              <Field
+                label="URL تصویر موبایل"
+                value={hero.mobileImageUrl || ''}
+                onChange={(v) => patchHero({ mobileImageUrl: v || null })}
+              />
+              <label className="mt-2 block text-xs text-gray-500">
+                یا آپلود فایل
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={!!uploading}
+                  className="mt-1 block w-full text-xs"
+                  onChange={(e) => void onUpload('mobile', e.target.files?.[0] || null)}
+                />
+                {uploading === 'mobile' && <span className="text-[#2D6CDF]">در حال آپلود…</span>}
+              </label>
+            </div>
           </div>
-          <p className="text-xs text-gray-400">آپلود فایل در مرحله بعد به Media وصل می‌شود؛ فعلاً URL واقعی وارد کنید.</p>
         </section>
       )}
 
@@ -284,7 +352,6 @@ export default function AdminSiteBuilderPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-400">#{i + 1}</span>
                   <span className="text-sm font-medium text-[#0B2C4A]">{s.label}</span>
-                  <code className="text-xs text-gray-400">{s.id}</code>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-1 text-xs">
@@ -299,82 +366,32 @@ export default function AdminSiteBuilderPage() {
                     />
                     فعال
                   </label>
-                  <button
-                    type="button"
-                    disabled={i === 0}
-                    onClick={() => moveSection(i, -1)}
-                    className="rounded-lg bg-gray-100 px-2 py-1 text-xs disabled:opacity-40"
-                  >
+                  <button type="button" disabled={i === 0} onClick={() => moveSection(i, -1)} className="rounded-lg bg-gray-100 px-2 py-1 text-xs disabled:opacity-40">
                     بالا
                   </button>
-                  <button
-                    type="button"
-                    disabled={i === sections.length - 1}
-                    onClick={() => moveSection(i, 1)}
-                    className="rounded-lg bg-gray-100 px-2 py-1 text-xs disabled:opacity-40"
-                  >
+                  <button type="button" disabled={i === sections.length - 1} onClick={() => moveSection(i, 1)} className="rounded-lg bg-gray-100 px-2 py-1 text-xs disabled:opacity-40">
                     پایین
                   </button>
                 </div>
               </div>
             ))}
-            {sections.length === 0 && (
-              <p className="py-6 text-center text-sm text-gray-500">بخشی تعریف نشده است.</p>
-            )}
           </div>
         </section>
       )}
 
       {tab === 'texts' && (
         <section className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4">
-          <Field
-            label="عنوان دسته‌بندی‌ها"
-            value={texts.categoriesTitle || ''}
-            onChange={(v) => patchTexts({ categoriesTitle: v })}
-          />
-          <Field
-            label="لینک همه خدمات"
-            value={texts.categoriesLinkText || ''}
-            onChange={(v) => patchTexts({ categoriesLinkText: v })}
-          />
-          <Field
-            label="عنوان زیباگرهای برتر"
-            value={texts.featuredTitle || ''}
-            onChange={(v) => patchTexts({ featuredTitle: v })}
-          />
-          <Field
-            label="لینک مشاهده همه"
-            value={texts.featuredLinkText || ''}
-            onChange={(v) => patchTexts({ featuredLinkText: v })}
-          />
+          <Field label="عنوان دسته‌بندی‌ها" value={texts.categoriesTitle || ''} onChange={(v) => patchTexts({ categoriesTitle: v })} />
+          <Field label="لینک همه خدمات" value={texts.categoriesLinkText || ''} onChange={(v) => patchTexts({ categoriesLinkText: v })} />
+          <Field label="عنوان زیباگرهای برتر" value={texts.featuredTitle || ''} onChange={(v) => patchTexts({ featuredTitle: v })} />
+          <Field label="لینک مشاهده همه" value={texts.featuredLinkText || ''} onChange={(v) => patchTexts({ featuredLinkText: v })} />
           <Field label="عنوان CTA" value={texts.ctaTitle || ''} onChange={(v) => patchTexts({ ctaTitle: v })} />
-          <Field
-            label="توضیح CTA"
-            value={texts.ctaDescription || ''}
-            onChange={(v) => patchTexts({ ctaDescription: v })}
-            multiline
-          />
+          <Field label="توضیح CTA" value={texts.ctaDescription || ''} onChange={(v) => patchTexts({ ctaDescription: v })} multiline />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field
-              label="متن دکمه اصلی CTA"
-              value={texts.ctaPrimaryText || ''}
-              onChange={(v) => patchTexts({ ctaPrimaryText: v })}
-            />
-            <Field
-              label="لینک دکمه اصلی"
-              value={texts.ctaPrimaryLink || ''}
-              onChange={(v) => patchTexts({ ctaPrimaryLink: v })}
-            />
-            <Field
-              label="متن دکمه ثانویه"
-              value={texts.ctaSecondaryText || ''}
-              onChange={(v) => patchTexts({ ctaSecondaryText: v })}
-            />
-            <Field
-              label="لینک دکمه ثانویه"
-              value={texts.ctaSecondaryLink || ''}
-              onChange={(v) => patchTexts({ ctaSecondaryLink: v })}
-            />
+            <Field label="متن دکمه اصلی CTA" value={texts.ctaPrimaryText || ''} onChange={(v) => patchTexts({ ctaPrimaryText: v })} />
+            <Field label="لینک دکمه اصلی" value={texts.ctaPrimaryLink || ''} onChange={(v) => patchTexts({ ctaPrimaryLink: v })} />
+            <Field label="متن دکمه ثانویه" value={texts.ctaSecondaryText || ''} onChange={(v) => patchTexts({ ctaSecondaryText: v })} />
+            <Field label="لینک دکمه ثانویه" value={texts.ctaSecondaryLink || ''} onChange={(v) => patchTexts({ ctaSecondaryLink: v })} />
           </div>
         </section>
       )}
