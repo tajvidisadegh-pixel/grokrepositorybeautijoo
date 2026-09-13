@@ -12,8 +12,9 @@ export type PanelNavItem = { href: string; label: string; disabled?: boolean };
 
 type Props = { title: string; items: PanelNavItem[]; roles: string[]; children: ReactNode };
 
-function isNotificationsHref(href: string): boolean {
-  return href.endsWith('/notifications');
+/** Badge only for personal inboxes — not admin campaign page. */
+function isPersonalNotificationsHref(href: string): boolean {
+  return href === '/panel/notifications' || href === '/zibagar/notifications';
 }
 
 export function PanelShell({ title, items, roles, children }: Props) {
@@ -25,7 +26,7 @@ export function PanelShell({ title, items, roles, children }: Props) {
       const res = await fetchUnreadCount();
       setUnread(typeof res?.count === 'number' ? res.count : 0);
     } catch {
-      /* non-blocking: badge simply stays at last known value */
+      /* non-blocking */
     }
   }, []);
 
@@ -40,12 +41,8 @@ export function PanelShell({ title, items, roles, children }: Props) {
       }
     })();
 
-    const onFocus = () => {
-      void refreshUnread();
-    };
-    const onUnreadChanged = () => {
-      void refreshUnread();
-    };
+    const onFocus = () => { void refreshUnread(); };
+    const onUnreadChanged = () => { void refreshUnread(); };
 
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', onFocus);
@@ -86,7 +83,7 @@ export function PanelShell({ title, items, roles, children }: Props) {
                 const active =
                   pathname === item.href ||
                   (item.href !== items[0]?.href && pathname?.startsWith(item.href + '/'));
-                const showBadge = isNotificationsHref(item.href) && unread > 0;
+                const showBadge = isPersonalNotificationsHref(item.href) && unread > 0;
                 return (
                   <Link
                     key={item.href}
