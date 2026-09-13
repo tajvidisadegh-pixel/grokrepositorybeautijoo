@@ -5,6 +5,8 @@ import {
   tehranDayBounds,
   minutesSinceTehranMidnight,
   tehranLocalToUtc,
+  tehranDateStr,
+  tehranHHMM,
   TEHRAN_TZ,
 } from '../common/timezone';
 
@@ -51,7 +53,9 @@ export class AvailabilityService {
       where: { professionalId, dayOfWeek, isActive: true, isClosed: false },
       include: { breaks: true },
     });
-    if (hours.length === 0) return { date: dateStr, slots: [] };
+    if (hours.length === 0) {
+      return { date: dateStr, professionalId, durationMin, slots: [], timezone: TEHRAN_TZ };
+    }
 
     const [timeOffs, manuals, bookings] = await Promise.all([
       this.prisma.timeOff.findMany({
@@ -99,7 +103,12 @@ export class AvailabilityService {
       });
     }
 
-    const slots: { start: string; end: string }[] = [];
+    // Skip past wall-clock times for "today" in Tehran (#69)
+    const now = new Date();
+    const todayTehran = tehranDateStr(now);
+    const nowMins = dateStr === todayTehran ? parseTime(tehranHHMM(now)) : -1;
+
+    const slots: { start: string; end: string; available: boolean }[] = [];
     const step = 15;
 
     for (const wh of hours) {
@@ -111,21 +120,23 @@ export class AvailabilityService {
       }));
 
       for (let t = whStart; t + durationMin <= whEnd; t += step) {
+        if (nowMins >= 0 && t < nowMins) continue;
+
         const slotEnd = t + durationMin;
         const inBreak = breaks.some((b) => t < b.end && slotEnd > b.start);
-        if (inBreak) continue;
         const inBusy = busy.some((b) => t < b.end && slotEnd > b.start);
-        if (inBusy) continue;
-        slots.push({ start: formatTime(t), end: formatTime(slotEnd) });
+        const available = !inBreak && !inBusy;
+        slots.push({
+          start: formatTime(t),
+          end: formatTime(slotEnd),
+          available,
+        });
       }
     }
 
     return { date: dateStr, professionalId, durationMin, slots, timezone: TEHRAN_TZ };
   }
 
-  /**
-   * Build a UTC Date for local Tehran wall-clock time on dateStr (YYYY-MM-DD) + HH:MM.
-   */
   static tehranLocalToUtc(dateStr: string, hhmm: string): Date {
     return tehranLocalToUtc(dateStr, hhmm);
   }
