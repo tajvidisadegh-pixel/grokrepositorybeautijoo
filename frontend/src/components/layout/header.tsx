@@ -5,6 +5,7 @@ import { Search, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/brand/logo';
 
 export function Header() {
   const { user, loading, logout, isAuthenticated, hasRole } = useAuth();
@@ -14,34 +15,26 @@ export function Header() {
     user?.profile?.displayName || user?.phone || 'کاربر';
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/80 bg-white/95 backdrop-blur-md shadow-[0_1px_0_0_rgba(55,73,137,0.06)]">
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-white/95 backdrop-blur-md shadow-[0_1px_0_0_rgba(252,112,116,0.08)]">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:h-16 sm:gap-4">
-        <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <span className="logo-mark size-8 text-sm sm:size-9 sm:text-base">B</span>
-          <div className="flex flex-col leading-none">
-            <span className="text-[15px] font-bold tracking-tight text-blue sm:text-base">
-              BEAUTIJOO
-            </span>
-            <span className="text-[11px] font-semibold text-coral sm:text-xs">بیوتی‌جو</span>
-          </div>
-        </Link>
+        <Logo />
 
         <nav className="hidden items-center gap-1 text-sm font-medium text-gray md:flex">
           <Link
             href="/professionals"
-            className="rounded-xl px-3 py-2 transition-colors hover:bg-blue-soft hover:text-blue"
+            className="rounded-xl px-3 py-2 transition-colors hover:bg-coral-soft hover:text-coral"
           >
             زیباگران
           </Link>
           <Link
             href="/search"
-            className="rounded-xl px-3 py-2 transition-colors hover:bg-blue-soft hover:text-blue"
+            className="rounded-xl px-3 py-2 transition-colors hover:bg-coral-soft hover:text-coral"
           >
             جستجو
           </Link>
           <Link
             href="/services"
-            className="rounded-xl px-3 py-2 transition-colors hover:bg-blue-soft hover:text-blue"
+            className="rounded-xl px-3 py-2 transition-colors hover:bg-coral-soft hover:text-coral"
           >
             خدمات
           </Link>
@@ -50,7 +43,7 @@ export function Header() {
         <div className="flex items-center gap-1.5 sm:gap-2">
           <Link
             href="/search"
-            className="flex size-10 items-center justify-center rounded-xl text-gray transition-colors hover:bg-blue-soft hover:text-blue md:hidden"
+            className="flex size-10 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
             aria-label="جستجو"
           >
             <Search className="size-5" />
@@ -61,7 +54,7 @@ export function Header() {
               {hasRole('SUPER_ADMIN') && (
                 <Link
                   href="/admin"
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-soft border border-blue/30 px-3 py-1.5 text-xs sm:text-sm font-bold text-blue hover:bg-blue hover:text-white transition-all shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl border border-blue/30 bg-blue-soft px-3 py-1.5 text-xs font-bold text-blue shadow-sm transition-all hover:bg-blue hover:text-white sm:text-sm"
                 >
                   <span>👑</span>
                   <span>پنل سوپر ادمین</span>
@@ -119,7 +112,7 @@ export function Header() {
 
           <button
             type="button"
-            className="flex size-10 items-center justify-center rounded-xl text-gray transition-colors hover:bg-blue-soft hover:text-blue md:hidden"
+            className="flex size-10 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
             onClick={() => setOpen((v) => !v)}
             aria-label={open ? 'بستن منو' : 'منو'}
             aria-expanded={open}
@@ -177,7 +170,7 @@ export function Header() {
                   <Link
                     href="/admin"
                     onClick={() => setOpen(false)}
-                    className="flex items-center gap-2 rounded-xl bg-blue-soft border border-blue/30 px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
+                    className="flex items-center gap-2 rounded-xl border border-blue/30 bg-blue-soft px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
                   >
                     <span>👑</span>
                     <span>پنل سوپر ادمین</span>

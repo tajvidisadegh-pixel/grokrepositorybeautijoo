@@ -63,14 +63,22 @@ body {
   background-color: var(--color-gray-light);
 }
 
-/* Brand logo mark (B ribbon style) */
+/* Brand logo mark — full coral (issue #68 mockups) */
 .logo-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, #fc7074 0%, #e85a5f 55%, #374989 100%);
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 3px rgba(55, 73, 137, 0.15);
+  background: linear-gradient(145deg, #ff9a9d 0%, #fc7074 42%, #e85a5f 100%);
+  border-radius: 0.85rem;
+  box-shadow:
+    0 2px 8px rgba(252, 112, 116, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.logo-mark svg {
+  display: block;
+  width: 58%;
+  height: 58%;
 }

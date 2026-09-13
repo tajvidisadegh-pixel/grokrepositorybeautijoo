@@ -1,16 +1,13 @@
 import Link from 'next/link';
+import { Logo } from '@/components/brand/logo';
 
 export function Footer() {
   return (
     <footer className="mt-auto bg-blue text-white">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-3 sm:py-12">
         <div className="sm:col-span-1">
-          <div className="mb-3 flex items-center gap-2.5">
-            <span className="logo-mark size-8 text-sm">B</span>
-            <div className="flex flex-col leading-none">
-              <span className="font-bold text-white">BEAUTIJOO</span>
-              <span className="text-xs font-medium text-coral-light">بیوتی‌جو</span>
-            </div>
+          <div className="mb-3">
+            <Logo onDark href={null} />
           </div>
           <p className="text-sm leading-7 text-white/75">
             پلتفرم رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای — آسان، سریع و مطمئن.
