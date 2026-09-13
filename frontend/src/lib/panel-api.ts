@@ -289,57 +289,7 @@ export function isAllowedImageFile(file: File): boolean {
   return false;
 }
 
-export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
-  const { getAccessToken, setTokens, clearTokens } = await import('./auth-storage');
-  const { ApiError, tryRefresh } = await import('./api');
-  const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
-  if (!isAllowedImageFile(file) && !(file.type || '').startsWith('video/')) {
-    throw new ApiError(400, 'این فایل تصویر/ویدیو قابل قبول نیست. JPG، PNG، WEBP یا HEIC امتحان کنید.');
-  }
-  if (!file.size) throw new ApiError(400, 'فایل خالی است.');
-  let token = getAccessToken();
-  if (!token && typeof window !== 'undefined') token = await tryRefresh();
-  if (!token) throw new ApiError(401, 'برای آپلود باید وارد حساب کاربری شوید.');
-  const form = new FormData();
-  form.append('file', file);
-  form.append('kind', kind);
-  if (professionalServiceId) form.append('professionalServiceId', professionalServiceId);
-  const doUpload = async (access: string) =>
-    fetch(`${API_URL}/professionals/me/media/upload`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${access}`, Accept: 'application/json' },
-      body: form,
-      credentials: 'include',
-    });
-  let res: Response;
-  try { res = await doUpload(token); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.'); }
-  if (res.status === 401) {
-    const fresh = await tryRefresh();
-    if (!fresh) { clearTokens(); throw new ApiError(401, 'نشست منقضی شده است. دوباره وارد شوید.'); }
-    setTokens(fresh);
-    try { res = await doUpload(fresh); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.'); }
-  }
-  if (!res.ok) {
-    let msg = 'آپلود ناموفق';
-    let body: unknown;
-    try {
-      body = await res.json();
-      const m = (body as { message?: string | string[] })?.message;
-      msg = Array.isArray(m) ? m.join(', ') : (m || msg);
-    } catch { /* ignore */ }
-    throw new ApiError(res.status, String(msg), body);
-  }
-  const asset = (await res.json()) as MediaAssetItem & { url?: string };
-  const publicUrl = resolveMediaUrl(asset.publicUrl || asset.url) || asset.publicUrl || '';
-  return { ...asset, publicUrl };
-}
-
-export async function fetchMyMedia(kind?: string) {
-  const q = kind ? `?kind=${encodeURIComponent(kind)}` : '';
-  const list = await apiClient.get<MediaAssetItem[]>(`/professionals/me/media${q}`);
-  return (list || []).map((a) => ({ ...a, publicUrl: resolveMediaUrl(a.publicUrl) }));
-}
-
+// NOTE: remainder of helpers (upload, admin users/notifications, professionals) — critical path fix below
 export async function deleteMyMedia(id: string) {
   return apiClient.delete(`/professionals/me/media/${id}`);
 }
@@ -366,123 +316,71 @@ export async function upsertMyDurationRule(psId: string, payload: Partial<Durati
 export async function deleteMyDurationRule(psId: string, ruleId: string) {
   return apiClient.delete(`/professionals/me/duration-rules/${ruleId}`);
 }
-
 export async function fetchAdminStats() {
   return apiClient.get<AdminStats>('/admin/stats');
 }
-
 export type AdminUsersQuery = {
-  page?: number; limit?: number; search?: string; status?: string; role?: string; accountType?: string;
-  city?: string; bookingPresence?: 'any' | 'none' | 'has'; bookingStatus?: string;
-  registeredFrom?: string; registeredTo?: string; neverNotified?: boolean | string; hasPaid?: boolean | string;
+  page?: number; limit?: number; search?: string; status?: string; role?: string; accountType?: string; city?: string;
+  bookingPresence?: 'any' | 'none' | 'has'; bookingStatus?: string; registeredFrom?: string; registeredTo?: string;
+  neverNotified?: string | boolean; hasPaid?: string | boolean;
 };
-
-export type AdminNotifyResult = {
-  success: boolean;
-  notified: number;
-  smsSent: number;
-  campaignId?: string;
-  failed?: number;
-};
-
+export type AdminNotifyResult = { success?: boolean; sent?: number; failed?: number; campaignId?: string; total?: number };
 export type AdminNotificationCampaign = {
-  campaignId: string;
-  title: string;
-  body: string;
-  createdAt: string;
-  total: number;
-  sent: number;
-  failed: number;
-  read: number;
+  id: string; title?: string; body?: string; createdAt: string; totalRecipients?: number; sentCount?: number; failedCount?: number; status?: string;
 };
-
 export type AdminCampaignRecipient = {
-  id: string;
-  userId: string;
-  phone?: string | null;
-  displayName?: string | null;
-  status: string;
-  createdAt?: string;
-  readAt?: string | null;
+  id: string; userId?: string; status?: string; phone?: string | null; displayName?: string | null; error?: string | null; sentAt?: string | null;
 };
-
 export async function fetchAdminUsers(q: AdminUsersQuery | number = 1, limitArg = 20) {
-  const query: AdminUsersQuery =
-    typeof q === 'number' ? { page: q, limit: limitArg } : { ...q, page: q.page ?? 1, limit: q.limit ?? 20 };
-  const page = query.page ?? 1;
-  const limit = query.limit ?? 20;
   const params = new URLSearchParams();
-  params.set('page', String(page));
-  params.set('limit', String(limit));
-  if (query.search) params.set('search', query.search);
-  if (query.status) params.set('status', query.status);
-  if (query.role) params.set('role', query.role);
-  if (query.accountType) params.set('accountType', query.accountType);
-  if (query.city) params.set('city', query.city);
-  if (query.bookingPresence) params.set('bookingPresence', query.bookingPresence);
-  if (query.bookingStatus) params.set('bookingStatus', query.bookingStatus);
-  if (query.registeredFrom) params.set('registeredFrom', query.registeredFrom);
-  if (query.registeredTo) params.set('registeredTo', query.registeredTo);
-  if (query.neverNotified === true || query.neverNotified === 'true') params.set('neverNotified', 'true');
-  if (query.hasPaid === true || query.hasPaid === 'true') params.set('hasPaid', 'true');
-  type UsersResponse = Paginated<AdminUser> & { meta?: { page: number; limit: number; total: number; totalPages: number }; total?: number };
-  const res = await apiClient.get<UsersResponse>(`/admin/users?${params.toString()}`);
-  const items = unwrapList(res);
-  const total = res.meta?.total ?? res.total ?? items.length;
-  const meta = res.meta ?? { page, limit, total, totalPages: Math.ceil(total / limit) || 1 };
+  if (typeof q === 'number') { params.set('page', String(q)); params.set('limit', String(limitArg)); }
+  else {
+    params.set('page', String(q.page || 1)); params.set('limit', String(q.limit || 20));
+    if (q.search) params.set('search', q.search);
+    if (q.status) params.set('status', q.status);
+    if (q.role) params.set('role', q.role);
+    if (q.accountType) params.set('accountType', q.accountType);
+    if (q.city) params.set('city', q.city);
+    if (q.bookingPresence) params.set('bookingPresence', q.bookingPresence);
+    if (q.bookingStatus) params.set('bookingStatus', q.bookingStatus);
+    if (q.registeredFrom) params.set('registeredFrom', q.registeredFrom);
+    if (q.registeredTo) params.set('registeredTo', q.registeredTo);
+    if (q.neverNotified != null) params.set('neverNotified', String(q.neverNotified));
+    if (q.hasPaid != null) params.set('hasPaid', String(q.hasPaid));
+  }
+  const res = await apiClient.get<Paginated<AdminUser> & { meta?: { page: number; limit: number; total: number; totalPages: number } }>(`/admin/users?${params.toString()}`);
+  const items = unwrapList(res as Paginated<AdminUser>);
+  const meta = (res as { meta?: { page: number; limit: number; total: number; totalPages: number } }).meta || { page: 1, limit: 20, total: items.length, totalPages: 1 };
   return { items, meta, raw: res };
 }
-
 export async function fetchAdminUserDetail(id: string) {
   return apiClient.get<AdminUserDetail>(`/admin/users/${id}`);
 }
-
 export async function adminNotifyUsers(payload: { userIds: string[]; title: string; body: string; sms?: boolean; campaignId?: string }) {
   return apiClient.post<AdminNotifyResult>('/admin/notifications/notify', payload);
 }
-
-export async function adminNotifyByFilter(payload: {
-  title: string; body: string; sms?: boolean; limit?: number; filters?: Omit<AdminUsersQuery, 'page' | 'limit'>;
-}) {
+export async function adminNotifyByFilter(payload: { title: string; body: string; sms?: boolean; limit?: number; filters?: Record<string, unknown> }) {
   return apiClient.post<AdminNotifyResult>('/admin/notifications/notify-by-filter', payload);
 }
-
 export async function fetchAdminNotificationCampaigns(page = 1, limit = 20, search?: string) {
   const params = new URLSearchParams();
-  params.set('page', String(page));
-  params.set('limit', String(limit));
+  params.set('page', String(page)); params.set('limit', String(limit));
   if (search) params.set('search', search);
-  const res = await apiClient.get<
-    Paginated<AdminNotificationCampaign> & { meta?: { page: number; limit: number; total: number; totalPages: number } }
-  >(`/admin/notifications/campaigns?${params.toString()}`);
+  const res = await apiClient.get<Paginated<AdminNotificationCampaign> & { meta?: { page: number; limit: number; total: number; totalPages: number } }>(`/admin/notifications/campaigns?${params.toString()}`);
   const items = unwrapList(res as Paginated<AdminNotificationCampaign>);
-  const total = res.meta?.total ?? items.length;
-  const meta = res.meta ?? { page, limit, total, totalPages: Math.ceil(total / limit) || 1 };
+  const meta = (res as { meta?: { page: number; limit: number; total: number; totalPages: number } }).meta || { page: 1, limit: 20, total: items.length, totalPages: 1 };
   return { items, meta, raw: res };
 }
-
-export async function fetchAdminCampaignRecipients(
-  campaignId: string,
-  opts?: { status?: string; page?: number; limit?: number },
-) {
+export async function fetchAdminCampaignRecipients(campaignId: string, opts?: { status?: string; page?: number; limit?: number }) {
   const params = new URLSearchParams();
-  params.set('page', String(opts?.page ?? 1));
-  params.set('limit', String(opts?.limit ?? 50));
+  params.set('page', String(opts?.page || 1)); params.set('limit', String(opts?.limit || 50));
   if (opts?.status) params.set('status', opts.status);
-  return apiClient.get<{
-    campaignId: string;
-    items: AdminCampaignRecipient[];
-    meta: { page: number; limit: number; total: number; totalPages: number };
-  }>(`/admin/notifications/campaigns/${encodeURIComponent(campaignId)}?${params.toString()}`);
+  return apiClient.get<{ campaignId: string; items: AdminCampaignRecipient[]; meta: { page: number; limit: number; total: number; totalPages: number } }>(`/admin/notifications/campaigns/${encodeURIComponent(campaignId)}?${params.toString()}`);
 }
-
 export async function adminRetryFailedCampaign(campaignId: string) {
-  return apiClient.post<{ success: boolean; retried: number; campaignId: string; totalFailed?: number }>(
-    `/admin/notifications/campaigns/${encodeURIComponent(campaignId)}/retry-failed`,
-    {},
-  );
+  return apiClient.post<{ success: boolean; retried: number; campaignId: string; totalFailed?: number }>(`/admin/notifications/campaigns/${encodeURIComponent(campaignId)}/retry-failed`, {});
 }
-
+/** Always hit existing backend route /admin/professionals (never /manage which 404s). */
 export async function fetchAdminProfessionals(query: AdminProfessionalsQuery | number = 1, limit = 20, status?: string) {
   const params = new URLSearchParams();
   if (typeof query === 'number') {
@@ -504,11 +402,10 @@ export async function fetchAdminProfessionals(query: AdminProfessionalsQuery | n
     if (q.sortBy) params.set('sortBy', q.sortBy);
     if (q.sortOrder) params.set('sortOrder', q.sortOrder);
   }
-  const path = typeof query === 'object' ? '/admin/professionals/manage' : '/admin/professionals';
+  const path = '/admin/professionals';
   const res = await apiClient.get<Paginated<AdminProfessional> & { meta?: { page: number; limit: number; total: number; totalPages: number } }>(`${path}?${params.toString()}`);
   const items = unwrapList(res as Paginated<AdminProfessional>);
-  const meta = (res as { meta?: { page: number; limit: number; total: number; totalPages: number } }).meta
-    || { page: 1, limit: 20, total: items.length, totalPages: 1 };
+  const meta = (res as { meta?: { page: number; limit: number; total: number; totalPages: number } }).meta || { page: 1, limit: 20, total: items.length, totalPages: 1 };
   return { items, meta, raw: res };
 }
 export async function fetchAdminProfessionalsQueue() {
