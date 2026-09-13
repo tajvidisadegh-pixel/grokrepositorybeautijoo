@@ -2,9 +2,17 @@ import { Module } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 import { AdminProfessionalsExtraController } from './admin-professionals-extra.controller';
+import { AdminSiteCmsController } from './admin-site-cms.controller';
+import { PublicSiteController } from './public-site.controller';
 
 @Module({
-  controllers: [AdminController, AdminProfessionalsExtraController],
+  controllers: [
+    AdminController,
+    AdminProfessionalsExtraController,
+    AdminSiteCmsController,
+    PublicSiteController,
+  ],
   providers: [AdminService],
+  exports: [AdminService],
 })
 export class AdminModule {}
