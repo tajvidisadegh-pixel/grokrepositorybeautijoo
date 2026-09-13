@@ -7,7 +7,7 @@ import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-b
 import { fetchMyBookings, createReview, type BookingListItem } from '@/lib/panel-api';
 import { persianBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, formatDate } from '@/lib/utils';
 
 export default function PanelBookingsPage() {
   const [items, setItems] = useState<BookingListItem[]>([]);
@@ -24,7 +24,6 @@ export default function PanelBookingsPage() {
       const res = await fetchMyBookings(1, 50);
       setItems(Array.isArray(res.items) ? res.items : []);
     } catch (e) {
-      // Soft-fail: show empty list + message instead of blocking whole panel
       setItems([]);
       setError(friendlyApiError(e));
     } finally { setLoading(false); }
@@ -55,7 +54,7 @@ export default function PanelBookingsPage() {
             <li key={b.id}><Card className="space-y-2">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div><p className="font-semibold">{proName}</p>
-                  <p className="text-xs text-gray" dir="ltr">{new Date(b.startAt).toLocaleString('fa-IR')}</p></div>
+                  <p className="text-xs text-gray">{formatDate(b.startAt, { style: 'short', includeTime: true })}</p></div>
                 <span className="rounded-full bg-coral-soft px-3 py-1 text-xs font-medium text-coral">{persianBookingStatus(b.status)}</span>
               </div>
               {b.totalPrice != null && <p className="text-sm text-gray">{formatPrice(b.totalPrice)}</p>}
