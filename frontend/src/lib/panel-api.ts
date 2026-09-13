@@ -95,7 +95,93 @@ export type AdminUserDetail = AdminUser & {
   reviews?: AdminUserReview[];
   auditLogs?: { id: string; action?: string; entity?: string; entityId?: string; actorId?: string; meta?: unknown; createdAt: string }[];
 };
-export type AdminProfessional = { id: string; slug: string; title?: string | null; status: string; user?: { phone?: string | null; profile?: { displayName?: string | null } | null } | null };
+export type AdminProfessional = {
+  id: string;
+  slug: string;
+  title?: string | null;
+  status: string;
+  isFeatured?: boolean;
+  ratingAvg?: number | string | null;
+  ratingCount?: number | null;
+  createdAt?: string;
+  publishedAt?: string | null;
+  city?: string | null;
+  specialties?: string[];
+  bookingCount?: number;
+  reviewCount?: number;
+  mediaCount?: number;
+  user?: {
+    phone?: string | null;
+    profile?: {
+      displayName?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      avatarUrl?: string | null;
+    } | null;
+  } | null;
+};
+export type AdminProfessionalsQueue = {
+  pendingProfessionals?: number;
+  pendingMedia?: number;
+  incompleteProfiles?: number;
+  draftProfessionals?: number;
+  suspendedProfessionals?: number;
+};
+export type AdminProfessionalDetail = AdminProfessional & {
+  bio?: string | null;
+  coverImageUrl?: string | null;
+  logoUrl?: string | null;
+  locations?: Array<{ isPrimary?: boolean; location?: { city?: string; address?: string; province?: string | null } }>;
+  professionalServices?: Array<{
+    id: string;
+    serviceId: string;
+    price: number;
+    durationMin: number;
+    isActive?: boolean;
+    service?: { name?: string; category?: { name?: string } | null } | null;
+  }>;
+  mediaAssets?: Array<{ id: string; kind: string; status: string; publicUrl?: string; url?: string; title?: string | null }>;
+  bookings?: Array<{
+    id: string;
+    status?: string;
+    startAt?: string;
+    totalPrice?: number | null;
+    customer?: { phone?: string | null; profile?: { displayName?: string | null } | null } | null;
+    payment?: { amount?: number | null; status?: string } | null;
+  }>;
+  reviews?: Array<{
+    id: string;
+    rating?: number;
+    comment?: string | null;
+    customer?: { profile?: { displayName?: string | null } | null } | null;
+  }>;
+  stats?: {
+    total?: number;
+    successful?: number;
+    cancelled?: number;
+    pending?: number;
+    revenue?: number;
+    ratingAvg?: number | string | null;
+    ratingCount?: number | null;
+    reviewCount?: number;
+    serviceCount?: number;
+    mediaCount?: number;
+  };
+};
+export type AdminProfessionalsQuery = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  city?: string;
+  specialty?: string;
+  categoryId?: string;
+  minRating?: number;
+  registeredFrom?: string;
+  registeredTo?: string;
+  sortBy?: string;
+  sortOrder?: string;
+};
 export type AuditLogItem = { id: string; action?: string; entity?: string; entityId?: string; actorId?: string; meta?: unknown; createdAt: string };
 
 export type CompletionField = { key: string; label: string; done: boolean };
@@ -378,188 +464,52 @@ export async function fetchMyMedia(kind?: string) {
   const list = await apiClient.get<MediaAssetItem[]>(`/professionals/me/media${q}`);
   return (list || []).map((a) => ({ ...a, publicUrl: resolveMediaUrl(a.publicUrl) }));
 }
-export async function deleteMyMedia(id: string) {
-  return apiClient.delete(`/professionals/me/media/${id}`);
-}
-export async function publishMyMedia(ids: string[]) {
-  return apiClient.post('/professionals/me/media/publish', { ids });
-}
-export async function fetchMyPriceRules(psId: string) {
-  const res = await apiClient.get<PriceRuleItem[] | Paginated<PriceRuleItem>>(`/professionals/me/services/${psId}/price-rules`);
-  return unwrapList(res as Paginated<PriceRuleItem>);
-}
-export async function upsertMyPriceRule(psId: string, payload: Partial<PriceRuleItem> & { label: string; price: number }) {
-  return apiClient.post(`/professionals/me/services/${psId}/price-rules`, payload);
-}
-export async function deleteMyPriceRule(psId: string, ruleId: string) {
-  return apiClient.delete(`/professionals/me/price-rules/${ruleId}`);
-}
-export async function fetchMyDurationRules(psId: string) {
-  const res = await apiClient.get<DurationRuleItem[] | Paginated<DurationRuleItem>>(`/professionals/me/services/${psId}/duration-rules`);
-  return unwrapList(res as Paginated<DurationRuleItem>);
-}
-export async function upsertMyDurationRule(psId: string, payload: Partial<DurationRuleItem> & { label: string; durationMin: number }) {
-  return apiClient.post(`/professionals/me/services/${psId}/duration-rules`, payload);
-}
-export async function deleteMyDurationRule(psId: string, ruleId: string) {
-  return apiClient.delete(`/professionals/me/duration-rules/${ruleId}`);
-}
 
-export async function fetchAdminStats() {
-  return apiClient.get<AdminStats>('/admin/stats');
-}
-
-export type AdminUsersQuery = {
-  page?: number;
-  limit?: number;
-  search?: string;
-  status?: string;
-  role?: string;
-  accountType?: string;
-  city?: string;
-  bookingPresence?: 'any' | 'none' | 'has';
-  bookingStatus?: string;
-  registeredFrom?: string;
-  registeredTo?: string;
-  neverNotified?: boolean | string;
-  hasPaid?: boolean | string;
-};
-
-export type AdminNotifyResult = {
-  success: boolean;
-  notified: number;
-  smsSent: number;
-  campaignId?: string;
-  failed?: number;
-};
-
-export type AdminNotificationCampaign = {
-  campaignId: string;
-  title: string;
-  body: string;
-  createdAt: string;
-  total: number;
-  sent: number;
-  failed: number;
-  read: number;
-};
-
-export type AdminCampaignRecipient = {
-  id: string;
-  userId: string;
-  phone?: string | null;
-  displayName?: string | null;
-  status: string;
-  createdAt?: string;
-  readAt?: string | null;
-};
-
-export async function fetchAdminUsers(q: AdminUsersQuery | number = 1, limitArg = 20) {
-  const query: AdminUsersQuery =
-    typeof q === 'number' ? { page: q, limit: limitArg } : { ...q, page: q.page ?? 1, limit: q.limit ?? 20 };
-  const page = query.page ?? 1;
-  const limit = query.limit ?? 20;
+// --- Admin professionals (#54) ---
+export async function fetchAdminProfessionals(query: AdminProfessionalsQuery | number = 1, limit = 20, status?: string) {
   const params = new URLSearchParams();
-  params.set('page', String(page));
-  params.set('limit', String(limit));
-  if (query.search) params.set('search', query.search);
-  if (query.status) params.set('status', query.status);
-  if (query.role) params.set('role', query.role);
-  if (query.accountType) params.set('accountType', query.accountType);
-  if (query.city) params.set('city', query.city);
-  if (query.bookingPresence) params.set('bookingPresence', query.bookingPresence);
-  if (query.bookingStatus) params.set('bookingStatus', query.bookingStatus);
-  if (query.registeredFrom) params.set('registeredFrom', query.registeredFrom);
-  if (query.registeredTo) params.set('registeredTo', query.registeredTo);
-  if (query.neverNotified === true || query.neverNotified === 'true') params.set('neverNotified', 'true');
-  if (query.hasPaid === true || query.hasPaid === 'true') params.set('hasPaid', 'true');
-  type UsersResponse = Paginated<AdminUser> & {
-    meta?: { page: number; limit: number; total: number; totalPages: number };
-    total?: number;
-  };
-  const res = await apiClient.get<UsersResponse>(`/admin/users?${params.toString()}`);
-  const items = unwrapList(res);
-  const total = res.meta?.total ?? res.total ?? items.length;
-  const meta = res.meta ?? {
-    page,
-    limit,
-    total,
-    totalPages: Math.ceil(total / limit) || 1,
-  };
-  return { items, meta, raw: res };
-}
-
-export async function fetchAdminUserDetail(id: string) {
-  return apiClient.get<AdminUserDetail>(`/admin/users/${id}`);
-}
-
-export async function adminNotifyUsers(payload: {
-  userIds: string[];
-  title: string;
-  body: string;
-  sms?: boolean;
-  campaignId?: string;
-}) {
-  return apiClient.post<AdminNotifyResult>('/admin/notifications/notify', payload);
-}
-
-export async function adminNotifyByFilter(payload: {
-  title: string;
-  body: string;
-  sms?: boolean;
-  limit?: number;
-  filters?: Omit<AdminUsersQuery, 'page' | 'limit'>;
-}) {
-  return apiClient.post<AdminNotifyResult>('/admin/notifications/notify-by-filter', payload);
-}
-
-export async function fetchAdminNotificationCampaigns(page = 1, limit = 20, search?: string) {
-  const params = new URLSearchParams();
-  params.set('page', String(page));
-  params.set('limit', String(limit));
-  if (search) params.set('search', search);
-  const res = await apiClient.get<
-    Paginated<AdminNotificationCampaign> & {
-      meta?: { page: number; limit: number; total: number; totalPages: number };
-    }
-  >(`/admin/notifications/campaigns?${params.toString()}`);
-  const items = unwrapList(res as Paginated<AdminNotificationCampaign>);
-  const total = res.meta?.total ?? items.length;
-  const meta = res.meta ?? {
-    page,
-    limit,
-    total,
-    totalPages: Math.ceil(total / limit) || 1,
-  };
-  return { items, meta, raw: res };
-}
-
-export async function fetchAdminCampaignRecipients(
-  campaignId: string,
-  opts?: { status?: string; page?: number; limit?: number },
-) {
-  const params = new URLSearchParams();
-  params.set('page', String(opts?.page ?? 1));
-  params.set('limit', String(opts?.limit ?? 50));
-  if (opts?.status) params.set('status', opts.status);
-  return apiClient.get<{
-    campaignId: string;
-    items: AdminCampaignRecipient[];
-    meta: { page: number; limit: number; total: number; totalPages: number };
-  }>(`/admin/notifications/campaigns/${encodeURIComponent(campaignId)}?${params.toString()}`);
-}
-
-export async function adminRetryFailedCampaign(campaignId: string) {
-  return apiClient.post<{ success: boolean; retried: number; campaignId: string; totalFailed?: number }>(
-    `/admin/notifications/campaigns/${encodeURIComponent(campaignId)}/retry-failed`,
-    {},
+  if (typeof query === 'number') {
+    params.set('page', String(query));
+    params.set('limit', String(limit));
+    if (status) params.set('status', status);
+  } else {
+    const q = query;
+    params.set('page', String(q.page || 1));
+    params.set('limit', String(q.limit || 20));
+    if (q.search) params.set('search', q.search);
+    if (q.status) params.set('status', q.status);
+    if (q.city) params.set('city', q.city);
+    if (q.specialty) params.set('specialty', q.specialty);
+    if (q.categoryId) params.set('categoryId', q.categoryId);
+    if (q.minRating != null) params.set('minRating', String(q.minRating));
+    if (q.registeredFrom) params.set('registeredFrom', q.registeredFrom);
+    if (q.registeredTo) params.set('registeredTo', q.registeredTo);
+    if (q.sortBy) params.set('sortBy', q.sortBy);
+    if (q.sortOrder) params.set('sortOrder', q.sortOrder);
+  }
+  const path = typeof query === 'object' ? '/admin/professionals/manage' : '/admin/professionals';
+  const res = await apiClient.get<Paginated<AdminProfessional> & { meta?: { page: number; limit: number; total: number; totalPages: number } }>(
+    `${path}?${params.toString()}`,
   );
+  const items = unwrapList(res as Paginated<AdminProfessional>);
+  const meta = (res as { meta?: { page: number; limit: number; total: number; totalPages: number } }).meta
+    || { page: 1, limit: 20, total: items.length, totalPages: 1 };
+  return { items, meta, raw: res };
 }
-
-export async function fetchAdminProfessionals(page = 1, limit = 20, status?: string) {
-  const q = status ? `&status=${encodeURIComponent(status)}` : '';
-  const res = await apiClient.get<Paginated<AdminProfessional> | AdminProfessional[]>(`/admin/professionals?page=${page}&limit=${limit}${q}`);
-  return { items: unwrapList(res as Paginated<AdminProfessional>), raw: res };
+export async function fetchAdminProfessionalsQueue() {
+  return apiClient.get<AdminProfessionalsQueue>('/admin/professionals-queue');
+}
+export async function fetchAdminProfessionalDetail(id: string) {
+  return apiClient.get<AdminProfessionalDetail>(`/admin/professionals/${id}`);
+}
+export async function adminUpdateProfessional(id: string, payload: { title?: string; bio?: string; isFeatured?: boolean; selectedCategoryIds?: string[] }) {
+  return apiClient.patch<AdminProfessionalDetail>(`/admin/professionals/${id}/profile`, payload);
+}
+export async function adminSetProfessionalFeatured(id: string, isFeatured: boolean) {
+  return apiClient.patch(`/admin/professionals/${id}/feature`, { isFeatured });
+}
+export async function adminSetMediaStatus(id: string, status: string) {
+  return apiClient.patch(`/admin/media/${id}/status`, { status });
 }
 export async function fetchAdminBookings(page = 1, limit = 20) {
   const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/admin/bookings?page=${page}&limit=${limit}`);
@@ -569,8 +519,8 @@ export async function fetchAuditLogs(page = 1, limit = 30) {
   const res = await apiClient.get<Paginated<AuditLogItem> | AuditLogItem[]>(`/admin/audit-logs?page=${page}&limit=${limit}`);
   return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
 }
-export async function adminSetProfessionalStatus(id: string, status: string) {
-  return apiClient.patch(`/admin/professionals/${id}/status`, { status });
+export async function adminSetProfessionalStatus(id: string, status: string, reason?: string) {
+  return apiClient.patch(`/admin/professionals/${id}/status`, reason ? { status, reason } : { status });
 }
 export async function adminSetUserStatus(id: string, status: string, reason?: string) {
   return apiClient.patch(`/admin/users/${id}/status`, { status, reason });
