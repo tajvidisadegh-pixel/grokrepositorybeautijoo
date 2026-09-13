@@ -290,7 +290,7 @@ export function isAllowedImageFile(file: File): boolean {
 }
 
 export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
-  const { getAccessToken } = await import('./auth-storage');
+  const { getAccessToken, setTokens, clearTokens } = await import('./auth-storage');
   const { ApiError, tryRefresh } = await import('./api');
   const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
   if (!isAllowedImageFile(file) && !(file.type || '').startsWith('video/')) {
@@ -300,21 +300,48 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
   let token = getAccessToken();
   if (!token && typeof window !== 'undefined') token = await tryRefresh();
   if (!token) throw new ApiError(401, 'برای آپلود باید وارد حساب کاربری شوید.');
-  const form = new FormData();
-  form.append('file', file);
-  form.append('kind', kind);
-  if (professionalServiceId) form.append('professionalServiceId', professionalServiceId);
-  const res = await fetch(`${API_URL}/professionals/me/media`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, (body as { message?: string })?.message || 'آپلود ناموفق بود');
+
+  const doUpload = async (tok: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('kind', kind);
+    if (professionalServiceId) form.append('professionalServiceId', professionalServiceId);
+    return fetch(`${API_URL}/professionals/me/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}` },
+      body: form,
+    });
+  };
+
+  let res: Response;
+  try { res = await doUpload(token); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.'); }
+  if (res.status === 401) {
+    const fresh = await tryRefresh();
+    if (!fresh) { clearTokens(); throw new ApiError(401, 'نشست منقضی شده است. دوباره وارد شوید.'); }
+    setTokens(fresh);
+    try { res = await doUpload(fresh); } catch { throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.'); }
   }
-  return res.json();
+  if (!res.ok) {
+    let msg = 'آپلود ناموفق';
+    let body: unknown;
+    try {
+      body = await res.json();
+      const m = (body as { message?: string | string[] })?.message;
+      msg = Array.isArray(m) ? m.join(', ') : (m || msg);
+    } catch { /* ignore */ }
+    throw new ApiError(res.status, String(msg), body);
+  }
+  const asset = (await res.json()) as MediaAssetItem & { url?: string };
+  const publicUrl = resolveMediaUrl(asset.publicUrl || asset.url) || asset.publicUrl || '';
+  return { ...asset, publicUrl };
 }
+
+export async function fetchMyMedia(kind?: string) {
+  const q = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+  const list = await apiClient.get<MediaAssetItem[]>(`/professionals/me/media${q}`);
+  return (list || []).map((a) => ({ ...a, publicUrl: resolveMediaUrl(a.publicUrl) }));
+}
+
 export async function deleteMyMedia(id: string) {
   return apiClient.delete(`/professionals/me/media/${id}`);
 }
@@ -342,7 +369,7 @@ export async function deleteMyDurationRule(psId: string, ruleId: string) {
   return apiClient.delete(`/professionals/me/duration-rules/${ruleId}`);
 }
 
-// Admin helpers — NEVER mock in production
+// ─── Admin ───────────────────────────────────────────────────────────────────
 export async function fetchAdminStats() {
   return apiClient.get<AdminStats>('/admin/stats');
 }
@@ -361,4 +388,56 @@ export async function fetchAdminUserDetail(id: string) {
 }
 export async function adminSetUserStatus(id: string, status: string, reason?: string) {
   return apiClient.patch(`/admin/users/${id}/status`, { status, reason });
+}
+export async function adminSetUserRoles(id: string, roles: string[]) {
+  return apiClient.patch(`/admin/users/${id}/roles`, { roles });
+}
+export async function fetchAdminProfessionals(q?: AdminProfessionalsQuery) {
+  const params = new URLSearchParams();
+  if (q?.page) params.set('page', String(q.page));
+  if (q?.limit) params.set('limit', String(q.limit));
+  if (q?.search) params.set('search', q.search);
+  if (q?.status) params.set('status', q.status);
+  if (q?.city) params.set('city', q.city);
+  if (q?.specialty) params.set('specialty', q.specialty);
+  if (q?.categoryId) params.set('categoryId', q.categoryId);
+  if (q?.minRating != null) params.set('minRating', String(q.minRating));
+  if (q?.registeredFrom) params.set('registeredFrom', q.registeredFrom);
+  if (q?.registeredTo) params.set('registeredTo', q.registeredTo);
+  if (q?.sortBy) params.set('sortBy', q.sortBy);
+  if (q?.sortOrder) params.set('sortOrder', q.sortOrder);
+  const res = await apiClient.get<Paginated<AdminProfessional> | AdminProfessional[]>(`/admin/professionals?${params.toString()}`);
+  return { items: unwrapList(res as Paginated<AdminProfessional>), raw: res };
+}
+export async function fetchAdminProfessionalsQueue() {
+  return apiClient.get<AdminProfessionalsQueue>('/admin/professionals/review-queue');
+}
+export async function fetchAdminProfessionalDetail(id: string) {
+  return apiClient.get<AdminProfessionalDetail>(`/admin/professionals/${id}`);
+}
+export async function adminUpdateProfessional(id: string, data: Record<string, unknown>) {
+  return apiClient.patch(`/admin/professionals/${id}`, data);
+}
+export async function adminSetProfessionalStatus(id: string, status: string, reason?: string) {
+  return apiClient.patch(`/admin/professionals/${id}/status`, reason ? { status, reason } : { status });
+}
+export async function adminSetProfessionalFeatured(id: string, isFeatured: boolean) {
+  return apiClient.patch(`/admin/professionals/${id}/feature`, { isFeatured });
+}
+export async function adminSetMediaStatus(id: string, status: string) {
+  return apiClient.patch(`/admin/media/${id}/status`, { status });
+}
+export async function fetchAdminBookings(page = 1, limit = 20) {
+  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/admin/bookings?page=${page}&limit=${limit}`);
+  return { items: unwrapList(res as Paginated<BookingListItem>), raw: res };
+}
+export async function fetchAuditLogs(page = 1, limit = 30) {
+  const res = await apiClient.get<Paginated<AuditLogItem> | AuditLogItem[]>(`/admin/audit-logs?page=${page}&limit=${limit}`);
+  return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
+}
+export async function adminNotifyUsers(dto: { userIds: string[]; title: string; body: string; sms?: boolean; campaignId?: string }) {
+  return apiClient.post('/admin/notifications/notify', dto);
+}
+export async function adminNotifyByFilter(dto: { title: string; body: string; sms?: boolean; limit?: number; filters?: Record<string, unknown> }) {
+  return apiClient.post('/admin/notifications/notify-by-filter', dto);
 }
