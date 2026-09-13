@@ -108,10 +108,10 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Top professionals / salons of the week */}
+      {/* Top professionals of the week — horizontal scroll */}
       <section className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
         <div className="mb-5 flex items-end justify-between gap-4 sm:mb-6">
-          <h2 className="text-lg font-bold text-foreground sm:text-xl">سالن‌های برتر هفته</h2>
+          <h2 className="text-lg font-bold text-foreground sm:text-xl">زیباگرهای برتر هفته</h2>
           <Link
             href="/professionals"
             className="text-sm font-medium text-coral transition-colors hover:text-coral-dark"
@@ -130,9 +130,17 @@ export default async function HomePage() {
           </p>
         )}
         {featured && featured.items.length > 0 && (
-          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory scroll-smooth sm:gap-4 [scrollbar-width:thin]"
+            dir="rtl"
+          >
             {featured.items.map((pro) => (
-              <ProfessionalCard key={pro.id} pro={pro} />
+              <div
+                key={pro.id}
+                className="w-[min(280px,78vw)] shrink-0 snap-start sm:w-[300px]"
+              >
+                <ProfessionalCard pro={pro} />
+              </div>
             ))}
           </div>
         )}
