@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -18,6 +18,19 @@ class CreateReviewDto {
 @Controller('reviews')
 export class ReviewsController {
   constructor(private readonly service: ReviewsService) {}
+
+  @Get('mine')
+  listMine(
+    @CurrentUser('id') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.listMine(
+      userId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
 
   @Post()
   create(@CurrentUser('id') userId: string, @Body() dto: CreateReviewDto) {
