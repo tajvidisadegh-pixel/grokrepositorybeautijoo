@@ -180,6 +180,7 @@ export class AdminService {
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const where: Prisma.ProfessionalWhereInput = {};
     if (q.status) where.status = q.status;
+    if (q.isFeatured !== undefined) where.isFeatured = !!q.isFeatured;
     if (q.search?.trim()) {
       const s = String(q.search).trim();
       where.OR = [
@@ -198,6 +199,52 @@ export class AdminService {
       this.prisma.professional.count({ where }),
     ]);
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
+  }
+
+  async getProfessionalsReviewQueue() {
+    const [pending, rejected, draft] = await Promise.all([
+      this.prisma.professional.count({ where: { status: ProfessionalStatus.pending_review } }),
+      this.prisma.professional.count({ where: { status: ProfessionalStatus.rejected } }),
+      this.prisma.professional.count({ where: { status: ProfessionalStatus.draft } }),
+    ]);
+    const items = await this.prisma.professional.findMany({
+      where: { status: { in: [ProfessionalStatus.pending_review, ProfessionalStatus.draft] } },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+      include: { user: { include: { profile: true } } },
+    });
+    return {
+      counts: { pendingReview: pending, rejected, draft },
+      items,
+    };
+  }
+
+  async updateProfessional(
+    id: string,
+    data: {
+      title?: string;
+      bio?: string;
+      isFeatured?: boolean;
+      selectedCategoryIds?: string[];
+    },
+    actorId?: string,
+  ) {
+    const existing = await this.prisma.professional.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Professional not found');
+    const updated = await this.prisma.professional.update({
+      where: { id },
+      data: {
+        title: data.title,
+        bio: data.bio,
+        isFeatured: data.isFeatured,
+        selectedCategoryIds:
+          data.selectedCategoryIds !== undefined
+            ? (data.selectedCategoryIds as unknown as Prisma.InputJsonValue)
+            : undefined,
+      },
+    });
+    await this.audit(actorId, 'professional.update', 'professional', id, existing, data);
+    return updated;
   }
 
   async getProfessionalDetail(id: string) {
@@ -440,13 +487,11 @@ export class AdminService {
     return { success: true, id };
   }
 
-  /** Published homepage CMS config (public). Stored in PlatformSetting. */
   async getPublishedSiteConfig() {
     const row = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_published' } });
     return (row?.value as object) ?? { version: 1, sections: [] };
   }
 
-  /** Promote draft CMS to published. */
   async publishSiteCms(actorId?: string) {
     const draft = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_draft' } });
     const value = (draft?.value as Prisma.InputJsonValue) ?? ({ version: 1, sections: [] } as Prisma.InputJsonValue);
@@ -459,7 +504,6 @@ export class AdminService {
     return { success: true, publishedAt: new Date().toISOString() };
   }
 
-  /** Upload image for site CMS (hero/banners). Writes to STORAGE_LOCAL_PATH when available. */
   async uploadSiteCmsImage(
     file: {
       buffer?: Buffer;
