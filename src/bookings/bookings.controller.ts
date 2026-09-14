@@ -143,9 +143,8 @@ export class BookingsController {
   report(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
     @Body() dto: ReportDto,
   ) {
-    return this.service.reportToAdmin(id, userId, roles || [], dto.message);
+    return this.service.reportIssue(id, userId, dto.message);
   }
 }
