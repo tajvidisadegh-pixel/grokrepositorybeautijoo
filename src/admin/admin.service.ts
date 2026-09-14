@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -12,6 +13,8 @@ import {
   MediaStatus,
   Prisma,
 } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class AdminService {
@@ -435,5 +438,60 @@ export class AdminService {
     await this.prisma.mediaAsset.delete({ where: { id } });
     await this.audit(actorId, 'media.delete', 'media_asset', id, existing, null);
     return { success: true, id };
+  }
+
+  /** Published homepage CMS config (public). Stored in PlatformSetting. */
+  async getPublishedSiteConfig() {
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_published' } });
+    return (row?.value as object) ?? { version: 1, sections: [] };
+  }
+
+  /** Promote draft CMS to published. */
+  async publishSiteCms(actorId?: string) {
+    const draft = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_draft' } });
+    const value = (draft?.value as Prisma.InputJsonValue) ?? ({ version: 1, sections: [] } as Prisma.InputJsonValue);
+    await this.prisma.platformSetting.upsert({
+      where: { key: 'site_cms_published' },
+      create: { key: 'site_cms_published', value },
+      update: { value },
+    });
+    await this.audit(actorId, 'site_cms.publish', 'platform_setting', 'site_cms_published', null, value);
+    return { success: true, publishedAt: new Date().toISOString() };
+  }
+
+  /** Upload image for site CMS (hero/banners). Writes to STORAGE_LOCAL_PATH when available. */
+  async uploadSiteCmsImage(
+    file: {
+      buffer?: Buffer;
+      path?: string;
+      mimetype: string;
+      originalname: string;
+      size: number;
+    },
+    slot?: string,
+    actorId?: string,
+  ) {
+    if (!file) throw new BadRequestException('فایل ارسال نشده است');
+    let buffer: Buffer;
+    if (file.buffer?.length) {
+      buffer = file.buffer;
+    } else if (file.path) {
+      buffer = fs.readFileSync(file.path);
+    } else {
+      throw new BadRequestException('فایل خالی است');
+    }
+    const safeName = (file.originalname || 'img').replace(/[^\w.\-]+/g, '_').slice(0, 80);
+    const key = `cms/${Date.now()}-${safeName}`;
+    const base = process.env.STORAGE_LOCAL_PATH || path.join(process.cwd(), 'uploads');
+    try {
+      fs.mkdirSync(path.join(base, 'cms'), { recursive: true });
+      fs.writeFileSync(path.join(base, key), buffer);
+    } catch (e) {
+      this.logger.warn(`CMS upload disk write failed: ${(e as Error)?.message || e}`);
+    }
+    const publicBase = (process.env.PUBLIC_FILES_BASE_URL || process.env.APP_URL || '').replace(/\/$/, '');
+    const url = publicBase ? `${publicBase}/files/${key}` : `/files/${key}`;
+    await this.audit(actorId, 'site_cms.upload', 'platform_setting', key, null, { url, slot, size: file.size });
+    return { url, key, slot: slot || 'generic', mimeType: file.mimetype, size: file.size };
   }
 }
