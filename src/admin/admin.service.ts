@@ -1,7 +1,6 @@
 import {
   Injectable,
   NotFoundException,
-  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -135,7 +134,7 @@ export class AdminService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { profile: true, roles: true },
+        include: { profile: true, userRoles: { include: { role: true } } },
       }),
       this.prisma.user.count({ where }),
     ]);
@@ -152,7 +151,7 @@ export class AdminService {
   async getUserDetail(id: string) {
     const u = await this.prisma.user.findUnique({
       where: { id },
-      include: { profile: true, roles: true },
+      include: { profile: true, userRoles: { include: { role: true } } },
     });
     if (!u) throw new NotFoundException('User not found');
     return u;
@@ -167,7 +166,10 @@ export class AdminService {
   }
 
   async setUserRoles(id: string, roles: string[], actorId?: string) {
-    return this.prisma.user.findUnique({ where: { id }, include: { roles: true } });
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { userRoles: { include: { role: true } } },
+    });
   }
 
   async listProfessionals(q: any) {
@@ -198,7 +200,7 @@ export class AdminService {
   async getProfessionalDetail(id: string) {
     const p = await this.prisma.professional.findUnique({
       where: { id },
-      include: { user: { include: { profile: true } }, services: true },
+      include: { user: { include: { profile: true } }, professionalServices: true },
     });
     if (!p) throw new NotFoundException('Professional not found');
     return p;
@@ -304,10 +306,12 @@ export class AdminService {
   async updateBookingStatus(id: string, status: BookingStatus, actorId?: string, reason?: string) {
     const existing = await this.prisma.booking.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Booking not found');
-    const updated = await this.prisma.booking.update({
-      where: { id },
-      data: { status, ...(reason ? { cancelReason: reason } : {}) } as any,
-    });
+    const data: Prisma.BookingUpdateInput = { status };
+    if (reason) data.cancelReason = reason;
+    if (status === BookingStatus.cancelled) data.cancelledAt = new Date();
+    if (status === BookingStatus.confirmed) data.confirmedAt = new Date();
+    if (status === BookingStatus.completed) data.completedAt = new Date();
+    const updated = await this.prisma.booking.update({ where: { id }, data });
     await this.audit(actorId, 'booking.status_change', 'booking', id, { status: existing.status }, { status, reason });
     return updated;
   }
@@ -334,8 +338,8 @@ export class AdminService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-      }).catch(() => [] as any[]),
-      this.prisma.notification.count().catch(() => 0),
+      }),
+      this.prisma.notification.count(),
     ]);
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }
@@ -343,7 +347,7 @@ export class AdminService {
   async listAuditLogs(q?: any) {
     const page = Math.max(1, Number(q?.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q?.limit) || 50));
-    const where: any = {};
+    const where: Prisma.AuditLogWhereInput = {};
     if (q?.action) where.action = q.action;
     if (q?.entityType) where.entityType = q.entityType;
     if (q?.entityId) where.entityId = q.entityId;
@@ -353,8 +357,8 @@ export class AdminService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-      }).catch(() => [] as any[]),
-      this.prisma.auditLog.count({ where }).catch(() => 0),
+      }),
+      this.prisma.auditLog.count({ where }),
     ]);
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }

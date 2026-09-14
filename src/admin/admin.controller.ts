@@ -97,25 +97,6 @@ class RolesDto {
   roles: string[];
 }
 
-class BroadcastNotificationDto {
-  @ApiProperty()
-  @IsString()
-  title: string;
-  @ApiProperty()
-  @IsString()
-  body: string;
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  type?: string;
-}
-
-class AssignCategoryDto {
-  @ApiProperty()
-  @IsString()
-  categoryId: string;
-}
-
 @ApiTags('admin')
 @ApiBearerAuth()
 @Roles('SUPER_ADMIN', 'admin')
@@ -360,32 +341,5 @@ export class AdminController {
       type,
       search,
     });
-  }
-
-  @Post('notifications/broadcast')
-  broadcastNotification(@Body() dto: BroadcastNotificationDto, @CurrentUser('id') actorId?: string) {
-    return this.service.broadcastNotification?.(dto, actorId);
-  }
-
-  @Get('service-categories')
-  listServiceCategories() {
-    return this.service.listServiceCategories?.();
-  }
-
-  @Get('catalog-services')
-  listCatalogServices(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.service.listCatalogServices?.({
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 50,
-    });
-  }
-
-  @Patch('catalog-services/:serviceId/category')
-  assignServiceCategory(
-    @Param('serviceId') serviceId: string,
-    @Body() dto: AssignCategoryDto,
-    @CurrentUser('id') actorId?: string,
-  ) {
-    return this.service.assignServiceFilterCategory?.(serviceId, dto.categoryId, actorId);
   }
 }
