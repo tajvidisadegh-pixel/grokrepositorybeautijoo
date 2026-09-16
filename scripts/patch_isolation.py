@@ -2,10 +2,30 @@
 from pathlib import Path
 import re
 
-p = Path('backend/src/admin/admin.service.ts')
+def replace_method(src, name, new_body):
+    key = f"async {name}("
+    start = src.find(key)
+    if start < 0:
+        print(name, "NOT FOUND")
+        return src
+    i = src.find("{", start)
+    depth = 0
+    j = i
+    while j < len(src):
+        if src[j] == "{":
+            depth += 1
+        elif src[j] == "}":
+            depth -= 1
+            if depth == 0:
+                j += 1
+                break
+        j += 1
+    return src[:start] + new_body + src[j:]
+
+p = Path("backend/src/admin/admin.service.ts")
 st = p.read_text()
 
-NEW = '''async hardDeleteUser(id: string, actorId?: string) {
+NEW_HDU = """async hardDeleteUser(id: string, actorId?: string) {
     const existing = await this.prisma.user.findUnique({ where: { id }, include: { professional: true } });
     if (!existing) throw new NotFoundException('User not found');
     if (existing.professional) {
@@ -18,25 +38,19 @@ NEW = '''async hardDeleteUser(id: string, actorId?: string) {
     });
     await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone }, null);
     return { id, deleted: true };
-  }'''
+  }"""
+st = replace_method(st, "hardDeleteUser", NEW_HDU)
+print("hardDelete done")
 
-st2, n = re.subn(
-    r'async hardDeleteUser\(id: string, actorId\?: string\) \{[\s\S]*?return \{ id, deleted: true \};\n  \}',
-    NEW,
-    st,
-    count=1,
-)
-print('hardDelete', n)
-
-if 'professional: { is: null }' not in st2:
-    st2 = st2.replace(
-        'const where: Prisma.UserWhereInput = {};',
-        'const where: Prisma.UserWhereInput = { professional: { is: null } };',
+if "professional: { is: null }" not in st:
+    st = st.replace(
+        "const where: Prisma.UserWhereInput = {};",
+        "const where: Prisma.UserWhereInput = { professional: { is: null } };",
         1,
     )
-    print('listUsers filter')
+    print("listUsers filter")
 
-STATS = '''async getCustomersStats() {
+NEW_STATS = """async getCustomersStats() {
     const base = { professional: { is: null } } as Prisma.UserWhereInput;
     const [total, active, suspended, inactive, withBookings] = await Promise.all([
       this.prisma.user.count({ where: base }),
@@ -46,24 +60,68 @@ STATS = '''async getCustomersStats() {
       this.prisma.user.count({ where: { ...base, bookingsAsCustomer: { some: {} } } }),
     ]);
     return { total, active, suspended, inactive, withBookings, neverBooked: Math.max(0, total - withBookings) };
-  }'''
-st2, n2 = re.subn(r'async getCustomersStats\(\) \{[\s\S]*?\n  \}', STATS, st2, count=1)
-print('stats', n2)
+  }"""
+st = replace_method(st, "getCustomersStats", NEW_STATS)
+print("stats done")
 
-if 'BadRequestException' not in st2.split('from')[0]:
-    st2 = st2.replace('NotFoundException,', 'NotFoundException,\n  BadRequestException,')
-p.write_text(st2)
+if "BadRequestException" not in st.split("from")[0]:
+    st = st.replace("NotFoundException,", "NotFoundException,\n  BadRequestException,")
+p.write_text(st)
 
-pros = Path('frontend/src/app/admin/professionals/page.tsx')
+cat = Path("backend/src/admin/admin-catalog.controller.ts")
+ct = cat.read_text()
+ct2, n1 = re.subn(
+    r"async deleteCategory\(@Param\('id'\) id: string\) \{[\s\S]*?return \{ id, deleted: true, soft: true \};\n\}",
+    """async deleteCategory(@Param('id') id: string) {
+  const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
+  if (!row) throw new NotFoundException('category not found');
+  await this.prisma.$transaction(async (tx) => {
+    const services = await tx.service.findMany({ where: { categoryId: id }, select: { id: true } });
+    const serviceIds = services.map((s) => s.id);
+    if (serviceIds.length) {
+      await tx.professionalService.deleteMany({ where: { serviceId: { in: serviceIds } } });
+      await tx.service.deleteMany({ where: { id: { in: serviceIds } } });
+    }
+    await tx.serviceCategory.updateMany({ where: { parentId: id }, data: { parentId: null } });
+    await tx.serviceCategory.delete({ where: { id } });
+  });
+  return { id, deleted: true, hard: true };
+}""",
+    ct,
+    count=1,
+)
+ct2, n2 = re.subn(
+    r"async deleteCatalogService\(@Param\('id'\) id: string\) \{[\s\S]*?return \{ id, deleted: true, soft: true \};\n\}",
+    """async deleteCatalogService(@Param('id') id: string) {
+  const row = await this.prisma.service.findUnique({ where: { id } });
+  if (!row) throw new NotFoundException('service not found');
+  await this.prisma.$transaction(async (tx) => {
+    await tx.professionalService.deleteMany({ where: { serviceId: id } });
+    await tx.service.delete({ where: { id } });
+  });
+  return { id, deleted: true, hard: true };
+}""",
+    ct2,
+    count=1,
+)
+print("catalog", n1, n2)
+cat.write_text(ct2)
+
+u = Path("frontend/src/lib/utils.ts")
+ut = u.read_text().replace("DateTimeFormat('fa-IR'", "DateTimeFormat('fa-IR-u-ca-persian'")
+u.write_text(ut)
+print("utils", "fa-IR-u-ca-persian" in ut)
+
+pros = Path("frontend/src/app/admin/professionals/page.tsx")
 pt = pros.read_text()
-if 'adminNotifyUsers' not in pt:
+if "adminNotifyUsers" not in pt:
     pt = pt.replace(
         "import { friendlyApiError } from '@/lib/api-errors';",
         "import { friendlyApiError } from '@/lib/api-errors';\nimport { adminNotifyUsers } from '@/lib/panel-api';",
     )
-if 'async function onNotify' not in pt:
+if "async function onNotify" not in pt:
     pt = pt.replace(
-        'async function onDelete',
+        "async function onDelete",
         """async function onNotify(p: AdminProfessional) {
     const title = window.prompt('عنوان اعلان', 'پیام مدیریت');
     if (title == null) return;
@@ -91,20 +149,20 @@ m = re.search(
 if m:
     pt = (
         pt[: m.start()]
-        + '''<div className="flex flex-wrap gap-1">
+        + """<div className=\"flex flex-wrap gap-1\">
                       {p.status !== 'approved' && (
-                        <Button size="sm" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
+                        <Button size=\"sm\" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
                       )}
                       <Link href={`/admin/professionals/${p.id}`}>
-                        <Button size="sm" variant="outline">ویرایش</Button>
+                        <Button size=\"sm\" variant=\"outline\">ویرایش</Button>
                       </Link>
-                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onNotify(p)}>اعلان</Button>
-                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</Button>
-                    </div>'''
+                      <Button size=\"sm\" variant=\"outline\" loading={busyId === p.id} onClick={() => onNotify(p)}>اعلان</Button>
+                      <Button size=\"sm\" variant=\"outline\" loading={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</Button>
+                    </div>"""
         + pt[m.end() :]
     )
-    print('pros ok')
+    print("pros ok")
 else:
-    print('pros fail')
+    print("pros fail")
 pros.write_text(pt)
-print('done')
+print("ALL DONE")
