@@ -13,7 +13,6 @@ import {
   publishMyProfessional,
   uploadMyMedia, fetchCategories, resolveMediaUrl,
   setMySelectedCategories,
-  createCategoryNode,
   type CatalogCategory,
   type OwnProfessional, type ProfileCompletion,
 } from '@/lib/panel-api';
@@ -29,8 +28,6 @@ const STEPS: WizardStep[] = [
   { id: 'hours', label: 'ساعات کاری' },
   { id: 'review', label: 'بررسی نهایی' },
 ];
-
-const FEATURED_ROOT_NAMES = ['پوست', 'مو', 'ناخن', 'میکاپ', 'مردانه'];
 
 const WEEK_DAYS = [
   { value: 'saturday', label: 'شنبه' },
@@ -66,26 +63,16 @@ export default function ProfileCompletePage() {
   const [locProvince, setLocProvince] = useState('');
   const [locLat, setLocLat] = useState<number | null>(null);
   const [locLng, setLocLng] = useState<number | null>(null);
-  const [mapSelected, setMapSelected] = useState(false);
+  const [, setMapSelected] = useState(false);
   const [cityOptions, setCityOptions] = useState<IranCity[]>([]);
   const [rootCategories, setRootCategories] = useState<CatalogCategory[]>([]);
   const [selectedRootIds, setSelectedRootIds] = useState<string[]>([]);
-  const [specialtyMoreOpen, setSpecialtyMoreOpen] = useState(false);
   const [specialtySearch, setSpecialtySearch] = useState('');
   const [hourDays, setHourDays] = useState<string[]>(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday']);
   const [hourStart, setHourStart] = useState('10:00');
   const [hourEnd, setHourEnd] = useState('20:00');
 
-  const featuredRootCategories = useMemo(() => {
-    const byName = new Map(rootCategories.map((r) => [r.name, r]));
-    return FEATURED_ROOT_NAMES.map((n) => byName.get(n)).filter(Boolean) as CatalogCategory[];
-  }, [rootCategories]);
 
-  const specialtySearchResults = useMemo(() => {
-    const q = specialtySearch.trim();
-    if (!q) return [];
-    return rootCategories.filter((r) => r.name.includes(q)).slice(0, 20);
-  }, [specialtySearch, rootCategories]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PanelLoading, PanelError } from '@/components/panel/state-blocks';
 import {
@@ -15,29 +14,23 @@ import {
   renameMyService,
   deactivateMyService,
   upsertMyAddOn,
-  deactivateMyAddOn,
   uploadMyMedia,
   deleteMyMedia,
-  resolveMediaUrl,
   upsertMyPriceRule,
-  deleteMyPriceRule,
   fetchMyPriceRules,
   upsertMyDurationRule,
-  deleteMyDurationRule,
   fetchMyDurationRules,
   createServiceNode,
   createCategoryNode,
   type ProfessionalServiceItem,
   type CatalogCategory,
-  type ServiceAddOnItem,
   type PriceRuleItem,
   type DurationRuleItem,
   type MediaAssetItem,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
-import { formatPrice, parsePriceInput, formatPriceDigits, priceToWords } from '@/lib/utils';
+import { formatPrice, parsePriceInput, formatPriceDigits } from '@/lib/utils';
 import {
-  FEATURED_ROOT_NAMES,
   collectLeaves,
   findCategory,
   flattenSearch,
