@@ -673,7 +673,19 @@ export class AdminService {
 
   async getPublishedSiteConfig() {
     const row = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_published' } });
-    return (row?.value as object) ?? { version: 1, sections: [] };
+    const value = (row?.value as any) || {};
+    const nested = value.content || {};
+    const content = {
+      hero: nested.hero || value.hero || {},
+      texts: nested.texts || value.texts || {},
+      features: nested.features || value.features || {},
+    };
+    return {
+      version: value.version || 1,
+      content,
+      sections: Array.isArray(value.sections) ? value.sections : [],
+      publishedAt: value.publishedAt || null,
+    };
   }
 
   async publishSiteCms(actorId?: string) {
