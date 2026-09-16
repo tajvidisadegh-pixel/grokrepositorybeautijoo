@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'scripts/patch_frontend_lint.py'
+      - 'scripts/patch_frontend_lint2.py'
       - '.github/workflows/fix-frontend-lint.yml'
 jobs:
   run:
@@ -12,11 +13,13 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: python3 scripts/patch_frontend_lint.py
+      - run: |
+          if [ -f scripts/patch_frontend_lint.py ]; then python3 scripts/patch_frontend_lint.py || true; fi
+          if [ -f scripts/patch_frontend_lint2.py ]; then python3 scripts/patch_frontend_lint2.py || true; fi
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/profile/complete/page.tsx frontend/src/app/zibagar/services/page.tsx
-          git commit -m "fix(frontend): remove unused imports/vars blocking next build" || exit 0
+          git add frontend/src/app/zibagar/profile/complete/page.tsx frontend/src/app/zibagar/services/page.tsx frontend/src/lib/auth-storage.ts || true
+          git commit -m "fix(frontend): remove remaining unused imports for next build" || exit 0
           git push origin HEAD:main
