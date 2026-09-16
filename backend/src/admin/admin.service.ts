@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   Logger,
   BadRequestException,
@@ -14,13 +15,19 @@ import {
   Prisma,
 } from '@prisma/client';
 import * as fs from 'fs';
-import * as path from 'path';
+import {
+  STORAGE_PROVIDER,
+  type StorageProvider,
+} from '../storage/storage.provider';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+  ) {}
 
   private async audit(
     actorId: string | undefined,
@@ -728,39 +735,25 @@ export class AdminService {
     const safeName = (file.originalname || 'img').replace(/[^\w.\-]+/g, '_').slice(0, 80);
     const ext = (safeName.split('.').pop() || 'jpg').toLowerCase();
     const key = `cms/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const base = process.env.STORAGE_LOCAL_PATH
-      ? (process.env.STORAGE_LOCAL_PATH.startsWith('/')
-          ? process.env.STORAGE_LOCAL_PATH
-          : path.resolve(process.cwd(), process.env.STORAGE_LOCAL_PATH))
-      : path.join(process.cwd(), 'uploads');
+    const mime = file.mimetype || 'application/octet-stream';
+    let storageKey: string;
     try {
-      fs.mkdirSync(path.dirname(path.join(base, key)), { recursive: true });
-      fs.writeFileSync(path.join(base, key), buffer);
+      storageKey = await this.storage.upload(key, buffer, mime);
     } catch (e) {
-      this.logger.warn(`CMS upload disk write failed: ${(e as Error)?.message || e}`);
-      throw new BadRequestException('ذخیره فایل ناموفق بود. دیسک ذخیره‌سازی را بررسی کنید.');
+      this.logger.warn(`CMS upload via storage provider failed: ${(e as Error)?.message || e}`);
+      throw new BadRequestException('ذخیره فایل ناموفق بود. تنظیمات ذخیره‌سازی را بررسی کنید.');
     }
-    const publicBase = (
-      process.env.PUBLIC_API_URL ||
-      process.env.API_PUBLIC_URL ||
-      process.env.APP_URL ||
-      ''
-    )
-      .replace(/\/$/, '')
-      .replace(/\/api\/v1$/i, '');
-    const url = publicBase
-      ? `${publicBase}/api/v1/files/${key}`
-      : `/api/v1/files/${key}`;
-    await this.audit(actorId, 'site_cms.upload', 'platform_setting', key, null, {
+    const url = this.storage.getPublicUrl(storageKey);
+    await this.audit(actorId, 'site_cms.upload', 'platform_setting', storageKey, null, {
       url,
       slot: slot || 'generic',
       size: file.size,
     });
     return {
       url,
-      key,
+      key: storageKey,
       slot: slot || 'generic',
-      mimeType: file.mimetype,
+      mimeType: mime,
       size: file.size,
     };
   }
