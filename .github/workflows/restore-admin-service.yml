@@ -1,0 +1,43 @@
+name: Restore admin.service.ts
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-admin-service.yml'
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore from last good commit and fix UUID contains
+        run: |
+          set -e
+          git show 1127896182b5f174151ff71f471ee404153af193:backend/src/admin/admin.service.ts > backend/src/admin/admin.service.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/admin/admin.service.ts')
+          t = p.read_text()
+          bad = "        { id: { contains: s } },\n"
+          if bad in t:
+              t = t.replace(bad, "")
+              p.write_text(t)
+              print('removed illegal contains on Booking.id')
+          else:
+              print('pattern already absent')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+          else
+            git commit -m "fix(ci): restore admin.service.ts and drop contains on Booking UUID id"
+            git push origin main
+          fi
