@@ -1,0 +1,23 @@
+name: Fix finance APIs
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/patch_finance.py'
+      - '.github/workflows/fix-finance.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_finance.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts backend/src/admin/admin.controller.ts frontend/src/app/admin/finance/page.tsx
+          git status
+          git commit -m "fix(admin): complete finance summary/transactions/alerts for panel" || exit 0
+          git push origin HEAD:main
