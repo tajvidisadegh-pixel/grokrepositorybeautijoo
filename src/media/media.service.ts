@@ -135,8 +135,35 @@ export class MediaService {
 
       const processed = await this.processImage(raw);
 
-      const pro = await this.prisma.professional.findUnique({ where: { userId } });
-      if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+      let pro = await this.prisma.professional.findUnique({ where: { userId } });
+      if (!pro) {
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: { profile: true },
+        });
+        if (!user) throw new NotFoundException('کاربر یافت نشد');
+        const baseSlug = (user.profile?.displayName || user.phone || 'pro')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^\w\u0600-\u06FF-]+/g, '')
+          .slice(0, 40) || 'pro';
+        let slug = baseSlug;
+        for (let i = 0; i < 5; i++) {
+          const taken = await this.prisma.professional.findUnique({ where: { slug } });
+          if (!taken) break;
+          slug = `${baseSlug}-${Date.now().toString(36).slice(-4)}`;
+        }
+        pro = await this.prisma.professional.create({
+          data: {
+            userId,
+            slug,
+            title: user.profile?.displayName || 'زیباگر',
+            status: 'draft' as any,
+          },
+        });
+      }
 
       if (professionalServiceId) {
         const ps = await this.prisma.professionalService.findFirst({

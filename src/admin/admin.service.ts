@@ -670,15 +670,39 @@ export class AdminService {
   }
 
   async publishSiteCms(actorId?: string) {
-    const draft = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_draft' } });
-    const value = (draft?.value as Prisma.InputJsonValue) ?? ({ version: 1, sections: [] } as Prisma.InputJsonValue);
+    const [contentRow, sectionsRow, legacyDraft] = await Promise.all([
+      this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_content' } }),
+      this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_sections' } }),
+      this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_draft' } }),
+    ]);
+    const content = (contentRow?.value as any) || {};
+    const sections = Array.isArray(sectionsRow?.value)
+      ? sectionsRow!.value
+      : Array.isArray((sectionsRow?.value as any)?.sections)
+        ? (sectionsRow!.value as any).sections
+        : [];
+    const legacy = (legacyDraft?.value as any) || {};
+    const value = {
+      version: 1,
+      content: Object.keys(content).length ? content : (legacy.content || {}),
+      hero: content.hero || legacy.hero || {},
+      texts: content.texts || legacy.texts || {},
+      features: content.features || legacy.features || {},
+      sections: sections.length ? sections : (legacy.sections || []),
+      publishedAt: new Date().toISOString(),
+    } as any;
     await this.prisma.platformSetting.upsert({
       where: { key: 'site_cms_published' },
       create: { key: 'site_cms_published', value },
       update: { value },
     });
+    await this.prisma.platformSetting.upsert({
+      where: { key: 'site_cms_draft' },
+      create: { key: 'site_cms_draft', value },
+      update: { value },
+    });
     await this.audit(actorId, 'site_cms.publish', 'platform_setting', 'site_cms_published', null, value);
-    return { success: true, publishedAt: new Date().toISOString() };
+    return { success: true, publishedAt: value.publishedAt };
   }
 
   async uploadSiteCmsImage(
@@ -689,6 +713,45 @@ export class AdminService {
       originalname: string;
       size: number;
     },
+    slot?: string,
+    actorId?: string,
+  ) {
+    if (!file) throw new BadRequestException('فایل ارسال نشده است');
+    let buffer: Buffer;
+    if (file.buffer?.length) {
+      buffer = file.buffer;
+    } else if (file.path) {
+      buffer = fs.readFileSync(file.path);
+    } else {
+      throw new BadRequestException('فایل خالی است');
+    }
+    const safeName = (file.originalname || 'img').replace(/[^\w.\-]+/g, '_').slice(0, 80);
+    const ext = (safeName.split('.').pop() || 'jpg').toLowerCase();
+    const key = `cms/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const base = process.env.STORAGE_LOCAL_PATH
+      ? (process.env.STORAGE_LOCAL_PATH.startsWith('/')
+          ? process.env.STORAGE_LOCAL_PATH
+          : path.resolve(process.cwd(), process.env.STORAGE_LOCAL_PATH))
+      : path.join(process.cwd(), 'uploads');
+    try {
+      fs.mkdirSync(path.dirname(path.join(base, key)), { recursive: true });
+      fs.writeFileSync(path.join(base, key), buffer);
+    } catch (e) {
+      this.logger.warn(`CMS upload disk write failed: ${(e as Error)?.message || e}`);
+      throw new BadRequestException('ذخیره فایل ناموفق بود. دیسک ذخیره‌سازی را بررسی کنید.');
+    }
+    const publicBase = (
+      process.env.PUBLIC_API_URL ||
+      process.env.API_PUBLIC_URL ||
+      process.env.APP_URL ||
+      ''
+    ).replace(/\/$/, '').replace(/\/api\/v1$/i, '');
+    const url = publicBase
+      ? `${publicBase}/api/v1/files/${key}`
+      : `/api/v1/files/${key}`;
+    await this.audit(actorId, 'site_cms.upload', 'platform_setting', key, null, { url, slot, size: file.size });
+    return { url, key, slot: slot || 'generic', mimeType: file.mimetype };
+  },
     slot?: string,
     actorId?: string,
   ) {
