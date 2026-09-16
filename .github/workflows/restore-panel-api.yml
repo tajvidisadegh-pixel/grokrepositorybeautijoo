@@ -1,0 +1,26 @@
+name: Restore panel-api upload path
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/api-audit-media-upload]
+    paths:
+      - 'scripts/restore_panel_api_upload.py'
+      - '.github/workflows/restore-panel-api.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/api-audit-media-upload
+      - run: python3 scripts/restore_panel_api_upload.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/panel-api.ts
+          git diff --cached --stat
+          git commit -m "fix: audit and repair frontend api connections" || exit 0
+          git push origin HEAD:fix/api-audit-media-upload
