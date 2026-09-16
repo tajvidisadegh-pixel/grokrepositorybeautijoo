@@ -1,0 +1,23 @@
+name: Fix media CMS admin pro
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/patch_media_cms.py'
+      - '.github/workflows/fix-media-cms.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_media_cms.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/media/media.service.ts backend/src/media/media.controller.ts backend/src/admin/admin.service.ts backend/src/admin/admin-ops.controller.ts frontend/src/app/admin/site-builder/page.tsx
+          git status
+          git commit -m "fix: pro media auto-create, CMS banner URL/publish, admin create professional" || exit 0
+          git push origin HEAD:main
