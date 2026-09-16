@@ -1,0 +1,177 @@
+name: Remove bio step from pro wizard
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/remove-bio-step.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Patch frontend wizard + backend completion
+        run: |
+          set -e
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          # --- frontend complete page ---
+          p = Path('frontend/src/app/zibagar/profile/complete/page.tsx')
+          t = p.read_text()
+
+          t = t.replace(
+          """const STEPS: WizardStep[] = [
+            { id: 'basic', label: 'اطلاعات پایه' },
+            { id: 'contact', label: 'معرفی' },
+            { id: 'media', label: 'تصاویر' },
+            { id: 'location', label: 'موقعیت' },
+            { id: 'services', label: 'تخصص‌ها' },
+            { id: 'hours', label: 'ساعات کاری' },
+            { id: 'review', label: 'بررسی نهایی' },
+          ];""",
+          """const STEPS: WizardStep[] = [
+            { id: 'basic', label: 'اطلاعات پایه' },
+            { id: 'media', label: 'تصاویر' },
+            { id: 'location', label: 'موقعیت' },
+            { id: 'services', label: 'تخصص‌ها' },
+            { id: 'hours', label: 'ساعات کاری' },
+            { id: 'review', label: 'بررسی نهایی' },
+          ];""")
+
+          t = t.replace("  const [bio, setBio] = useState('');\n", "")
+          t = t.replace("      setBio(data.bio || data.user?.profile?.bio || '');\n", "")
+
+          old_resume = """        const order = ['title','firstName','lastName','bio','avatarOrCover','location','service','workingHours'];
+          let resume = 0;
+          for (let i = 0; i < order.length; i++) {
+            const f = fields.find((x) => x.key === order[i]);
+            if (f && !f.done) {
+              if (i <= 2) resume = 0;
+              else if (i === 3) resume = 1;
+              else if (i === 4) resume = 2;
+              else if (i === 5) resume = 3;
+              else if (i === 6) resume = 4;
+              else resume = 5;
+              break;
+            }
+            if (i === order.length - 1 && data.completion?.complete) resume = 6;
+          }"""
+          new_resume = """        const order = ['title','firstName','lastName','avatarOrCover','location','service','workingHours'];
+          let resume = 0;
+          for (let i = 0; i < order.length; i++) {
+            const f = fields.find((x) => x.key === order[i]);
+            if (f && !f.done) {
+              if (i <= 2) resume = 0;
+              else if (i === 3) resume = 1;
+              else if (i === 4) resume = 2;
+              else if (i === 5) resume = 3;
+              else resume = 4;
+              break;
+            }
+            if (i === order.length - 1 && data.completion?.complete) resume = 5;
+          }"""
+          if old_resume not in t:
+              raise SystemExit('resume block missing')
+          t = t.replace(old_resume, new_resume)
+
+          t, n = re.subn(r"\n  async function saveContact\(\) \{.*?\n  \}\n", "\n", t, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit(f'saveContact n={n}')
+
+          old_next = """  async function onNext() {
+            let ok = true;
+            if (step === 0) ok = await saveBasic();
+            else if (step === 1) ok = await saveContact();
+            else if (step === 2) ok = await saveMedia();
+            else if (step === 3) ok = await saveLocation();
+            else if (step === 4) ok = await saveService();
+            else if (step === 5) ok = await saveHours();
+            if (ok) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+          }"""
+          new_next = """  async function onNext() {
+            let ok = true;
+            if (step === 0) ok = await saveBasic();
+            else if (step === 1) ok = await saveMedia();
+            else if (step === 2) ok = await saveLocation();
+            else if (step === 3) ok = await saveService();
+            else if (step === 4) ok = await saveHours();
+            if (ok) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+          }"""
+          if old_next not in t:
+              raise SystemExit('onNext missing')
+          t = t.replace(old_next, new_next)
+
+          old_ui = """      {step === 1 && (
+            <Card className=\"space-y-4\">
+              <h2 className=\"font-semibold\">معرفی / بیو</h2>
+              <p className=\"text-xs text-gray\">اختیاری — بدون بیو هم می‌توانید پروفایل را کامل کنید.</p>
+              <label className=\"block space-y-1 text-sm\">درباره شما
+                <textarea className=\"w-full rounded-xl border border-border p-3 text-sm\" rows={4}
+                  value={bio} onChange={(e) => setBio(e.target.value)} placeholder=\"اختیاری\" /></label>
+            </Card>
+          )}
+          """
+          if old_ui not in t:
+              raise SystemExit('bio UI missing')
+          t = t.replace(old_ui, '')
+
+          # renumber UI steps with placeholders (original indices after UI removal still 2,3,4,5,6)
+          t = t.replace('{step === 2 &&', '{__M__ &&')
+          t = t.replace('{step === 3 &&', '{__L__ &&')
+          t = t.replace('{step === 4 &&', '{__S__ &&')
+          t = t.replace('{step === 5 &&', '{__H__ &&')
+          t = t.replace('{step === 6 &&', '{__R__ &&')
+          # categories effect was if (step === 4) for services — mark carefully only the useEffect one
+          t = t.replace(
+              "  useEffect(() => {\n    if (step === 4) {",
+              "  useEffect(() => {\n    if (step === 3) {",
+          )
+          t = t.replace('{__M__ &&', '{step === 1 &&')
+          t = t.replace('{__L__ &&', '{step === 2 &&')
+          t = t.replace('{__S__ &&', '{step === 3 &&')
+          t = t.replace('{__H__ &&', '{step === 4 &&')
+          t = t.replace('{__R__ &&', '{step === 5 &&')
+
+          if 'saveContact' in t or 'setBio' in t or 'معرفی / بیو' in t:
+              raise SystemExit('frontend still has bio remnants')
+          p.write_text(t)
+          print('frontend ok')
+
+          # --- backend ---
+          b = Path('backend/src/professionals/professionals.service.ts')
+          bt = b.read_text()
+          bt = bt.replace("  | 'bio'\n", '')
+          bt = bt.replace("  bio: '\u0645\u0639\u0631\u0641\u06cc / \u0628\u06cc\u0648',\n", '')
+          bt = bt.replace("  bio: '\u0645\u0639\u0631\u0641\u06cc / \u0628\u06cc\u0648',\n".encode().decode('unicode_escape') if False else '', '')
+          # real unicode line
+          bt = bt.replace("  bio: 'معرفی / بیو',\n", '')
+          bt = bt.replace("        { bio: { contains: params.q, mode: 'insensitive' } },\n", '')
+          bt = bt.replace("    // Bio is optional — never blocks completion to 100%\n    const hasBio = true;\n", '')
+          bt = bt.replace("      { key: 'bio', label: COMPLETION_LABELS.bio + ' (اختیاری)', done: hasBio },\n", '')
+          bt = bt.replace("    const required = fields.filter((f) => f.key !== 'bio');\n", "    const required = fields;\n")
+          bt = bt.replace(
+              "              displayName: true, firstName: true, lastName: true, avatarUrl: true, bio: true,\n",
+              "              displayName: true, firstName: true, lastName: true, avatarUrl: true,\n",
+          )
+          b.write_text(bt)
+          print('backend ok')
+          PY
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/profile/complete/page.tsx backend/src/professionals/professionals.service.ts
+          if git diff --cached --quiet; then
+            echo 'No changes'
+          else
+            git commit -m "feat: remove bio/intro step from professional registration wizard"
+            git push origin main
+          fi
