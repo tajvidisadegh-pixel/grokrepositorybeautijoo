@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { Card } from '@/components/ui/card';
