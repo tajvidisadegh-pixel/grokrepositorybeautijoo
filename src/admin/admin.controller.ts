@@ -97,6 +97,12 @@ class RolesDto {
   roles: string[];
 }
 
+class BulkDeleteUsersDto {
+  @IsArray()
+  @IsUUID('4', { each: true })
+  userIds!: string[];
+}
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @Roles('SUPER_ADMIN', 'admin')
@@ -190,6 +196,23 @@ export class AdminController {
   setUserRoles(@Param('id') id: string, @Body() dto: RolesDto, @CurrentUser('id') actorId?: string) {
     return this.service.setUserRoles(id, dto.roles, actorId);
   }
+
+  @Delete('users/:id')
+  hardDeleteUser(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    return this.service.hardDeleteUser(id, actorId);
+  }
+
+  @Post('users/bulk-delete')
+  bulkHardDeleteUsers(@Body() dto: BulkDeleteUsersDto, @CurrentUser('id') actorId?: string) {
+    return this.service.bulkHardDeleteUsers(dto.userIds, actorId);
+  }
+
+  @Delete('professionals/:id')
+  hardDeleteProfessional(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    return this.service.hardDeleteProfessional(id, actorId);
+  }
+
+
 
   @Get('professionals')
   listProfessionals(

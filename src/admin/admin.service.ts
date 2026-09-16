@@ -478,6 +478,52 @@ export class AdminService {
     return updated;
   }
 
+
+  async hardDeleteUser(id: string, actorId?: string) {
+    const existing = await this.prisma.user.findUnique({ where: { id }, include: { professional: true } });
+    if (!existing) throw new NotFoundException('User not found');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.review.deleteMany({ where: { customerId: id } });
+      await tx.booking.deleteMany({ where: { customerId: id } });
+      if (existing.professional) {
+        const pid = existing.professional.id;
+        await tx.review.deleteMany({ where: { professionalId: pid } });
+        await tx.booking.deleteMany({ where: { professionalId: pid } });
+        await tx.professional.delete({ where: { id: pid } });
+      }
+      await tx.user.delete({ where: { id } });
+    });
+    await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone }, null);
+    return { id, deleted: true };
+  }
+
+  async bulkHardDeleteUsers(userIds: string[], actorId?: string) {
+    const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+    let deleted = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.hardDeleteUser(id, actorId);
+        deleted += 1;
+      } catch {
+        failed.push(id);
+      }
+    }
+    return { deleted, failed };
+  }
+
+  async hardDeleteProfessional(id: string, actorId?: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { id } });
+    if (!pro) throw new NotFoundException('Professional not found');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.review.deleteMany({ where: { professionalId: id } });
+      await tx.booking.deleteMany({ where: { professionalId: id } });
+      await tx.professional.delete({ where: { id } });
+    });
+    await this.audit(actorId, 'professional.hard_delete', 'professional', id, { userId: pro.userId, slug: pro.slug }, null);
+    return { id, deleted: true };
+  }
+
   async deleteMedia(id: string, actorId?: string) {
     const existing = await this.prisma.mediaAsset.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Media not found');
