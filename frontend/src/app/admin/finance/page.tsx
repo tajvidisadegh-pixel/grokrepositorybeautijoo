@@ -191,16 +191,16 @@ export default function AdminFinancePage() {
             </div>
             <div className="rounded-xl bg-gray-light/60 p-3">
               <p className="text-xs text-gray">کارمزد پلتفرم</p>
-              <p className="text-lg font-bold text-coral">{formatPrice(summary.platformCommission)}</p>
+              <p className="text-lg font-bold text-coral">{formatPrice(summary.platformCommission ?? 0)}</p>
             </div>
             <div className="rounded-xl bg-gray-light/60 p-3">
               <p className="text-xs text-gray">سهم زیباگر</p>
-              <p className="text-lg font-bold">{formatPrice(summary.professionalNet)}</p>
+              <p className="text-lg font-bold">{formatPrice(summary.professionalNet ?? 0)}</p>
             </div>
             <div className="rounded-xl bg-gray-light/60 p-3">
               <p className="text-xs text-gray">تراکنش موفق / ناموفق</p>
               <p className="text-lg font-bold">
-                {summary.transactions.paid} / {summary.transactions.failed}
+                {summary.transactions?.paid ?? 0} / {summary.transactions?.failed ?? 0}
               </p>
             </div>
           </div>
