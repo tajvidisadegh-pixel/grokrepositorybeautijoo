@@ -3,8 +3,9 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'scripts/patch_frontend_lint.py'
+      - 'scripts/patch_frontend_lint3.py'
       - 'scripts/patch_frontend_lint2.py'
+      - 'scripts/patch_frontend_lint.py'
       - '.github/workflows/fix-frontend-lint.yml'
 jobs:
   run:
@@ -14,12 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          if [ -f scripts/patch_frontend_lint.py ]; then python3 scripts/patch_frontend_lint.py || true; fi
-          if [ -f scripts/patch_frontend_lint2.py ]; then python3 scripts/patch_frontend_lint2.py || true; fi
+          if [ -f scripts/patch_frontend_lint3.py ]; then python3 scripts/patch_frontend_lint3.py; fi
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/profile/complete/page.tsx frontend/src/app/zibagar/services/page.tsx frontend/src/lib/auth-storage.ts || true
-          git commit -m "fix(frontend): remove remaining unused imports for next build" || exit 0
+          git add frontend/src/app/admin/professionals/page.tsx frontend/src/app/admin/media/page.tsx frontend/src/app/admin/users/page.tsx frontend/src/app/admin/site-builder/page.tsx frontend/src/lib/auth-storage.ts || true
+          git commit -m "fix(frontend): ESLint no-explicit-any and unused vars for next build" || exit 0
           git push origin HEAD:main
