@@ -11,23 +11,25 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Add IsUUID import
+      - name: Force IsUUID in imports
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('backend/src/admin/admin.controller.ts')
           t = p.read_text()
-          if 'IsUUID' not in t.split('from')[0] and "from 'class-validator'" in t:
-              t = t.replace('IsArray,', 'IsArray,\n  IsUUID,')
+          # only fix import block if IsUUID not already imported
+          if "IsUUID," not in t and "IsUUID }" not in t:
+              t = t.replace(
+                  "  IsArray,\n  ArrayMinSize,",
+                  "  IsArray,\n  IsUUID,\n  ArrayMinSize,",
+              )
               p.write_text(t)
-              print('added IsUUID')
+              print('fixed')
           else:
-              print('already has IsUUID or structure different')
-              # force check
-              if 'IsUUID' not in t:
-                  t = t.replace("  IsArray,\n  ArrayMinSize,", "  IsArray,\n  IsUUID,\n  ArrayMinSize,")
-                  p.write_text(t)
-                  print('forced')
+              print('already imported')
+          # verify
+          block = t.split("from 'class-validator'")[0][-200:]
+          print('import tail:', repr(block))
           PY
       - name: Commit
         run: |
