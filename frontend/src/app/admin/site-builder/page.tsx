@@ -126,7 +126,9 @@ async function uploadCmsImage(file: File, slot: string): Promise<string> {
   if (url.startsWith('/')) {
     try {
       const origin = new URL(API_URL).origin;
-      url = `${origin}${url}`;
+      if (url.startsWith('/files/')) url = `${origin}/api/v1${url}`;
+      else if (url.startsWith('/api/')) url = `${origin}${url}`;
+      else url = `${origin}${url}`;
     } catch {
       /* keep relative */
     }
