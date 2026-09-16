@@ -4,6 +4,7 @@ import { AdminController } from './admin.controller';
 import { AdminProfessionalsExtraController } from './admin-professionals-extra.controller';
 import { AdminSiteCmsController } from './admin-site-cms.controller';
 import { PublicSiteController } from './public-site.controller';
+import { AdminCatalogController } from './admin-catalog.controller';
 
 @Module({
   controllers: [
@@ -11,6 +12,7 @@ import { PublicSiteController } from './public-site.controller';
     AdminProfessionalsExtraController,
     AdminSiteCmsController,
     PublicSiteController,
+    AdminCatalogController,
   ],
   providers: [AdminService],
   exports: [AdminService],
