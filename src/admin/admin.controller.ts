@@ -100,7 +100,8 @@ class RolesDto {
 
 class BulkDeleteUsersDto {
   @IsArray()
-  @IsUUID('4', { each: true })
+  @ArrayMinSize(1)
+  @IsString({ each: true })
   userIds!: string[];
 }
 
