@@ -162,6 +162,18 @@ export class AdminController {
     return this.service.getFailedTransactionsAlert();
   }
 
+  @Post('finance/settings/commission')
+  setCommissionPost(@Body() dto: CommissionDto, @CurrentUser('id') actorId?: string) {
+    return this.service.updateCommissionSetting(dto.rate, actorId);
+  }
+
+  @Post('finance/failed-alert/threshold')
+  setFailedThreshold(@Body() body: { threshold?: number }, @CurrentUser('id') actorId?: string) {
+    return this.service.setFailedTransactionsThreshold(Number(body?.threshold ?? 0), actorId);
+  }
+
+
+
   @Get('users')
   listUsers(
     @Query('page') page?: string,
