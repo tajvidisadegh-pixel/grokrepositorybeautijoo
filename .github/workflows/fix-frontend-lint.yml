@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'scripts/patch_pro_userid.py'
+      - 'scripts/patch_settokens.py'
       - '.github/workflows/fix-frontend-lint.yml'
 jobs:
   run:
@@ -12,11 +12,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: python3 scripts/patch_pro_userid.py
+      - run: python3 scripts/patch_settokens.py
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/lib/panel-api.ts frontend/src/app/admin/professionals/page.tsx
-          git commit -m "fix(frontend): AdminProfessional.userId/user.id for notify build" || exit 0
+          git add frontend/src/lib/auth-storage.ts
+          git commit -m "fix(frontend): restore setTokens(access, refresh?) signature" || exit 0
           git push origin HEAD:main
