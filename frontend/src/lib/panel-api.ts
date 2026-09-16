@@ -305,10 +305,11 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
   form.append('file', file);
   form.append('kind', kind);
   if (professionalServiceId) form.append('professionalServiceId', professionalServiceId);
-  const res = await fetch(`${API_URL}/professionals/me/media`, {
+  const res = await fetch(`${API_URL}/professionals/me/media/upload`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
+    credentials: 'include',
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
