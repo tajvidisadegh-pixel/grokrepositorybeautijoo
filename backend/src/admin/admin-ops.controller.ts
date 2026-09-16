@@ -185,7 +185,18 @@ export class AdminOpsController {
     const pro = await this.prisma.professional.create({
       data: { userId: user.id, slug, title: (body.title || body.displayName || 'زیباگر').trim(), status: 'draft' as any },
     });
-    await this.audit(actorId, 'professional.create', 'professional', pro.id, { phone, slug });
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId || null,
+          action: 'professional.create',
+          entityType: 'professional',
+          entityId: pro.id,
+          before: null,
+          after: { phone, slug } as any,
+        },
+      });
+    } catch { /* non-blocking */ }
     return pro;
   }
 
