@@ -21,8 +21,52 @@ export class AdminOpsController {
 
   @Get('content')
   async getContent() {
-    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_content' } });
-    return (row?.value as object) ?? { hero: {}, texts: {}, features: {} };
+    const [draftRow, publishedRow] = await Promise.all([
+      this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_content' } }),
+      this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_published' } }),
+    ]);
+    const empty = { hero: {}, texts: {}, features: {} };
+    const draftRaw = (draftRow?.value as any) || {};
+    // Accept either flat {hero,texts,features} or nested {content:{...}}
+    const draft = {
+      hero: draftRaw.hero ?? draftRaw.content?.hero ?? {},
+      texts: draftRaw.texts ?? draftRaw.content?.texts ?? {},
+      features: draftRaw.features ?? draftRaw.content?.features ?? {},
+      updatedAt: draftRaw.updatedAt ?? null,
+    };
+    const pubRaw = (publishedRow?.value as any) || {};
+    const publishedContent = pubRaw.content || {
+      hero: pubRaw.hero || {},
+      texts: pubRaw.texts || {},
+      features: pubRaw.features || {},
+    };
+    const published = publishedRow
+      ? {
+          hero: publishedContent.hero || {},
+          texts: publishedContent.texts || {},
+          features: publishedContent.features || {},
+          publishedAt: pubRaw.publishedAt || null,
+          updatedAt: pubRaw.updatedAt || pubRaw.publishedAt || null,
+        }
+      : null;
+    const hasUnpublishedChanges =
+      JSON.stringify({
+        hero: draft.hero || {},
+        texts: draft.texts || {},
+        features: draft.features || {},
+      }) !==
+      JSON.stringify({
+        hero: published?.hero || {},
+        texts: published?.texts || {},
+        features: published?.features || {},
+      });
+    return {
+      draft: Object.keys(draft.hero || {}).length || Object.keys(draft.texts || {}).length || Object.keys(draft.features || {}).length
+        ? draft
+        : (Object.keys(empty).length ? { ...empty, ...draft } : empty),
+      published,
+      hasUnpublishedChanges: published ? hasUnpublishedChanges : true,
+    };
   }
 
   @Put('content')
@@ -34,10 +78,24 @@ export class AdminOpsController {
 
   @Get('site-builder')
   async getSiteBuilder() {
-    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_sections' } });
-    const val = row?.value as any;
-    if (Array.isArray(val)) return val;
-    return Array.isArray(val?.sections) ? val.sections : [];
+    const [draftRow, publishedRow] = await Promise.all([
+      this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_sections' } }),
+      this.prisma.platformSetting.findUnique({ where: { key: 'site_cms_published' } }),
+    ]);
+    const normalize = (val: any): any[] => {
+      if (Array.isArray(val)) return val;
+      if (Array.isArray(val?.sections)) return val.sections;
+      return [];
+    };
+    const draftSections = normalize(draftRow?.value);
+    const publishedSections = normalize((publishedRow?.value as any)?.sections);
+    const hasUnpublishedChanges =
+      JSON.stringify(draftSections) !== JSON.stringify(publishedSections);
+    return {
+      draft: { sections: draftSections },
+      published: publishedRow ? { sections: publishedSections } : null,
+      hasUnpublishedChanges: publishedRow ? hasUnpublishedChanges : true,
+    };
   }
 
   @Put('site-builder')
