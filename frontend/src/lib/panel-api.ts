@@ -72,7 +72,8 @@ export type AdminProfessional = {
   id: string; slug: string; title?: string | null; status: string; isFeatured?: boolean;
   ratingAvg?: number | string | null; ratingCount?: number | null; createdAt?: string; publishedAt?: string | null;
   city?: string | null; specialties?: string[]; bookingCount?: number; reviewCount?: number; mediaCount?: number;
-  user?: { phone?: string | null; profile?: { displayName?: string | null; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null } | null } | null;
+  userId?: string | null;
+  user?: { id?: string; phone?: string | null; profile?: { displayName?: string | null; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null } | null } | null;
 };
 export type AdminProfessionalsQueue = {
   pendingProfessionals?: number; pendingMedia?: number; incompleteProfiles?: number; draftProfessionals?: number; suspendedProfessionals?: number;

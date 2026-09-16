@@ -97,7 +97,7 @@ export default function AdminProfessionalsPage() {
     if (title == null) return;
     const body = window.prompt('متن اعلان', '');
     if (body == null || !String(body).trim()) return;
-    const userId = (p as { userId?: string; user?: { id?: string } }).userId || p.user?.id;
+    const userId = p.userId || p.user?.id;
     if (!userId) { setError('شناسه کاربر زیباگر یافت نشد'); return; }
     setBusyId(p.id); setError(null); setMsg(null);
     try {
