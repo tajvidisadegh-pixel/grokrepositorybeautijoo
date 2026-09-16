@@ -12,7 +12,6 @@ export type CompletionFieldKey =
   | 'title'
   | 'firstName'
   | 'lastName'
-  | 'bio'
   | 'avatarOrCover'
   | 'location'
   | 'service'
@@ -28,7 +27,6 @@ const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
   title: '\u0639\u0646\u0648\u0627\u0646 \u062d\u0631\u0641\u0647\u200c\u0627\u06cc',
   firstName: '\u0646\u0627\u0645',
   lastName: '\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc',
-  bio: '\u0645\u0639\u0631\u0641\u06cc / \u0628\u06cc\u0648',
   avatarOrCover: '\u062a\u0635\u0648\u06cc\u0631 \u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627 \u06a9\u0627\u0648\u0631',
   location: '\u0645\u0648\u0642\u0639\u06cc\u062a \u0645\u06a9\u0627\u0646\u06cc',
   service: '\u062d\u062f\u0627\u0642\u0644 \u06cc\u06a9 \u062a\u062e\u0635\u0635',
@@ -49,7 +47,6 @@ export class ProfessionalsService {
     if (params.q) {
       where.OR = [
         { title: { contains: params.q, mode: 'insensitive' } },
-        { bio: { contains: params.q, mode: 'insensitive' } },
         { slug: { contains: params.q, mode: 'insensitive' } },
       ];
     }
@@ -236,8 +233,6 @@ export class ProfessionalsService {
     const hasTitle = !!(pro.title && pro.title.trim().length >= 2);
     const hasFirst = !!(profile?.firstName && profile.firstName.trim());
     const hasLast = !!(profile?.lastName && profile.lastName.trim());
-    // Bio is optional — never blocks completion to 100%
-    const hasBio = true;
     const hasImage = !!(
       (pro.coverImageUrl && pro.coverImageUrl.trim()) ||
       ((pro as { logoUrl?: string | null }).logoUrl && String((pro as { logoUrl?: string | null }).logoUrl).trim()) ||
@@ -259,13 +254,12 @@ export class ProfessionalsService {
       { key: 'title', label: COMPLETION_LABELS.title, done: hasTitle },
       { key: 'firstName', label: COMPLETION_LABELS.firstName, done: hasFirst },
       { key: 'lastName', label: COMPLETION_LABELS.lastName, done: hasLast },
-      { key: 'bio', label: COMPLETION_LABELS.bio + ' (اختیاری)', done: hasBio },
       { key: 'avatarOrCover', label: COMPLETION_LABELS.avatarOrCover, done: hasImage },
       { key: 'location', label: COMPLETION_LABELS.location, done: hasLocation },
       { key: 'service', label: COMPLETION_LABELS.service, done: hasService },
       { key: 'workingHours', label: COMPLETION_LABELS.workingHours, done: hasHours },
     ];
-    const required = fields.filter((f) => f.key !== 'bio');
+    const required = fields;
     const doneCount = required.filter((f) => f.done).length;
     const percent = Math.round((doneCount / required.length) * 100);
     return { percent, complete: percent === 100, fields };
@@ -277,7 +271,7 @@ export class ProfessionalsService {
         select: {
           profile: {
             select: {
-              displayName: true, firstName: true, lastName: true, avatarUrl: true, bio: true,
+              displayName: true, firstName: true, lastName: true, avatarUrl: true,
             },
           },
         },
