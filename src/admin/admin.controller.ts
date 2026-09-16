@@ -37,6 +37,7 @@ import {
   IsString,
   IsBoolean,
   IsArray,
+  IsUUID,
   ArrayMinSize,
 } from 'class-validator';
 
