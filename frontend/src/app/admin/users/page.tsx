@@ -356,42 +356,55 @@ export default function AdminUsersPage() {
       {items.length === 0 ? (
         <PanelEmpty title="مشتری‌ای یافت نشد" />
       ) : (
-        <ul className="space-y-3">
-          {items.map((u) => (
-            <li key={u.id}>
-              <Card className="space-y-3 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex items-start gap-3">
-                    <input type="checkbox" className="mt-1" checked={selected.has(u.id)} onChange={() => toggleSelect(u.id)} />
-                    <div>
-                      <p className="font-semibold">{u.profile?.displayName || u.profile?.firstName || 'بدون نام'}</p>
-                      <p className="text-xs text-gray" dir="ltr">{u.phone || '—'}</p>
-                      <p className="text-xs text-gray">
-                        عضویت: {formatDate(u.createdAt, { style: 'short' })}
-                        {u.bookingCount != null ? ` · رزرو: ${u.bookingCount}` : ''}
-                      </p>
+        <div className="overflow-x-auto rounded-xl border border-border bg-white">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50 text-right text-xs text-gray-600">
+                <th className="px-3 py-2 font-medium">
+                  <input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleSelectAll} />
+                </th>
+                <th className="px-3 py-2 font-medium">نام</th>
+                <th className="px-3 py-2 font-medium">موبایل</th>
+                <th className="px-3 py-2 font-medium">وضعیت</th>
+                <th className="px-3 py-2 font-medium">رزرو</th>
+                <th className="px-3 py-2 font-medium">عضویت</th>
+                <th className="px-3 py-2 font-medium">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((u) => (
+                <tr key={u.id} className="border-b last:border-0 hover:bg-gray-50/80">
+                  <td className="px-3 py-2">
+                    <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggleSelect(u.id)} />
+                  </td>
+                  <td className="px-3 py-2 font-medium">{u.profile?.displayName || u.profile?.firstName || 'بدون نام'}</td>
+                  <td className="px-3 py-2" dir="ltr">{u.phone || '—'}</td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                      u.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {STATUS_LABEL[u.status || ''] || u.status || '—'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">{u.bookingCount != null ? u.bookingCount : '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{formatDate(u.createdAt, { style: 'short' })}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      <button type="button" className="rounded border px-2 py-0.5 text-xs" onClick={() => openDetail(u.id)}>جزئیات</button>
+                      <button type="button" className="rounded border px-2 py-0.5 text-xs" onClick={() => openNotify([u.id])}>اعلان</button>
+                      {u.status === 'active' ? (
+                        <button type="button" className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-700" disabled={busy} onClick={() => changeStatus(u.id, 'suspended')}>مسدود</button>
+                      ) : (
+                        <button type="button" className="rounded border border-green-300 px-2 py-0.5 text-xs text-green-700" disabled={busy} onClick={() => changeStatus(u.id, 'active')}>فعال</button>
+                      )}
+                      <button type="button" className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700" disabled={busy} onClick={() => removeOne(u.id)}>حذف</button>
                     </div>
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs ${
-                    u.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {STATUS_LABEL[u.status || ''] || u.status || '—'}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className="rounded border px-3 py-1 text-xs" onClick={() => openDetail(u.id)}>جزئیات / ویرایش</button>
-                  <button type="button" className="rounded border px-3 py-1 text-xs" onClick={() => openNotify([u.id])}>اعلان</button>
-                  {u.status === 'active' ? (
-                    <button type="button" className="rounded border border-red-300 px-3 py-1 text-xs text-red-700" disabled={busy} onClick={() => changeStatus(u.id, 'suspended')}>مسدود</button>
-                  ) : (
-                    <button type="button" className="rounded border border-green-300 px-3 py-1 text-xs text-green-700" disabled={busy} onClick={() => changeStatus(u.id, 'active')}>فعال‌سازی</button>
-                  )}
-                  <button type="button" className="rounded border border-red-500 px-3 py-1 text-xs text-red-700" disabled={busy} onClick={() => removeOne(u.id)}>حذف کامل</button>
-                </div>
-              </Card>
-            </li>
-          ))}
-        </ul>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {items.length > 0 && (

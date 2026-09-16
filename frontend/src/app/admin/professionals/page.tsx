@@ -14,6 +14,7 @@ import {
 } from '@/lib/panel-api';
 import { persianProfessionalStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
+import { apiClient } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 
 const STATUSES = [
@@ -83,6 +84,20 @@ export default function AdminProfessionalsPage() {
     try {
       await adminSetProfessionalStatus(id, next);
       setMsg('وضعیت به‌روز شد');
+      await load();
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onDelete(id: string) {
+    if (!window.confirm('حذف کامل این زیباگر؟ رزروها و نظرات مرتبط حذف می‌شوند.')) return;
+    setBusyId(id); setError(null); setMsg(null);
+    try {
+      await apiClient.delete(`/admin/professionals/${id}`);
+      setMsg('زیباگر حذف شد');
       await load();
     } catch (e) {
       setError(friendlyApiError(e));
@@ -161,47 +176,64 @@ export default function AdminProfessionalsPage() {
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {msg && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700">{msg}</p>}
 
-      {items.length === 0 ? (
+      {loading ? <PanelLoading /> : items.length === 0 ? (
         <PanelEmpty title="زیباگری یافت نشد" />
       ) : (
-        <ul className="space-y-3">
-          {items.map((p) => (
-            <li key={p.id}>
-              <Card className="space-y-3 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <Link href={`/admin/professionals/${p.id}`} className="font-semibold text-coral hover:underline">
+        <div className="overflow-x-auto rounded-xl border border-border bg-white">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50 text-right text-xs text-gray-600">
+                <th className="px-3 py-2 font-medium">نام / عنوان</th>
+                <th className="px-3 py-2 font-medium">موبایل</th>
+                <th className="px-3 py-2 font-medium">شهر</th>
+                <th className="px-3 py-2 font-medium">امتیاز</th>
+                <th className="px-3 py-2 font-medium">وضعیت</th>
+                <th className="px-3 py-2 font-medium">عضویت</th>
+                <th className="px-3 py-2 font-medium">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((p) => (
+                <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/80">
+                  <td className="px-3 py-2">
+                    <Link href={`/admin/professionals/${p.id}`} className="font-medium text-coral hover:underline">
                       {p.user?.profile?.displayName || p.title || p.slug}
                     </Link>
-                    <p className="text-xs text-gray" dir="ltr">{p.slug} · {p.user?.phone || ''}</p>
-                    <p className="text-xs text-gray">
-                      {p.city || '—'} · امتیاز {p.ratingAvg != null ? Number(p.ratingAvg).toFixed(1) : '—'} ({p.ratingCount ?? 0})
-                      {p.createdAt ? ` · ${formatDate(p.createdAt)}` : ''}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-coral-soft px-3 py-1 text-xs text-coral">{persianProfessionalStatus(p.status)}</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link href={`/admin/professionals/${p.id}`}>
-                    <Button size="sm" variant="outline">جزئیات</Button>
-                  </Link>
-                  {p.status !== 'approved' && (
-                    <Button size="sm" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
-                  )}
-                  {p.status !== 'rejected' && (
-                    <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onStatus(p.id, 'rejected')}>رد</Button>
-                  )}
-                  {p.status !== 'suspended' && (
-                    <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onStatus(p.id, 'suspended')}>تعلیق</Button>
-                  )}
-                  <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onFeatured(p.id, !p.isFeatured)}>
-                    {p.isFeatured ? 'حذف ویژه' : 'ویژه'}
-                  </Button>
-                </div>
-              </Card>
-            </li>
-          ))}
-        </ul>
+                    <div className="text-xs text-gray" dir="ltr">{p.slug}</div>
+                  </td>
+                  <td className="px-3 py-2" dir="ltr">{p.user?.phone || '—'}</td>
+                  <td className="px-3 py-2">{p.city || '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {p.ratingAvg != null ? Number(p.ratingAvg).toFixed(1) : '—'} ({p.ratingCount ?? 0})
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="rounded-full bg-coral-soft px-2 py-0.5 text-xs text-coral">{persianProfessionalStatus(p.status)}</span>
+                    {p.isFeatured ? <span className="mr-1 text-xs text-amber-600">ویژه</span> : null}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">{p.createdAt ? formatDate(p.createdAt) : '—'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      <Link href={`/admin/professionals/${p.id}`}><Button size="sm" variant="outline">جزئیات</Button></Link>
+                      {p.status !== 'approved' && (
+                        <Button size="sm" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
+                      )}
+                      {p.status !== 'rejected' && (
+                        <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onStatus(p.id, 'rejected')}>رد</Button>
+                      )}
+                      {p.status !== 'suspended' && (
+                        <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onStatus(p.id, 'suspended')}>تعلیق</Button>
+                      )}
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onFeatured(p.id, !p.isFeatured)}>
+                        {p.isFeatured ? 'حذف ویژه' : 'ویژه'}
+                      </Button>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {meta.totalPages > 1 && (
