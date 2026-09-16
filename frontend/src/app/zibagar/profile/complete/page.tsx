@@ -23,7 +23,6 @@ import LocationMapPicker, { type MapPosition } from '@/components/location/locat
 
 const STEPS: WizardStep[] = [
   { id: 'basic', label: 'اطلاعات پایه' },
-  { id: 'contact', label: 'معرفی' },
   { id: 'media', label: 'تصاویر' },
   { id: 'location', label: 'موقعیت' },
   { id: 'services', label: 'تخصص‌ها' },
@@ -58,7 +57,6 @@ export default function ProfileCompletePage() {
   const [title, setTitle] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [coverImageUrl, setCoverImageUrl] = useState('');
   const [uploading, setUploading] = useState<string | null>(null);
@@ -97,7 +95,6 @@ export default function ProfileCompletePage() {
       setTitle(data.title || '');
       setFirstName(data.user?.profile?.firstName || '');
       setLastName(data.user?.profile?.lastName || '');
-      setBio(data.bio || data.user?.profile?.bio || '');
       setAvatarUrl(resolveMediaUrl(data.user?.profile?.avatarUrl || ''));
       setCoverImageUrl(resolveMediaUrl(data.coverImageUrl || ''));
       if (Array.isArray(data.selectedCategoryIds) && data.selectedCategoryIds.length) {
@@ -118,7 +115,7 @@ export default function ProfileCompletePage() {
       if (!resumeApplied.current) {
         resumeApplied.current = true;
         const fields = data.completion?.fields || [];
-        const order = ['title','firstName','lastName','bio','avatarOrCover','location','service','workingHours'];
+        const order = ['title','firstName','lastName','avatarOrCover','location','service','workingHours'];
         let resume = 0;
         for (let i = 0; i < order.length; i++) {
           const f = fields.find((x) => x.key === order[i]);
@@ -127,11 +124,10 @@ export default function ProfileCompletePage() {
             else if (i === 3) resume = 1;
             else if (i === 4) resume = 2;
             else if (i === 5) resume = 3;
-            else if (i === 6) resume = 4;
-            else resume = 5;
+            else resume = 4;
             break;
           }
-          if (i === order.length - 1 && data.completion?.complete) resume = 6;
+          if (i === order.length - 1 && data.completion?.complete) resume = 5;
         }
         setStep(resume);
       }
@@ -144,7 +140,7 @@ export default function ProfileCompletePage() {
 
   useEffect(() => { if (!authLoading && user) load(); }, [authLoading, user, load]);
   useEffect(() => {
-    if (step === 4) {
+    if (step === 3) {
       fetchCategories()
         .then((cats) => {
           const roots = (cats || []).filter((c) => !c.parentId);
@@ -178,20 +174,6 @@ export default function ProfileCompletePage() {
     }
   }
 
-  async function saveContact() {
-    setSaving(true); setError(null); setMsg(null);
-    try {
-      const data = await updateMyProfessional({ bio: bio.trim() });
-      setPro(data); setCompletion(data.completion || null);
-      setMsg('ذخیره شد');
-      return true;
-    } catch (e) {
-      setError(friendlyApiError(e));
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function saveMedia() {
     setSaving(true); setError(null); setMsg(null);
@@ -292,11 +274,10 @@ export default function ProfileCompletePage() {
   async function onNext() {
     let ok = true;
     if (step === 0) ok = await saveBasic();
-    else if (step === 1) ok = await saveContact();
-    else if (step === 2) ok = await saveMedia();
-    else if (step === 3) ok = await saveLocation();
-    else if (step === 4) ok = await saveService();
-    else if (step === 5) ok = await saveHours();
+    else if (step === 1) ok = await saveMedia();
+    else if (step === 2) ok = await saveLocation();
+    else if (step === 3) ok = await saveService();
+    else if (step === 4) ok = await saveHours();
     if (ok) setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
 
@@ -350,15 +331,6 @@ export default function ProfileCompletePage() {
       )}
       {step === 1 && (
         <Card className="space-y-4">
-          <h2 className="font-semibold">معرفی / بیو</h2>
-          <p className="text-xs text-gray">اختیاری — بدون بیو هم می‌توانید پروفایل را کامل کنید.</p>
-          <label className="block space-y-1 text-sm">درباره شما
-            <textarea className="w-full rounded-xl border border-border p-3 text-sm" rows={4}
-              value={bio} onChange={(e) => setBio(e.target.value)} placeholder="اختیاری" /></label>
-        </Card>
-      )}
-      {step === 2 && (
-        <Card className="space-y-4">
           <h2 className="font-semibold">تصاویر پروفایل</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {([
@@ -408,7 +380,7 @@ export default function ProfileCompletePage() {
           </div>
         </Card>
       )}
-      {step === 3 && (
+      {step === 2 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">موقعیت محل فعالیت</h2>
           <p className="text-xs text-gray">استان و شهر الزامی است.</p>
@@ -455,7 +427,7 @@ export default function ProfileCompletePage() {
           </div>
         </Card>
       )}
-      {step === 4 && (
+      {step === 3 && (
         <Card className="space-y-4">
           <h2 className="font-semibold text-[#0B2C4A]">تخصص خودت را انتخاب کن</h2>
           {!rootCategories.length ? (
@@ -476,7 +448,7 @@ export default function ProfileCompletePage() {
           <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده</p>
         </Card>
       )}
-      {step === 5 && (
+      {step === 4 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">ساعات کاری</h2>
           <div className="flex flex-wrap gap-2">
@@ -495,7 +467,7 @@ export default function ProfileCompletePage() {
           </div>
         </Card>
       )}
-      {step === 6 && (
+      {step === 5 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">بررسی نهایی</h2>
           <p className="text-sm text-gray">پیشرفت: {percent}٪ {isPublished ? '· منتشر شده' : ''}</p>
