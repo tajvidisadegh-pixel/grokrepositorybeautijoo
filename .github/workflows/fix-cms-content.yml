@@ -1,0 +1,23 @@
+name: Fix CMS content API shape
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/fix_cms_content_api.py'
+      - '.github/workflows/fix-cms-content.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_cms_content_api.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin-ops.controller.ts backend/src/admin/admin.service.ts
+          git status
+          git commit -m "fix: return draft/published shape for site CMS content API" || exit 0
+          git push origin HEAD:main
