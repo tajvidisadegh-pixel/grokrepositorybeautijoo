@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'scripts/patch_finance.py'
+      - 'scripts/patch_fin_ctrl.py'
       - '.github/workflows/fix-finance.yml'
 jobs:
   run:
@@ -12,12 +13,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: python3 scripts/patch_finance.py
+      - name: Apply patches
+        run: |
+          if [ -f scripts/patch_finance.py ]; then python3 scripts/patch_finance.py || true; fi
+          if [ -f scripts/patch_fin_ctrl.py ]; then python3 scripts/patch_fin_ctrl.py || true; fi
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/admin/admin.service.ts backend/src/admin/admin.controller.ts frontend/src/app/admin/finance/page.tsx
           git status
-          git commit -m "fix(admin): complete finance summary/transactions/alerts for panel" || exit 0
+          git commit -m "fix(admin): finance POST routes + defensive UI" || exit 0
           git push origin HEAD:main
