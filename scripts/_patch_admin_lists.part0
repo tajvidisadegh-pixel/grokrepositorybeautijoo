@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import re
+
+# --- service methods ---
+svc = Path('backend/src/admin/admin.service.ts')
+st = svc.read_text()
+if 'hardDeleteUser' not in st:
+    methods = '''
+  async hardDeleteUser(id: string, actorId?: string) {
+    const existing = await this.prisma.user.findUnique({ where: { id }, include: { professional: true } });
+    if (!existing) throw new NotFoundException('User not found');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.review.deleteMany({ where: { customerId: id } });
+      await tx.booking.deleteMany({ where: { customerId: id } });
+      if (existing.professional) {
+        const pid = existing.professional.id;
+        await tx.review.deleteMany({ where: { professionalId: pid } });
+        await tx.booking.deleteMany({ where: { professionalId: pid } });
+        await tx.professional.delete({ where: { id: pid } });
+      }
+      await tx.user.delete({ where: { id } });
+    });
+    await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone }, null);
+    return { id, deleted: true };
+  }
+
+  async bulkHardDeleteUsers(userIds: string[], actorId?: string) {
+    const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+    let deleted = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.hardDeleteUser(id, actorId);
+        deleted += 1;
+      } catch {
+        failed.push(id);
+      }
+    }
+    return { deleted, failed };
+  }
+
+  async hardDeleteProfessional(id: string, actorId?: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { id } });
+    if (!pro) throw new NotFoundException('Professional not found');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.review.deleteMany({ where: { professionalId: id } });
+      await tx.booking.deleteMany({ where: { professionalId: id } });
+      await tx.professional.delete({ where: { id } });
+    });
+    await this.audit(actorId, 'professional.hard_delete', 'professional', id, { userId: pro.userId, slug: pro.slug }, null);
+    return { id, deleted: true };
+  }
+
+'''
+    if 'async deleteMedia' in st:
+        st = st.replace('  async deleteMedia', methods + '  async deleteMedia')
+    else:
+        st = st.rstrip()
+        if st.endswith('}'):
+            st = st[:-1] + methods + '}\n'
+    svc.write_text(st)
+    print('service ok')
+else:
+    print('service skip')
+
+# --- controller routes ---
+ctrl = Path('backend/src/admin/admin.controller.ts')
+ct = ctrl.read_text()
+if "@Delete('users/:id')" not in ct:
+    if 'IsArray' not in ct:
+        ct = ct.replace('IsEnum,', 'IsArray,\n  IsEnum,')
+    if 'Delete,' not in ct and re.search(r'\bDelete\b', ct.split('from')[0]) is None:
+        ct = re.sub(r'(Patch,)', r'Delete,\n  \1', ct, count=1)
+    if 'BulkDeleteUsersDto' not in ct:
+        ct = ct.replace(
+            "@ApiTags('admin')",
+            "class BulkDeleteUsersDto {\n  @IsArray()\n  @IsUUID('4', { each: true })\n  userIds!: string[];\n}\n\n@ApiTags('admin')",
+        )
+    routes = '''
+  @Delete('users/:id')
+  hardDeleteUser(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    return this.service.hardDeleteUser(id, actorId);
+  }
+
+  @Post('users/bulk-delete')
+  bulkHardDeleteUsers(@Body() dto: BulkDeleteUsersDto, @CurrentUser('id') actorId?: string) {
+    return this.service.bulkHardDeleteUsers(dto.userIds, actorId);
+  }
+
+  @Delete('professionals/:id')
+  hardDeleteProfessional(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    return this.service.hardDeleteProfessional(id, actorId);
+  }
+
+'''
+    marker = "setUserRoles(id, dto.roles, actorId);\n  }"
+    if marker in ct:
+        ct = ct.replace(marker, marker + '\n' + routes, 1)
+    else:
+        ct = ct.replace("@Get('professionals')", routes + "  @Get('professionals')", 1)
+    ctrl.write_text(ct)
+    print('controller ok')
+else:
+    print('controller skip')

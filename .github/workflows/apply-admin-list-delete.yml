@@ -3,7 +3,9 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'scripts/_patch_admin_lists.py'
+      - 'scripts/_patch_admin_lists.part0'
+      - 'scripts/_patch_admin_lists.part1'
+      - 'scripts/_patch_admin_lists.part2'
       - '.github/workflows/apply-admin-list-delete.yml'
 jobs:
   run:
@@ -12,8 +14,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Run patch
-        run: python3 scripts/_patch_admin_lists.py
+      - name: Assemble and run patch
+        run: |
+          cat scripts/_patch_admin_lists.part0 scripts/_patch_admin_lists.part1 scripts/_patch_admin_lists.part2 > scripts/_patch_admin_lists.py
+          python3 scripts/_patch_admin_lists.py
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
