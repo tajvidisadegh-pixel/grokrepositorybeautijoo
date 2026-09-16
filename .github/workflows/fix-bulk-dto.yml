@@ -1,0 +1,37 @@
+name: Fix bulk DTO
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-bulk-dto.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch DTO
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/admin/admin.controller.ts')
+          t = p.read_text()
+          t = t.replace(
+          "class BulkDeleteUsersDto {\n  @IsArray()\n  @IsUUID('4', { each: true })\n  userIds!: string[];\n}",
+          "class BulkDeleteUsersDto {\n  @IsArray()\n  @ArrayMinSize(1)\n  @IsString({ each: true })\n  userIds!: string[];\n}",
+          )
+          # also add IsUUID import just in case
+          if 'IsUUID' not in t.split("from 'class-validator'")[0]:
+              t = t.replace('  IsArray,\n  ArrayMinSize,', '  IsArray,\n  IsUUID,\n  ArrayMinSize,')
+          p.write_text(t)
+          print('patched')
+          print([line for line in t.splitlines() if 'BulkDelete' in line or 'userIds' in line or 'IsUUID' in line][:10])
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.controller.ts
+          git commit -m "fix(admin): BulkDeleteUsersDto without IsUUID import issue" || exit 0
+          git push origin HEAD:main
