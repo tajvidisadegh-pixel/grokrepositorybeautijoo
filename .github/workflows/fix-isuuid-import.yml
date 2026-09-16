@@ -1,0 +1,38 @@
+name: Fix IsUUID import
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-isuuid-import.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add IsUUID import
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/admin/admin.controller.ts')
+          t = p.read_text()
+          if 'IsUUID' not in t.split('from')[0] and "from 'class-validator'" in t:
+              t = t.replace('IsArray,', 'IsArray,\n  IsUUID,')
+              p.write_text(t)
+              print('added IsUUID')
+          else:
+              print('already has IsUUID or structure different')
+              # force check
+              if 'IsUUID' not in t:
+                  t = t.replace("  IsArray,\n  ArrayMinSize,", "  IsArray,\n  IsUUID,\n  ArrayMinSize,")
+                  p.write_text(t)
+                  print('forced')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.controller.ts
+          git commit -m "fix(admin): import IsUUID for BulkDeleteUsersDto" || exit 0
+          git push origin HEAD:main
