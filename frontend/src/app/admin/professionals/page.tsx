@@ -14,6 +14,7 @@ import {
 } from '@/lib/panel-api';
 import { persianProfessionalStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
+import { adminNotifyUsers } from '@/lib/panel-api';
 import { apiClient } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 
@@ -85,6 +86,24 @@ export default function AdminProfessionalsPage() {
       await adminSetProfessionalStatus(id, next);
       setMsg('وضعیت به‌روز شد');
       await load();
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onNotify(p: AdminProfessional) {
+    const title = window.prompt('عنوان اعلان', 'پیام مدیریت');
+    if (title == null) return;
+    const body = window.prompt('متن اعلان', '');
+    if (body == null || !String(body).trim()) return;
+    const userId = (p as any).userId || (p as any).user?.id;
+    if (!userId) { setError('شناسه کاربر زیباگر یافت نشد'); return; }
+    setBusyId(p.id); setError(null); setMsg(null);
+    try {
+      const res = await adminNotifyUsers({ userIds: [userId], title: title.trim(), body: String(body).trim() });
+      setMsg('اعلان ارسال شد (' + String(res.notified ?? 1) + ')');
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -213,19 +232,13 @@ export default function AdminProfessionalsPage() {
                   <td className="px-3 py-2 whitespace-nowrap">{p.createdAt ? formatDate(p.createdAt) : '—'}</td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
-                      <Link href={`/admin/professionals/${p.id}`}><Button size="sm" variant="outline">جزئیات</Button></Link>
                       {p.status !== 'approved' && (
                         <Button size="sm" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
                       )}
-                      {p.status !== 'rejected' && (
-                        <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onStatus(p.id, 'rejected')}>رد</Button>
-                      )}
-                      {p.status !== 'suspended' && (
-                        <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onStatus(p.id, 'suspended')}>تعلیق</Button>
-                      )}
-                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onFeatured(p.id, !p.isFeatured)}>
-                        {p.isFeatured ? 'حذف ویژه' : 'ویژه'}
-                      </Button>
+                      <Link href={`/admin/professionals/${p.id}`}>
+                        <Button size="sm" variant="outline">ویرایش</Button>
+                      </Link>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onNotify(p)}>اعلان</Button>
                       <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</Button>
                     </div>
                   </td>

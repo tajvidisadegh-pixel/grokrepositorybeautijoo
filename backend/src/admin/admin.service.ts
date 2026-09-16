@@ -122,7 +122,7 @@ export class AdminService {
   async listUsers(q: any) {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
-    const where: Prisma.UserWhereInput = {};
+    const where: Prisma.UserWhereInput = { professional: { is: null } };
     if (q.status) where.status = q.status;
     if (q.search?.trim()) {
       const s = String(q.search).trim();
@@ -145,10 +145,15 @@ export class AdminService {
   }
 
   async getCustomersStats() {
-    return {
-      total: await this.prisma.user.count(),
-      active: await this.prisma.user.count({ where: { status: UserStatus.active } }),
-    };
+    const base = { professional: { is: null } } as Prisma.UserWhereInput;
+    const [total, active, suspended, inactive, withBookings] = await Promise.all([
+      this.prisma.user.count({ where: base }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.active } }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.suspended } }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.inactive } }),
+      this.prisma.user.count({ where: { ...base, bookingsAsCustomer: { some: {} } } }),
+    ]);
+    return { total, active, suspended, inactive, withBookings, neverBooked: Math.max(0, total - withBookings) };
   }
 
   async getUserDetail(id: string) {
@@ -482,15 +487,12 @@ export class AdminService {
   async hardDeleteUser(id: string, actorId?: string) {
     const existing = await this.prisma.user.findUnique({ where: { id }, include: { professional: true } });
     if (!existing) throw new NotFoundException('User not found');
+    if (existing.professional) {
+      throw new BadRequestException('این حساب زیباگر است. برای حذف از بخش زیباگرها اقدام کنید.');
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { customerId: id } });
       await tx.booking.deleteMany({ where: { customerId: id } });
-      if (existing.professional) {
-        const pid = existing.professional.id;
-        await tx.review.deleteMany({ where: { professionalId: pid } });
-        await tx.booking.deleteMany({ where: { professionalId: pid } });
-        await tx.professional.delete({ where: { id: pid } });
-      }
       await tx.user.delete({ where: { id } });
     });
     await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone }, null);
