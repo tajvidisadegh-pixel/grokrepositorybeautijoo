@@ -192,7 +192,6 @@ export class AdminOpsController {
           action: 'professional.create',
           entityType: 'professional',
           entityId: pro.id,
-          before: null,
           after: { phone, slug } as any,
         },
       });
