@@ -1,0 +1,26 @@
+name: Fix CMS storage provider
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/fix_cms_storage.py'
+      - '.github/workflows/fix-cms-storage.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_cms_storage.py
+      - name: Show diff
+        run: git diff -- backend/src/admin/admin.service.ts | head -120
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts
+          # ensure only this file
+          git status
+          git commit -m "fix: use configured storage provider for CMS image uploads" || exit 0
+          git push origin HEAD:main
