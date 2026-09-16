@@ -43,7 +43,7 @@ export class ServicesService {
     for (const c of byId.values()) {
       if (c.parentId && byId.has(c.parentId)) {
         byId.get(c.parentId)!.children.push(c);
-      } else if (!c.parentId) {
+      } else {
         roots.push(c);
       }
     }

@@ -638,20 +638,32 @@ export default function ZibagarServicesPage() {
 
       {mode === 'add' && (
         <div className="space-y-3">
-          <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="نام دسته..." className="w-full" />
-          {addSearch.trim() && (
-            <div className="relative">
-              <ul className={`max-h-60 overflow-y-auto rounded-2xl border ${navy.border} bg-white p-1`}>
-                {roots.filter((r) => r.name.includes(addSearch.trim())).slice(0, 10).map((r) => (
-                  <li key={r.id}><button type="button" className="w-full rounded-xl px-3 py-2.5 text-right text-sm hover:bg-[#F3F6F9]" onClick={() => void addRootSpecialty(r.id)}>{r.name}</button></li>
-                ))}
-                {!roots.some((r) => r.name === addSearch.trim()) && (
-                  <li>
-                    <button type="button" disabled={busy} className={`w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold ${navy.title} hover:bg-[#F3F6F9]`} onClick={async () => { setBusy(true); try { const created = await createCategoryNode({ name: addSearch.trim() }); await addRootSpecialty(created.id); setAddSearch(''); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>＋ افزودن «{addSearch.trim()}»</button>
-                  </li>
-                )}
-              </ul>
-            </div>
+          <p className="text-sm text-gray-500">تخصص‌های تعریف‌شده توسط ادمین را انتخاب کنید.</p>
+          <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="جستجوی تخصص..." className="w-full" />
+          {!roots.length ? (
+            <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-gray-500">
+              هنوز تخصصی از پنل سوپرادمین ثبت نشده است.
+            </p>
+          ) : (
+            <ul className={`max-h-80 overflow-y-auto rounded-2xl border ${navy.border} bg-white p-1`}>
+              {roots
+                .filter((r) => !addSearch.trim() || r.name.includes(addSearch.trim()))
+                .map((r) => {
+                  const already = selectedRootIds.includes(r.id);
+                  return (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        disabled={busy || already}
+                        className={`w-full rounded-xl px-3 py-2.5 text-right text-sm hover:bg-[#F3F6F9] disabled:opacity-50 ${already ? 'text-[#2D6CDF]' : ''}`}
+                        onClick={() => void addRootSpecialty(r.id)}
+                      >
+                        {r.name}{already ? ' · انتخاب‌شده' : ''}
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
           )}
         </div>
       )}

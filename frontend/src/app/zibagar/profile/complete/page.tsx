@@ -143,8 +143,9 @@ export default function ProfileCompletePage() {
     if (step === 3) {
       fetchCategories()
         .then((cats) => {
-          const roots = (cats || []).filter((c) => !c.parentId);
-          setRootCategories(roots);
+          const list = cats || [];
+          const roots = list.filter((c) => !c.parentId);
+          setRootCategories(roots.length ? roots : list);
           const fromPro = Array.isArray(pro?.selectedCategoryIds)
             ? (pro!.selectedCategoryIds as string[]).filter((id) => roots.some((r) => r.id === id))
             : [];
@@ -431,18 +432,29 @@ export default function ProfileCompletePage() {
         <Card className="space-y-4">
           <h2 className="font-semibold text-[#0B2C4A]">تخصص خودت را انتخاب کن</h2>
           {!rootCategories.length ? (
-            <p className="text-sm text-gray">در حال بارگذاری تخصص‌ها…</p>
+            <p className="text-sm text-gray">هنوز تخصصی از پنل ادمین ثبت نشده است. از سوپرادمین دسته‌بندی/تخصص اضافه کنید.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {featuredRootCategories.map((c) => {
-                const on = selectedRootIds.includes(c.id);
-                return (
-                  <button key={c.id} type="button" onClick={() => void toggleRootCategory(c.id)}
-                    className={`rounded-full border px-3 py-1.5 text-sm ${on ? 'border-coral bg-coral text-white' : 'border-border bg-white'}`}>
-                    {c.name}
-                  </button>
-                );
-              })}
+            <div className="space-y-3">
+              <Input
+                value={specialtySearch}
+                onChange={(e) => setSpecialtySearch(e.target.value)}
+                placeholder="جستجوی تخصص..."
+                className="text-right"
+              />
+              <div className="flex flex-wrap gap-2">
+                {(specialtySearch.trim()
+                  ? rootCategories.filter((c) => c.name.includes(specialtySearch.trim()))
+                  : rootCategories
+                ).map((c) => {
+                  const on = selectedRootIds.includes(c.id);
+                  return (
+                    <button key={c.id} type="button" onClick={() => void toggleRootCategory(c.id)}
+                      className={`rounded-full border px-3 py-1.5 text-sm ${on ? 'border-coral bg-coral text-white' : 'border-border bg-white'}`}>
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
           <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده</p>
