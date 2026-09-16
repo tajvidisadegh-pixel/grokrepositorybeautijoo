@@ -1,0 +1,168 @@
+name: Fix admin isolation hard-delete Shamsi
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-admin-isolation.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch service + pros UI
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          # admin.service hardDeleteUser + listUsers + stats
+          as_path = Path('backend/src/admin/admin.service.ts')
+          st = as_path.read_text()
+          st, n1 = re.subn(
+              r'async hardDeleteUser\(id: string, actorId\?: string\) \{[\s\S]*?return \{ id, deleted: true \};\n  \}',
+              '''async hardDeleteUser(id: string, actorId?: string) {
+    const existing = await this.prisma.user.findUnique({ where: { id }, include: { professional: true } });
+    if (!existing) throw new NotFoundException('User not found');
+    if (existing.professional) {
+      throw new BadRequestException('این حساب زیباگر است. برای حذف از بخش زیباگرها اقدام کنید.');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.review.deleteMany({ where: { customerId: id } });
+      await tx.booking.deleteMany({ where: { customerId: id } });
+      await tx.user.delete({ where: { id } });
+    });
+    await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone }, null);
+    return { id, deleted: true };
+  }''',
+              st, count=1)
+          print('hardDelete', n1)
+          if 'professional: { is: null }' not in st:
+              st = st.replace(
+                  'const where: Prisma.UserWhereInput = {};',
+                  'const where: Prisma.UserWhereInput = { professional: { is: null } };',
+                  1,
+              )
+              print('listUsers filter added')
+          st, n2 = re.subn(
+              r'async getCustomersStats\(\) \{[\s\S]*?\n  \}',
+              '''async getCustomersStats() {
+    const base = { professional: { is: null } } as Prisma.UserWhereInput;
+    const [total, active, suspended, inactive, withBookings] = await Promise.all([
+      this.prisma.user.count({ where: base }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.active } }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.suspended } }),
+      this.prisma.user.count({ where: { ...base, status: UserStatus.inactive } }),
+      this.prisma.user.count({ where: { ...base, bookingsAsCustomer: { some: {} } } }),
+    ]);
+    return { total, active, suspended, inactive, withBookings, neverBooked: Math.max(0, total - withBookings) };
+  }''',
+              st, count=1)
+          print('stats', n2)
+          if 'BadRequestException' not in st.split('from')[0]:
+              st = st.replace('NotFoundException,', 'NotFoundException,\n  BadRequestException,')
+          as_path.write_text(st)
+
+          # catalog hard delete
+          cat = Path('backend/src/admin/admin-catalog.controller.ts')
+          ct = cat.read_text()
+          ct, n3 = re.subn(
+              r"async deleteCategory\(@Param\('id'\) id: string\) \{[\s\S]*?return \{ id, deleted: true, soft: true \};\n\}",
+              '''async deleteCategory(@Param('id') id: string) {
+  const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
+  if (!row) throw new NotFoundException('category not found');
+  await this.prisma.$transaction(async (tx) => {
+    const services = await tx.service.findMany({ where: { categoryId: id }, select: { id: true } });
+    const serviceIds = services.map((s) => s.id);
+    if (serviceIds.length) {
+      await tx.professionalService.deleteMany({ where: { serviceId: { in: serviceIds } } });
+      await tx.service.deleteMany({ where: { id: { in: serviceIds } } });
+    }
+    await tx.serviceCategory.updateMany({ where: { parentId: id }, data: { parentId: null } });
+    await tx.serviceCategory.delete({ where: { id } });
+  });
+  return { id, deleted: true, hard: true };
+}''',
+              ct, count=1)
+          ct, n4 = re.subn(
+              r"async deleteCatalogService\(@Param\('id'\) id: string\) \{[\s\S]*?return \{ id, deleted: true, soft: true \};\n\}",
+              '''async deleteCatalogService(@Param('id') id: string) {
+  const row = await this.prisma.service.findUnique({ where: { id } });
+  if (!row) throw new NotFoundException('service not found');
+  await this.prisma.$transaction(async (tx) => {
+    await tx.professionalService.deleteMany({ where: { serviceId: id } });
+    await tx.service.delete({ where: { id } });
+  });
+  return { id, deleted: true, hard: true };
+}''',
+              ct, count=1)
+          print('catalog', n3, n4)
+          cat.write_text(ct)
+
+          # utils Shamsi
+          u = Path('frontend/src/lib/utils.ts')
+          ut = u.read_text().replace("DateTimeFormat('fa-IR'", "DateTimeFormat('fa-IR-u-ca-persian'")
+          u.write_text(ut)
+          print('utils shamsi')
+
+          # pros buttons
+          pros = Path('frontend/src/app/admin/professionals/page.tsx')
+          pt = pros.read_text()
+          if 'adminNotifyUsers' not in pt:
+              pt = pt.replace(
+                  "import { friendlyApiError } from '@/lib/api-errors';",
+                  "import { friendlyApiError } from '@/lib/api-errors';\nimport { apiClient } from '@/lib/api';\nimport { adminNotifyUsers } from '@/lib/panel-api';",
+              )
+          if 'async function onNotify' not in pt:
+              pt = pt.replace(
+                  'async function onDelete',
+                  '''async function onNotify(p: AdminProfessional) {
+    const title = window.prompt('عنوان اعلان', 'پیام مدیریت');
+    if (title == null) return;
+    const body = window.prompt('متن اعلان', '');
+    if (body == null || !String(body).trim()) return;
+    const userId = (p as any).userId || (p as any).user?.id;
+    if (!userId) { setError('شناسه کاربر زیباگر یافت نشد'); return; }
+    setBusyId(p.id); setError(null); setMsg(null);
+    try {
+      const res = await adminNotifyUsers({ userIds: [userId], title: title.trim(), body: String(body).trim() });
+      setMsg(`اعلان ارسال شد (${res.notified ?? 1})`);
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onDelete''',
+              )
+          m = re.search(
+              r'<div className="flex flex-wrap gap-1">\s*<Link href=\{`/admin/professionals/\$\{p\.id\}`\}>[\s\S]*?onClick=\{\(\) => onDelete\(p\.id\)\}>حذف</Button>\s*</div>',
+              pt,
+          )
+          if m:
+              pt = pt[:m.start()] + '''<div className="flex flex-wrap gap-1">
+                      {p.status !== 'approved' && (
+                        <Button size="sm" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
+                      )}
+                      <Link href={`/admin/professionals/${p.id}`}>
+                        <Button size="sm" variant="outline">ویرایش</Button>
+                      </Link>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onNotify(p)}>اعلان</Button>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</Button>
+                    </div>''' + pt[m.end():]
+              print('pros actions ok')
+          else:
+              print('pros actions FAIL')
+          pros.write_text(pt)
+          print('ALL DONE')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts backend/src/admin/admin-catalog.controller.ts frontend/src/lib/utils.ts frontend/src/app/admin/professionals/page.tsx
+          git status
+          git commit -m "fix(admin): hard-delete catalog; customer/pro isolation; 4 pros actions; Shamsi dates" || exit 0
+          git push origin HEAD:main
