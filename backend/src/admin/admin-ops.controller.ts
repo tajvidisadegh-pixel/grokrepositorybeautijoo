@@ -148,4 +148,45 @@ export class AdminOpsController {
     if (!pro) throw new NotFoundException('not found');
     return this.prisma.professional.update({ where: { id }, data: { isFeatured: !!dto.isFeatured } });
   }
+
+  @Post('professionals/create')
+  async createProfessional(
+    @Body() body: { phone: string; title?: string; displayName?: string; firstName?: string; lastName?: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    const phone = String(body.phone || '').trim();
+    if (!phone) throw new BadRequestException('موبایل الزامی است');
+    let user: any = await this.prisma.user.findFirst({ where: { phone }, include: { professional: true, profile: true } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          phone,
+          accountType: 'professional' as any,
+          status: 'active' as any,
+          profile: {
+            create: {
+              displayName: (body.displayName || body.title || body.firstName || phone).trim(),
+              firstName: body.firstName?.trim() || null,
+              lastName: body.lastName?.trim() || null,
+            },
+          },
+        },
+        include: { professional: true, profile: true },
+      });
+    }
+    if (user.professional) return user.professional;
+    const baseSlug = (body.title || body.displayName || phone).toString().trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u0600-\u06FF-]+/g, '').slice(0, 40) || 'pro';
+    let slug = baseSlug;
+    for (let i = 0; i < 5; i++) {
+      const taken = await this.prisma.professional.findUnique({ where: { slug } });
+      if (!taken) break;
+      slug = `${baseSlug}-${Date.now().toString(36).slice(-4)}`;
+    }
+    const pro = await this.prisma.professional.create({
+      data: { userId: user.id, slug, title: (body.title || body.displayName || 'زیباگر').trim(), status: 'draft' as any },
+    });
+    await this.audit(actorId, 'professional.create', 'professional', pro.id, { phone, slug });
+    return pro;
+  }
+
 }

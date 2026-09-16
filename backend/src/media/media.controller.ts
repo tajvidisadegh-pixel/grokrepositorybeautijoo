@@ -42,7 +42,7 @@ const MULTER_ACCEPT = new Set([
 
 @ApiTags('media')
 @ApiBearerAuth()
-@Roles('professional', 'admin')
+@Roles('professional', 'admin', 'SUPER_ADMIN')
 @Controller('professionals/me/media')
 export class MediaController {
   private readonly logger = new Logger(MediaController.name);
