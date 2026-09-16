@@ -19,7 +19,7 @@ export function setAccessToken(accessToken: string | null): void {
 }
 
 /** Store access token in memory. Refresh token is ignored (cookie-managed by backend). */
-export function setTokens(accessToken: string, _rt?: string): void {
+export function setTokens(accessToken: string): void {
   accessTokenMemory = accessToken;
 }
 

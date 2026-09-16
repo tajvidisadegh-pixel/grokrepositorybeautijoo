@@ -107,7 +107,6 @@ export default function AdminMediaPage() {
       setMsg('وضعیت رسانه به‌روز شد');
       await load();
       if (detail?.id === id) {
-        const d = await apiClient.get<MediaItem>(`/admin/media`).catch(() => null);
         setDetail((prev) => (prev ? { ...prev, status: next } : prev));
       }
     } catch (e) {

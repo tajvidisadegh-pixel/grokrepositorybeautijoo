@@ -68,18 +68,6 @@ type BuilderPayload = {
 type BlockId = 'hero' | 'categories' | 'featured' | 'cta' | 'layout';
 
 
-function resolveCmsUrl(url?: string | null): string {
-  if (!url) return '';
-  const u = String(url).trim();
-  if (!u) return '';
-  if (/^https?:\/\//i.test(u)) return u;
-  const api = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
-  const origin = api.replace(/\/api\/v1$/i, '');
-  if (u.startsWith('/api/v1/')) return `${origin}${u}`;
-  if (u.startsWith('/files/')) return `${origin}/api/v1${u}`;
-  if (u.startsWith('/')) return `${origin}${u}`;
-  return `${api}/files/${u.replace(/^\/+/, '')}`;
-}
 
 async function uploadCmsImage(file: File, slot: string): Promise<string> {
   const token = getAccessToken();

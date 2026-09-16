@@ -8,7 +8,6 @@ import {
   fetchAdminProfessionals,
   fetchAdminProfessionalsQueue,
   adminSetProfessionalStatus,
-  adminSetProfessionalFeatured,
   type AdminProfessional,
   type AdminProfessionalsQueue,
 } from '@/lib/panel-api';
@@ -98,7 +97,7 @@ export default function AdminProfessionalsPage() {
     if (title == null) return;
     const body = window.prompt('متن اعلان', '');
     if (body == null || !String(body).trim()) return;
-    const userId = (p as any).userId || (p as any).user?.id;
+    const userId = (p as { userId?: string; user?: { id?: string } }).userId || p.user?.id;
     if (!userId) { setError('شناسه کاربر زیباگر یافت نشد'); return; }
     setBusyId(p.id); setError(null); setMsg(null);
     try {
@@ -125,17 +124,6 @@ export default function AdminProfessionalsPage() {
     }
   }
 
-  async function onFeatured(id: string, isFeatured: boolean) {
-    setBusyId(id);
-    try {
-      await adminSetProfessionalFeatured(id, isFeatured);
-      await load();
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   if (loading && items.length === 0) return <PanelLoading />;
   if (error && items.length === 0) return <PanelError message={error} onRetry={load} />;
