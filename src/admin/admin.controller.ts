@@ -37,7 +37,6 @@ import {
   IsString,
   IsBoolean,
   IsArray,
-  IsUUID,
   ArrayMinSize,
 } from 'class-validator';
 
@@ -103,6 +102,12 @@ class BulkDeleteUsersDto {
   @ArrayMinSize(1)
   @IsString({ each: true })
   userIds!: string[];
+}
+
+class ReviewPublishDto {
+  @ApiProperty({ description: 'true = published, false = hidden' })
+  @IsBoolean()
+  isPublished!: boolean;
 }
 
 @ApiTags('admin')
@@ -172,8 +177,6 @@ export class AdminController {
     return this.service.setFailedTransactionsThreshold(Number(body?.threshold ?? 0), actorId);
   }
 
-
-
   @Get('users')
   listUsers(
     @Query('page') page?: string,
@@ -225,8 +228,6 @@ export class AdminController {
   hardDeleteProfessional(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.hardDeleteProfessional(id, actorId);
   }
-
-
 
   @Get('professionals')
   listProfessionals(
@@ -299,12 +300,33 @@ export class AdminController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('isPublished') isPublished?: string,
   ) {
+    let publishedFilter: boolean | undefined;
+    if (isPublished === 'true') publishedFilter = true;
+    else if (isPublished === 'false') publishedFilter = false;
     return this.service.listReviews({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       search,
+      isPublished: publishedFilter,
     });
+  }
+
+  @Patch('reviews/:id/publish')
+  @ApiOperation({ summary: 'Publish or hide a review' })
+  setReviewPublished(
+    @Param('id') id: string,
+    @Body() dto: ReviewPublishDto,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.setReviewPublished(id, dto.isPublished, actorId);
+  }
+
+  @Delete('reviews/:id')
+  @ApiOperation({ summary: 'Delete a review and recalc professional rating' })
+  deleteReview(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    return this.service.deleteReview(id, actorId);
   }
 
   @Get('media')
