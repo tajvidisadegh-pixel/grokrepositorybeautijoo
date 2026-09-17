@@ -1,10 +1,10 @@
-name: Restore admin.service.ts
+name: Restore admin.service + review moderation
 on:
   workflow_dispatch:
   push:
     paths:
+      - 'scripts/apply_review_moderation.py'
       - '.github/workflows/restore-admin-service.yml'
-
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -14,30 +14,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Restore from last good commit and fix UUID contains
+      - name: Restore admin.service.ts from last good commit if placeholder
         run: |
-          set -e
-          git show 1127896182b5f174151ff71f471ee404153af193:backend/src/admin/admin.service.ts > backend/src/admin/admin.service.ts
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('backend/src/admin/admin.service.ts')
-          t = p.read_text()
-          bad = "        { id: { contains: s } },\n"
-          if bad in t:
-              t = t.replace(bad, "")
-              p.write_text(t)
-              print('removed illegal contains on Booking.id')
-          else:
-              print('pattern already absent')
-          PY
+          if grep -q 'PLACEHOLDER_WILL_FAIL' backend/src/admin/admin.service.ts 2>/dev/null; then
+            echo "Restoring from 244bc18b..."
+            git show 244bc18b4a91325275d2314364ba297af096f74d:backend/src/admin/admin.service.ts > backend/src/admin/admin.service.ts
+          fi
+          python3 scripts/apply_review_moderation.py
+      - name: Commit if changed
+        run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add backend/src/admin/admin.service.ts
-          if git diff --cached --quiet; then
-            echo 'No changes to commit'
+          if git diff --staged --quiet; then
+            echo "No changes"
           else
-            git commit -m "fix(ci): restore admin.service.ts and drop contains on Booking UUID id"
-            git push origin main
+            git commit -m "fix(admin): restore admin.service + review moderation methods (#5)"
+            git push
           fi
