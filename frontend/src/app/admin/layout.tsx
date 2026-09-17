@@ -10,7 +10,7 @@ const ITEMS = [
   { href: '/admin/professionals', label: 'زیباگرها' },
   { href: '/admin/service-categories', label: 'تخصص‌ها و دسته‌بندی‌ها' },
   { href: '/admin/bookings', label: 'رزروها' },
-  { href: '/admin/reviews', label: 'نظرات و امتیازها', disabled: true },
+  { href: '/admin/reviews', label: 'نظرات و امتیازها' },
   { href: '/admin/media', label: 'رسانه‌ها' },
   { href: '/admin/site-builder', label: 'طراحی سایت' },
   { href: '/admin/settings', label: 'تنظیمات', disabled: true },
