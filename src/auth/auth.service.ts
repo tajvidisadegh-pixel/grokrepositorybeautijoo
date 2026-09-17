@@ -12,7 +12,7 @@ import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
 import { AccountType, ProfessionalStatus } from '@prisma/client';
-import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto, UpdateProfileDto } from './dto/auth.dto';
 import { userAuthCache } from './user-auth-cache';
 
 function ttlToMs(ttl: string | undefined, fallbackMs: number): number {
@@ -135,14 +135,12 @@ export class AuthService {
   async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
 
-    // Prefer exact accountType match; for privileged admins also try any account on this phone
     let user = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
       include: { userRoles: { include: { role: true } } },
     });
 
     if (!user || !user.passwordHash) {
-      // Fallback: find any active user with this phone that has SUPER_ADMIN/admin
       const candidates = await this.prisma.user.findMany({
         where: { phone: dto.phone, status: 'active' },
         include: { userRoles: { include: { role: true } } },
@@ -165,7 +163,6 @@ export class AuthService {
     const roles = user.userRoles.map((r) => r.role.name);
     const privileged = this.isPrivileged(roles);
 
-    // Panel gates apply only to non-admin accounts
     if (
       !privileged &&
       accountType === AccountType.professional &&
@@ -427,5 +424,115 @@ export class AuthService {
           }
         : null,
     };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+    if (!user) throw new UnauthorizedException();
+
+    if (dto.email !== undefined && dto.email !== null && dto.email !== '') {
+      const email = String(dto.email).trim().toLowerCase();
+      if (email !== (user.email || '').toLowerCase()) {
+        const taken = await this.prisma.user.findFirst({
+          where: { email, NOT: { id: userId } },
+          select: { id: true },
+        });
+        if (taken) throw new ConflictException('این ایمیل قبلاً ثبت شده است');
+      }
+    }
+
+    const profileData: {
+      displayName?: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      bio?: string | null;
+      avatarUrl?: string | null;
+    } = {};
+    if (dto.displayName !== undefined) {
+      const name = String(dto.displayName).trim();
+      if (!name) throw new BadRequestException('نام نمایشی نمی‌تواند خالی باشد');
+      profileData.displayName = name.slice(0, 120);
+    }
+    if (dto.firstName !== undefined) {
+      profileData.firstName = dto.firstName ? String(dto.firstName).trim().slice(0, 80) : null;
+    }
+    if (dto.lastName !== undefined) {
+      profileData.lastName = dto.lastName ? String(dto.lastName).trim().slice(0, 80) : null;
+    }
+    if (dto.bio !== undefined) {
+      profileData.bio = dto.bio ? String(dto.bio).trim().slice(0, 2000) : null;
+    }
+    if (dto.avatarUrl !== undefined) {
+      profileData.avatarUrl = dto.avatarUrl ? String(dto.avatarUrl).trim().slice(0, 512) : null;
+    }
+
+    const emailUpdate =
+      dto.email !== undefined
+        ? dto.email
+          ? String(dto.email).trim().toLowerCase()
+          : null
+        : undefined;
+
+    await this.prisma.$transaction(async (tx) => {
+      if (emailUpdate !== undefined) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { email: emailUpdate },
+        });
+      }
+      if (Object.keys(profileData).length > 0) {
+        if (user.profile) {
+          await tx.profile.update({
+            where: { userId },
+            data: profileData,
+          });
+        } else {
+          await tx.profile.create({
+            data: {
+              userId,
+              displayName:
+                profileData.displayName ||
+                user.phone ||
+                'کاربر',
+              firstName: profileData.firstName ?? null,
+              lastName: profileData.lastName ?? null,
+              bio: profileData.bio ?? null,
+              avatarUrl: profileData.avatarUrl ?? null,
+            },
+          });
+        }
+      }
+      try {
+        await tx.auditLog.create({
+          data: {
+            actorId: userId,
+            action: 'user.profile_update',
+            entityType: 'user',
+            entityId: userId,
+            before: {
+              email: user.email,
+              profile: user.profile
+                ? {
+                    displayName: user.profile.displayName,
+                    firstName: user.profile.firstName,
+                    lastName: user.profile.lastName,
+                    bio: user.profile.bio,
+                    avatarUrl: user.profile.avatarUrl,
+                  }
+                : null,
+            } as any,
+            after: { email: emailUpdate, ...profileData } as any,
+          },
+        });
+      } catch {
+        /* non-blocking */
+      }
+    });
+
+    userAuthCache.invalidate(userId);
+    return this.me(userId);
   }
 }
