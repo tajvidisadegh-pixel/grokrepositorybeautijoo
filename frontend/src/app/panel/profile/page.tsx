@@ -8,7 +8,7 @@ import { authApi } from '@/lib/auth-api';
 import { friendlyApiError } from '@/lib/api-errors';
 
 export default function PanelProfilePage() {
-  const { user, loading, refreshUser } = useAuth();
+  const { user, loading, reload } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -21,10 +21,10 @@ export default function PanelProfilePage() {
   useEffect(() => {
     if (!user) return;
     setDisplayName(user.profile?.displayName || '');
-    setFirstName((user.profile as any)?.firstName || '');
-    setLastName((user.profile as any)?.lastName || '');
+    setFirstName(user.profile?.firstName || '');
+    setLastName(user.profile?.lastName || '');
     setEmail(user.email || '');
-    setBio((user.profile as any)?.bio || '');
+    setBio(user.profile?.bio || '');
   }, [user]);
 
   if (loading) return <PanelLoading />;
@@ -43,7 +43,7 @@ export default function PanelProfilePage() {
         email: email.trim() || undefined,
         bio: bio.trim() || undefined,
       });
-      await refreshUser?.();
+      await reload();
       setMsg('پروفایل با موفقیت به‌روزرسانی شد.');
     } catch (e) {
       setErr(friendlyApiError(e));
