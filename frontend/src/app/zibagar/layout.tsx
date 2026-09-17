@@ -7,7 +7,10 @@ import { RequireAuth } from '@/components/auth/require-auth';
 const ITEMS = [
   { href: '/zibagar', label: 'داشبورد' },
   { href: '/zibagar/bookings', label: 'رزروها' },
+  { href: '/zibagar/reviews', label: 'نظرات' },
   { href: '/zibagar/services', label: 'تخصص‌ها' },
+  { href: '/zibagar/portfolio', label: 'پورتفولیو' },
+  { href: '/zibagar/earnings', label: 'درآمد و تسویه' },
   { href: '/zibagar/profile', label: 'پروفایل' },
   { href: '/zibagar/hours', label: 'ساعات کاری' },
   { href: '/zibagar/locations', label: 'مکان‌ها' },
