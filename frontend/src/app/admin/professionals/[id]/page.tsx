@@ -208,11 +208,11 @@ export default function AdminProfessionalDetailPage() {
               <img src={resolveMediaUrl(m.publicUrl || m.url) || ''} alt="" className="mb-2 h-32 w-full rounded-lg object-cover" />
               <p className="text-xs">{m.kind} · {m.status}</p>
               <div className="mt-1 flex gap-1">
-                {m.status !== 'approved' && (
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => mediaStatus(m.id, 'approved')}>تأیید</Button>
+                {m.status !== 'published' && (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => mediaStatus(m.id, 'published')}>انتشار رسانه</Button>
                 )}
-                {m.status !== 'rejected' && (
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => mediaStatus(m.id, 'rejected')}>رد</Button>
+                {m.status !== 'draft' && (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => mediaStatus(m.id, 'draft')}>پیش‌نویس</Button>
                 )}
               </div>
             </div>
