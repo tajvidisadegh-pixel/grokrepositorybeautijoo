@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   Post,
   HttpCode,
   Req,
@@ -18,6 +19,7 @@ import {
   RequestOtpDto,
   VerifyOtpDto,
   RefreshDto,
+  UpdateProfileDto,
 } from './dto/auth.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -122,5 +124,15 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser('id') userId: string) {
     return this.auth.me(userId);
+  }
+
+  @ApiBearerAuth()
+  @Patch('me')
+  @HttpCode(200)
+  updateProfile(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.auth.updateProfile(userId, dto);
   }
 }
