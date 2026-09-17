@@ -8,6 +8,7 @@ import type {
   OtpRequestResponse,
   RegisterPayload,
   RequestOtpPayload,
+  UpdateProfilePayload,
   VerifyOtpPayload,
 } from '@/types/auth';
 
@@ -52,5 +53,9 @@ export const authApi = {
     return apiClient.get<AuthMeResponse>('/auth/me', {
       token: token ?? undefined,
     });
+  },
+
+  updateProfile(payload: UpdateProfilePayload) {
+    return apiClient.patch<AuthMeResponse>('/auth/me', payload);
   },
 };

@@ -31,7 +31,10 @@ export type AuthMeResponse = {
   phoneVerified: boolean;
   profile: {
     displayName?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
     avatarUrl?: string | null;
+    bio?: string | null;
   } | null;
   roles: string[];
   professional: {
@@ -73,4 +76,13 @@ export type VerifyOtpPayload = {
   code: string;
   purpose?: string;
   accountType?: AccountType;
+};
+
+export type UpdateProfilePayload = {
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  bio?: string;
+  avatarUrl?: string;
 };
