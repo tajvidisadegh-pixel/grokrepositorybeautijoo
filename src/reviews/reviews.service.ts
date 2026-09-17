@@ -37,6 +37,43 @@ export class ReviewsService {
     };
   }
 
+  /** Reviews received by the logged-in professional */
+  async listForProfessional(userId: string, page = 1, limit = 20) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const take = Math.min(50, Math.max(1, limit));
+    const skip = (Math.max(1, page) - 1) * take;
+    const where = { professionalId: pro.id };
+    const [items, total] = await Promise.all([
+      this.prisma.review.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          customer: {
+            select: {
+              phone: true,
+              profile: { select: { displayName: true } },
+            },
+          },
+          booking: {
+            select: { id: true, startAt: true, status: true },
+          },
+        },
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page: Math.max(1, page), limit: take, total, totalPages: Math.ceil(total / take) || 0 },
+      summary: {
+        ratingAvg: pro.ratingAvg,
+        ratingCount: pro.ratingCount,
+      },
+    };
+  }
+
   async create(userId: string, data: { bookingId: string; rating: number; comment?: string }) {
     if (data.rating < 1 || data.rating > 5) throw new BadRequestException('امتیاز باید ۱ تا ۵ باشد');
     const booking = await this.prisma.booking.findUnique({
