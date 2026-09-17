@@ -9,8 +9,13 @@ import { persianBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate } from '@/lib/utils';
 
+type BookingWithReview = BookingListItem & {
+  review?: { id?: string } | null;
+  hasReview?: boolean;
+};
+
 export default function PanelBookingsPage() {
-  const [items, setItems] = useState<BookingListItem[]>([]);
+  const [items, setItems] = useState<BookingWithReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewFor, setReviewFor] = useState<string | null>(null);
@@ -25,7 +30,7 @@ export default function PanelBookingsPage() {
     setError(null);
     try {
       const res = await fetchMyBookings(1, 50);
-      setItems(Array.isArray(res.items) ? res.items : []);
+      setItems(Array.isArray(res.items) ? (res.items as BookingWithReview[]) : []);
     } catch (e) {
       setItems([]);
       setError(friendlyApiError(e));
@@ -86,7 +91,7 @@ export default function PanelBookingsPage() {
               b.professional?.title ||
               'زیباگر';
             const alreadyReviewed =
-              reviewedIds.has(b.id) || !!(b as any).review || !!(b as any).hasReview;
+              reviewedIds.has(b.id) || !!b.review || !!b.hasReview;
             return (
               <li key={b.id}>
                 <Card className="space-y-2">
