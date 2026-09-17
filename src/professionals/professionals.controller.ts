@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID } from 'class-validator';
+import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ProfessionalsService } from './professionals.service';
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -21,8 +22,12 @@ class UpdateProDto {
   @IsOptional() @IsString() @MaxLength(120) displayName?: string;
   @IsOptional() @IsString() @MaxLength(512) avatarUrl?: string;
   @IsOptional() @IsString() @MaxLength(5000) profileBio?: string;
-  /** Root service category IDs selected by the professional */
   @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedCategoryIds?: string[];
+}
+
+class PayoutRequestDto {
+  @Type(() => Number) @IsInt() @Min(10000) amount!: number;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
 @ApiTags('professionals')
@@ -47,14 +52,14 @@ export class ProfessionalsController {
   }
 
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Get('me')
   getMe(@CurrentUser('id') userId: string) {
     return this.service.getOwn(userId);
   }
 
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Get('me/completion')
   async getCompletion(@CurrentUser('id') userId: string) {
     const own = await this.service.getOwn(userId);
@@ -62,10 +67,32 @@ export class ProfessionalsController {
   }
 
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Get('me/preview')
   getPreview(@CurrentUser('id') userId: string) {
     return this.service.getOwnPreview(userId);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Get('me/earnings')
+  getEarnings(
+    @CurrentUser('id') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.getEarnings(
+      userId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Post('me/payout-request')
+  requestPayout(@CurrentUser('id') userId: string, @Body() dto: PayoutRequestDto) {
+    return this.service.requestPayout(userId, dto.amount, dto.note);
   }
 
   @Public()
@@ -75,28 +102,28 @@ export class ProfessionalsController {
   }
 
   @ApiBearerAuth()
-  @Roles('customer', 'professional', 'admin')
+  @Roles('customer', 'professional', 'admin', 'SUPER_ADMIN')
   @Post()
   create(@CurrentUser('id') userId: string, @Body() dto: CreateProDto) {
     return this.service.createForUser(userId, dto);
   }
 
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Patch('me')
   updateMe(@CurrentUser('id') userId: string, @Body() dto: UpdateProDto) {
     return this.service.updateOwn(userId, dto);
   }
 
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Post('me/publish')
   publish(@CurrentUser('id') userId: string) {
     return this.service.publish(userId);
   }
 
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Post('me/unpublish')
   unpublish(@CurrentUser('id') userId: string) {
     return this.service.unpublish(userId);
