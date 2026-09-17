@@ -4,7 +4,8 @@ on:
   push:
     paths:
       - 'scripts/fix_admin_pro_approve3.py'
-      - 'scripts/pro_approve_methods.b64'
+      - 'scripts/pro_approve_methods.b64.part1'
+      - 'scripts/pro_approve_methods.b64.part2'
       - '.github/workflows/fix-admin-pro-approve3.yml'
 jobs:
   run:
