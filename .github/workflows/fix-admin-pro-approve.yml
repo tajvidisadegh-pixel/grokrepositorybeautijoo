@@ -1,0 +1,23 @@
+name: Fix admin pro approve publish notify detail
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/fix_admin_pro_approve.py'
+      - '.github/workflows/fix-admin-pro-approve.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_admin_pro_approve.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts
+          git diff --cached --stat
+          git commit -m "fix: publish professional on admin approve, notify, full detail" || exit 0
+          git push origin HEAD:main
