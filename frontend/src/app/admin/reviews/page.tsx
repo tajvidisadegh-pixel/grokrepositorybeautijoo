@@ -108,7 +108,7 @@ export default function AdminReviewsPage() {
           <Button
             key={k}
             size="sm"
-            variant={filter === k ? 'default' : 'outline'}
+            variant={filter === k ? 'primary' : 'outline'}
             onClick={() => setFilter(k)}
           >
             {label}
