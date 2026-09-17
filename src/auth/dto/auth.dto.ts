@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, MinLength, Matches, Length, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  MinLength,
+  Matches,
+  Length,
+  IsIn,
+  IsEmail,
+  MaxLength,
+} from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: '09123456789' })
@@ -88,4 +97,43 @@ export class RefreshDto {
   @IsOptional()
   @IsString()
   refreshToken?: string;
+}
+
+/** Customer/professional self-service profile update */
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ example: 'مریم رضایی' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  displayName?: string;
+
+  @ApiPropertyOptional({ example: 'مریم' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: 'رضایی' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  lastName?: string;
+
+  @ApiPropertyOptional({ example: 'user@example.com' })
+  @IsOptional()
+  @IsEmail({}, { message: 'ایمیل معتبر نیست' })
+  @MaxLength(255)
+  email?: string;
+
+  @ApiPropertyOptional({ example: 'علاقه‌مند به خدمات زیبایی' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  bio?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/avatar.jpg' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  avatarUrl?: string;
 }
