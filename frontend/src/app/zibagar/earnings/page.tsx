@@ -13,7 +13,15 @@ type EarningsSummary = {
   platformCommission: number;
   professionalNet: number;
   paidCount: number;
+  totalEarned?: number;
+  totalPaidOut?: number;
+  totalPendingPayout?: number;
+  available?: number;
+  settledCount?: number;
+  pendingCount?: number;
 };
+
+type PeriodBlock = { earned: number; gross: number; count: number };
 
 type PaymentRow = {
   id: string;
@@ -32,6 +40,12 @@ type PaymentRow = {
 
 export default function ZibagarEarningsPage() {
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
+  const [periods, setPeriods] = useState<{
+    today?: PeriodBlock;
+    week?: PeriodBlock;
+    month?: PeriodBlock;
+    allTime?: PeriodBlock;
+  } | null>(null);
   const [items, setItems] = useState<PaymentRow[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,10 +61,12 @@ export default function ZibagarEarningsPage() {
     try {
       const res = await apiClient.get<{
         summary: EarningsSummary;
+        periods?: typeof periods;
         items: PaymentRow[];
         notice?: string;
       }>('/professionals/me/earnings?page=1&limit=30');
       setSummary(res.summary);
+      setPeriods(res.periods || null);
       setItems(res.items || []);
       setNotice(res.notice || null);
     } catch (e) {
@@ -82,6 +98,7 @@ export default function ZibagarEarningsPage() {
       setMsg(res.message || 'درخواست ثبت شد.');
       setAmount('');
       setNote('');
+      await load();
     } catch (e) {
       setMsg(friendlyApiError(e));
     } finally {
@@ -92,11 +109,18 @@ export default function ZibagarEarningsPage() {
   if (loading) return <PanelLoading />;
   if (error) return <PanelError message={error} onRetry={load} />;
 
+  const available = summary?.available ?? summary?.professionalNet ?? 0;
+  const earned = summary?.totalEarned ?? summary?.professionalNet ?? 0;
+  const paidOut = summary?.totalPaidOut ?? 0;
+  const pending = summary?.totalPendingPayout ?? 0;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">درآمد و تسویه</h1>
-        <p className="mt-1 text-sm text-gray">خلاصه درآمد خالص از رزروهای پرداخت‌شده</p>
+        <p className="mt-1 text-sm text-gray">
+          محاسبه خودکار از رزروهای پرداخت‌شده — تفکیک پرداخت‌شده و پرداخت‌نشده
+        </p>
       </div>
 
       {notice && (
@@ -104,20 +128,42 @@ export default function ZibagarEarningsPage() {
       )}
       {msg && <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{msg}</p>}
 
-      {summary && (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-xs text-gray">کل درآمد خالص</p>
+          <p className="mt-1 text-lg font-bold">{formatPrice(earned)}</p>
+          <p className="text-xs text-gray">{summary?.paidCount ?? 0} تراکنش پرداخت‌شده مشتری</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-gray">تسویه‌شده (پرداخت به شما)</p>
+          <p className="mt-1 text-lg font-bold text-emerald-700">{formatPrice(paidOut)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-gray">در صف تسویه</p>
+          <p className="mt-1 text-lg font-bold text-amber-700">{formatPrice(pending)}</p>
+        </Card>
+        <Card className="p-4 border-coral/30">
+          <p className="text-xs text-gray">قابل برداشت</p>
+          <p className="mt-1 text-lg font-bold text-coral">{formatPrice(available)}</p>
+        </Card>
+      </div>
+
+      {periods && (
         <div className="grid gap-3 sm:grid-cols-3">
           <Card className="p-4">
-            <p className="text-xs text-gray">فروش ناخالص</p>
-            <p className="mt-1 text-lg font-bold">{formatPrice(summary.grossRevenue)}</p>
+            <p className="text-xs text-gray">امروز</p>
+            <p className="mt-1 font-bold">{formatPrice(periods.today?.earned ?? 0)}</p>
+            <p className="text-xs text-gray">{periods.today?.count ?? 0} نوبت</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs text-gray">کارمزد پلتفرم</p>
-            <p className="mt-1 text-lg font-bold">{formatPrice(summary.platformCommission)}</p>
+            <p className="text-xs text-gray">این هفته</p>
+            <p className="mt-1 font-bold">{formatPrice(periods.week?.earned ?? 0)}</p>
+            <p className="text-xs text-gray">{periods.week?.count ?? 0} نوبت</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs text-gray">درآمد خالص شما</p>
-            <p className="mt-1 text-lg font-bold text-coral">{formatPrice(summary.professionalNet)}</p>
-            <p className="mt-0.5 text-xs text-gray">{summary.paidCount} تراکنش</p>
+            <p className="text-xs text-gray">این ماه</p>
+            <p className="mt-1 font-bold">{formatPrice(periods.month?.earned ?? 0)}</p>
+            <p className="text-xs text-gray">{periods.month?.count ?? 0} نوبت</p>
           </Card>
         </div>
       )}
@@ -125,7 +171,7 @@ export default function ZibagarEarningsPage() {
       <Card className="space-y-3 p-4">
         <h2 className="font-semibold">درخواست تسویه</h2>
         <p className="text-xs text-gray">
-          مبلغ درخواستی توسط ادمین به‌صورت دستی بررسی و پرداخت می‌شود (فاز اول).
+          فقط از مبلغ «قابل برداشت» می‌توانید درخواست دهید. پس از پرداخت مدیریت، وضعیت به تسویه‌شده می‌رود.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -144,13 +190,13 @@ export default function ZibagarEarningsPage() {
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="شماره کارت / توضیح" />
           </div>
         </div>
-        <Button size="sm" loading={busy} onClick={submitPayout}>
+        <Button size="sm" loading={busy} onClick={submitPayout} disabled={available < 10000}>
           ثبت درخواست تسویه
         </Button>
       </Card>
 
       <div>
-        <h2 className="mb-3 font-semibold">تراکنش‌های اخیر</h2>
+        <h2 className="mb-3 font-semibold">تراکنش‌های رزرو (پرداخت مشتری)</h2>
         {items.length === 0 ? (
           <PanelEmpty title="تراکنشی نیست" description="پس از پرداخت موفق رزروها، اینجا نمایش داده می‌شوند." />
         ) : (
