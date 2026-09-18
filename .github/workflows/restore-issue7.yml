@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - '.github/workflows/restore-issue7.yml'
+      - 'scripts/pro_full.p*.b64'
+      - 'scripts/sf_full.p*.b64'
   workflow_dispatch:
 jobs:
   restore:
@@ -11,21 +13,21 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore services from good commits
+      - name: Decode professionals.service + service-filters.service
         run: |
           set -e
-          git show 6e0504b891999deb5b0d025f3e58844c29ea1b0e:backend/src/professionals/professionals.service.ts > backend/src/professionals/professionals.service.ts
-          git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/service-filters/service-filters.service.ts > backend/src/service-filters/service-filters.service.ts
-          grep -qv PLACEHOLDER backend/src/professionals/professionals.service.ts
+          cat scripts/pro_full.p*.b64 | tr -d '\n' | base64 -d > backend/src/professionals/professionals.service.ts
+          cat scripts/sf_full.p*.b64 | tr -d '\n' | base64 -d > backend/src/service-filters/service-filters.service.ts
+          grep -q minRating backend/src/professionals/professionals.service.ts
+          grep -q availableDate backend/src/professionals/professionals.service.ts
           grep -q getEarnings backend/src/professionals/professionals.service.ts
-          grep -q searchProfessionalsByFilter backend/src/service-filters/service-filters.service.ts
+          grep -q requestPayout backend/src/professionals/professionals.service.ts
+          grep -q minRating backend/src/service-filters/service-filters.service.ts
           wc -c backend/src/professionals/professionals.service.ts backend/src/service-filters/service-filters.service.ts
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/professionals/professionals.service.ts backend/src/service-filters/service-filters.service.ts
-          git diff --staged --quiet || git commit -m "fix: restore professionals + service-filters services (remove PLACEHOLDER)"
+          git diff --staged --quiet || git commit -m "feat(#7): ProfessionalsService advanced search + service-filters pass-through"
           git push
