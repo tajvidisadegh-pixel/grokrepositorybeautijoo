@@ -193,10 +193,10 @@ export default function ZibagarBookingsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant={viewMode === 'list' ? 'default' : 'outline'} onClick={() => setViewMode('list')}>
+          <Button size="sm" variant={viewMode === 'list' ? 'primary' : 'outline'} onClick={() => setViewMode('list')}>
             لیست
           </Button>
-          <Button size="sm" variant={viewMode === 'week' ? 'default' : 'outline'} onClick={() => setViewMode('week')}>
+          <Button size="sm" variant={viewMode === 'week' ? 'primary' : 'outline'} onClick={() => setViewMode('week')}>
             تقویم هفتگی
           </Button>
         </div>
