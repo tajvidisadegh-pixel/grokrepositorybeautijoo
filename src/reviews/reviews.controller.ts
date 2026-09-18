@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ReviewsService } from './reviews.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -10,6 +10,10 @@ class CreateReviewDto {
   @IsUUID() bookingId!: string;
   @Type(() => Number) @IsInt() @Min(1) @Max(5) rating!: number;
   @IsOptional() @IsString() comment?: string;
+}
+
+class ReplyReviewDto {
+  @IsString() @MinLength(2) @MaxLength(2000) reply!: string;
 }
 
 @ApiTags('reviews')
@@ -51,5 +55,16 @@ export class ReviewsController {
   @Post()
   create(@CurrentUser('id') userId: string, @Body() dto: CreateReviewDto) {
     return this.service.create(userId, dto);
+  }
+
+  /** Professional reply to a review (#9) */
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Patch(':id/reply')
+  reply(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: ReplyReviewDto,
+  ) {
+    return this.service.replyAsProfessional(userId, id, dto.reply);
   }
 }

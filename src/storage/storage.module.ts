@@ -19,6 +19,15 @@ function resolveProvider(config: ConfigService): StorageProvider {
     return new S3StorageProvider(config);
   }
 
+  const nodeEnv = (process.env.NODE_ENV || config.get<string>('nodeEnv') || '').toLowerCase();
+  if (nodeEnv === 'production') {
+    logger.warn(
+      'STORAGE_PROVIDER is local while NODE_ENV=production. ' +
+        'For multi-instance deploys set STORAGE_PROVIDER=s3 (or liara/object) with S3_* env vars. ' +
+        'Local disk is not shared across instances and is not durable.',
+    );
+  }
+
   logger.log(`Using local filesystem storage (STORAGE_PROVIDER=${kind || 'local'})`);
   return new LocalStorageProvider(config);
 }
