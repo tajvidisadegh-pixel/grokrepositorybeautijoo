@@ -106,15 +106,40 @@ export type PublishedSiteConfig = {
       enabled?: boolean;
       title?: string;
       subtitle?: string;
+      description?: string;
       ctaText?: string;
-      ctaHref?: string;
-      imageUrl?: string;
+      ctaLink?: string;
+      badge?: string;
+      desktopImageUrl?: string | null;
+      mobileImageUrl?: string | null;
     };
-    [key: string]: unknown;
+    texts?: {
+      categoriesTitle?: string;
+      categoriesLinkText?: string;
+      featuredTitle?: string;
+      featuredLinkText?: string;
+      ctaTitle?: string;
+      ctaDescription?: string;
+      ctaPrimaryText?: string;
+      ctaPrimaryLink?: string;
+      ctaSecondaryText?: string;
+      ctaSecondaryLink?: string;
+    };
+    features?: {
+      showCategories?: boolean;
+      showFeaturedProfessionals?: boolean;
+      showBottomCta?: boolean;
+      showSearchInHero?: boolean;
+    };
+    publishedAt?: string | null;
   };
-  updatedAt?: string;
+  sections: Array<{ id: string; label: string; enabled: boolean; sortOrder: number }>;
 };
 
 export function getPublishedSiteConfig() {
-  return publicGet<PublishedSiteConfig>('/site/config');
+  return publicGet<PublishedSiteConfig>('/public/site-config', {
+    next: { revalidate: 30, tags: ['site-cms'] },
+  });
 }
+
+export { API_URL };
