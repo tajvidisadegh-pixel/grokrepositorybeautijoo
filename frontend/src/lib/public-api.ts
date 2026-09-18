@@ -53,6 +53,11 @@ export type SearchParams = {
   filterCategory?: boolean;
   page?: number;
   limit?: number;
+  minRating?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: string;
+  availableDate?: string;
 };
 
 export function searchProfessionals(params: SearchParams = {}) {
@@ -62,6 +67,11 @@ export function searchProfessionals(params: SearchParams = {}) {
   if (params.category) sp.set('category', params.category);
   if (params.page) sp.set('page', String(params.page));
   if (params.limit) sp.set('limit', String(params.limit));
+  if (params.minRating != null) sp.set('minRating', String(params.minRating));
+  if (params.minPrice != null) sp.set('minPrice', String(params.minPrice));
+  if (params.maxPrice != null) sp.set('maxPrice', String(params.maxPrice));
+  if (params.sort) sp.set('sort', params.sort);
+  if (params.availableDate) sp.set('availableDate', params.availableDate);
   const qs = sp.toString();
   const path = params.filterCategory
     ? `/service-filters/professionals${qs ? `?${qs}` : ''}`
@@ -96,40 +106,15 @@ export type PublishedSiteConfig = {
       enabled?: boolean;
       title?: string;
       subtitle?: string;
-      description?: string;
       ctaText?: string;
-      ctaLink?: string;
-      badge?: string;
-      desktopImageUrl?: string | null;
-      mobileImageUrl?: string | null;
+      ctaHref?: string;
+      imageUrl?: string;
     };
-    texts?: {
-      categoriesTitle?: string;
-      categoriesLinkText?: string;
-      featuredTitle?: string;
-      featuredLinkText?: string;
-      ctaTitle?: string;
-      ctaDescription?: string;
-      ctaPrimaryText?: string;
-      ctaPrimaryLink?: string;
-      ctaSecondaryText?: string;
-      ctaSecondaryLink?: string;
-    };
-    features?: {
-      showCategories?: boolean;
-      showFeaturedProfessionals?: boolean;
-      showBottomCta?: boolean;
-      showSearchInHero?: boolean;
-    };
-    publishedAt?: string | null;
+    [key: string]: unknown;
   };
-  sections: Array<{ id: string; label: string; enabled: boolean; sortOrder: number }>;
+  updatedAt?: string;
 };
 
 export function getPublishedSiteConfig() {
-  return publicGet<PublishedSiteConfig>('/public/site-config', {
-    next: { revalidate: 30, tags: ['site-cms'] },
-  });
+  return publicGet<PublishedSiteConfig>('/site/config');
 }
-
-export { API_URL };
