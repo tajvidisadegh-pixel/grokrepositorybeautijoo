@@ -1,1 +1,34 @@
-PLACEHOLDER_TOO_LONG
+name: Apply issue 7 min search
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-issue7-min.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore professionals.service.ts from z0-z3
+        run: |
+          set -e
+          python3 -c "
+import base64,zlib,pathlib
+parts=[pathlib.Path(f'scripts/z{i}.b64').read_text().strip() for i in range(4)]
+b=''.join(parts)
+pathlib.Path('backend/src/professionals/professionals.service.ts').write_bytes(zlib.decompress(base64.b64decode(b)))
+"
+          grep -q minRating backend/src/professionals/professionals.service.ts
+          grep -q availableDate backend/src/professionals/professionals.service.ts
+          grep -q getEarnings backend/src/professionals/professionals.service.ts
+          ! grep -q PLACEHOLDER backend/src/professionals/professionals.service.ts
+          wc -c backend/src/professionals/professionals.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/professionals/professionals.service.ts
+          git diff --staged --quiet || git commit -m "fix(#7): restore ProfessionalsService advanced search (full)"
+          git push
