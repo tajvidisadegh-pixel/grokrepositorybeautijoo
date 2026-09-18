@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/patch-earnings-methods.yml'
+      - 'scripts/apply-payload/earnings_methods_tail.b64'
 jobs:
   patch:
     runs-on: ubuntu-latest
@@ -24,16 +25,14 @@ jobs:
           if idx < 0:
               raise SystemExit('getEarnings not found')
           head = text[:idx]
-          # payload loaded from companion file if present, else embedded minimal fallback
           payload = Path('scripts/apply-payload/earnings_methods_tail.b64')
-          if payload.exists():
-              tail = base64.b64decode(payload.read_text().strip()).decode()
-          else:
+          if not payload.exists():
               raise SystemExit('missing earnings_methods_tail.b64')
+          tail = base64.b64decode(payload.read_text().strip()).decode()
           path.write_text(head + tail)
           body = path.read_text()
-          assert 'totalEarned' in body
-          assert 'available' in body
+          assert 'totalEarned' in body, 'missing totalEarned'
+          assert 'available' in body, 'missing available'
           print('patched OK', path.stat().st_size)
           PY
       - name: Commit
