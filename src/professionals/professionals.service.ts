@@ -317,16 +317,55 @@ export class ProfessionalsService {
       status: 'paid' as const,
       booking: { professionalId: pro.id },
     };
-    const [agg, items, total] = await Promise.all([
-      this.prisma.payment.aggregate({
-        where: paidWhere,
+
+    const now = new Date();
+    // Asia/Tehran approx: use local UTC+3:30 for period bounds
+    const tehranOffsetMs = 3.5 * 3600 * 1000;
+    const tehranNow = new Date(now.getTime() + tehranOffsetMs);
+    const startOfTodayTehran = new Date(Date.UTC(
+      tehranNow.getUTCFullYear(),
+      tehranNow.getUTCMonth(),
+      tehranNow.getUTCDate(),
+      0, 0, 0, 0,
+    ) - tehranOffsetMs);
+    // Saturday start of week in Tehran
+    const tehranDow = tehranNow.getUTCDay(); // 0=Sun..6=Sat in the shifted clock
+    // After adding offset, getUTCDay reflects Tehran calendar day-ish
+    const daysSinceSat = (tehranDow + 1) % 7;
+    const startOfWeekTehran = new Date(startOfTodayTehran.getTime() - daysSinceSat * 86400000);
+    const startOfMonthTehran = new Date(Date.UTC(
+      tehranNow.getUTCFullYear(),
+      tehranNow.getUTCMonth(),
+      1, 0, 0, 0, 0,
+    ) - tehranOffsetMs);
+
+    const sumNet = async (from?: Date) => {
+      const where: any = { ...paidWhere };
+      if (from) where.paidAt = { gte: from };
+      const agg = await this.prisma.payment.aggregate({
+        where,
         _sum: {
           amount: true,
           platformCommissionAmount: true,
           professionalNetAmount: true,
         },
         _count: true,
-      }),
+      });
+      const gross = Number(agg._sum.amount || 0);
+      let net = Number(agg._sum.professionalNetAmount || 0);
+      let commission = Number(agg._sum.platformCommissionAmount || 0);
+      if (!net && gross) {
+        commission = Math.round(gross * 0.1);
+        net = Math.max(0, gross - commission);
+      }
+      return { gross, net, commission, count: agg._count };
+    };
+
+    const [allTime, today, week, month, items, total, payoutAggs] = await Promise.all([
+      sumNet(),
+      sumNet(startOfTodayTehran),
+      sumNet(startOfWeekTehran),
+      sumNet(startOfMonthTehran),
       this.prisma.payment.findMany({
         where: paidWhere,
         skip,
@@ -348,20 +387,50 @@ export class ProfessionalsService {
         },
       }),
       this.prisma.payment.count({ where: paidWhere }),
+      this.prisma.payoutRequest.groupBy({
+        by: ['status'],
+        where: { professionalId: pro.id },
+        _sum: { amount: true },
+        _count: true,
+      }).catch(() => [] as Array<{ status: string; _sum: { amount: number | null }; _count: number }>),
     ]);
-    const gross = Number(agg._sum.amount || 0);
-    let net = Number(agg._sum.professionalNetAmount || 0);
-    let commission = Number(agg._sum.platformCommissionAmount || 0);
-    if (!net && gross) {
-      commission = Math.round(gross * 0.1);
-      net = Math.max(0, gross - commission);
+
+    let settled = 0; // paid out to professional
+    let pendingPayout = 0; // requested but not yet paid
+    let settledCount = 0;
+    let pendingCount = 0;
+    for (const row of payoutAggs as Array<{ status: string; _sum: { amount: number | null }; _count: number }>) {
+      const amt = Number(row._sum?.amount || 0);
+      if (row.status === 'paid') {
+        settled += amt;
+        settledCount += row._count;
+      } else if (row.status === 'pending' || row.status === 'approved') {
+        pendingPayout += amt;
+        pendingCount += row._count;
+      }
     }
+
+    const available = Math.max(0, allTime.net - settled - pendingPayout);
+
     return {
       summary: {
-        grossRevenue: gross,
-        platformCommission: commission,
-        professionalNet: net,
-        paidCount: agg._count,
+        grossRevenue: allTime.gross,
+        platformCommission: allTime.commission,
+        professionalNet: allTime.net,
+        paidCount: allTime.count,
+        // automatic balance
+        totalEarned: allTime.net,
+        totalPaidOut: settled,
+        totalPendingPayout: pendingPayout,
+        available,
+        settledCount,
+        pendingCount,
+      },
+      periods: {
+        today: { earned: today.net, gross: today.gross, count: today.count },
+        week: { earned: week.net, gross: week.gross, count: week.count },
+        month: { earned: month.net, gross: month.gross, count: month.count },
+        allTime: { earned: allTime.net, gross: allTime.gross, count: allTime.count },
       },
       items,
       meta: {
@@ -371,7 +440,7 @@ export class ProfessionalsService {
         totalPages: Math.ceil(total / take) || 0,
       },
       notice:
-        'درخواست تسویه در فاز اول به‌صورت دستی بررسی می‌شود. پس از ثبت درخواست، تیم پشتیبانی پیگیری می‌کند.',
+        'درآمد به‌صورت خودکار از رزروهای پرداخت‌شده محاسبه می‌شود. مبلغ قابل برداشت = درآمد خالص − تسویه‌شده − در صف تسویه.',
     };
   }
 
@@ -382,15 +451,31 @@ export class ProfessionalsService {
     });
     if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
     const earnings = await this.getEarnings(userId, 1, 1);
-    const available = earnings.summary.professionalNet;
+    const available = Number(earnings.summary.available ?? earnings.summary.professionalNet ?? 0);
     if (amount > available) {
       throw new BadRequestException(
-        `مبلغ درخواستی از درآمد خالص موجود (${available.toLocaleString('fa-IR')} ریال) بیشتر است`,
+        `مبلغ درخواستی از موجودی قابل برداشت (${available.toLocaleString('fa-IR')} ریال) بیشتر است`,
       );
     }
     if (amount < 10000) {
       throw new BadRequestException('حداقل مبلغ درخواست ۱۰٬۰۰۰ ریال است');
     }
+
+    let payoutId: string | null = null;
+    try {
+      const payout = await this.prisma.payoutRequest.create({
+        data: {
+          professionalId: pro.id,
+          amount,
+          note: note?.trim() || null,
+          status: 'pending',
+        },
+      });
+      payoutId = payout.id;
+    } catch {
+      /* table may lag migration in some envs — still notify */
+    }
+
     const adminRoles = await this.prisma.role.findMany({
       where: { name: { in: ['SUPER_ADMIN', 'admin'] } },
       select: { id: true },
@@ -415,6 +500,7 @@ export class ProfessionalsService {
             body,
             data: {
               type: 'payout_request',
+              payoutRequestId: payoutId,
               professionalId: pro.id,
               amount,
               note: note || null,
@@ -431,9 +517,9 @@ export class ProfessionalsService {
         data: {
           actorId: userId,
           action: 'professional.payout_request',
-          entityType: 'professional',
-          entityId: pro.id,
-          after: { amount, note: note || null, availableNet: available } as any,
+          entityType: payoutId ? 'payout_request' : 'professional',
+          entityId: payoutId || pro.id,
+          after: { amount, note: note || null, availableNet: available, professionalId: pro.id } as any,
         },
       });
     } catch {
@@ -441,7 +527,8 @@ export class ProfessionalsService {
     }
     return {
       success: true,
-      message: 'درخواست تسویه ثبت شد و برای بررسی ادمین ارسال گردید.',
+      message: 'درخواست تسویه ثبت شد. پس از پرداخت توسط مدیریت، از موجودی کم می‌شود.',
+      id: payoutId,
       amount,
       availableNet: available,
     };
