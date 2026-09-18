@@ -254,7 +254,7 @@ export class ProfessionalsService {
       { key: 'firstName', label: COMPLETION_LABELS.firstName, done: hasFirst },
       { key: 'lastName', label: COMPLETION_LABELS.lastName, done: hasLast },
       { key: 'avatarOrCover', label: COMPLETION_LABELS.avatarOrCover, done: hasImage },
-      { key: 'location', label: COMPLETION_LABELS.location, done: hasService },
+      { key: 'location', label: COMPLETION_LABELS.location, done: hasLocation },
       { key: 'service', label: COMPLETION_LABELS.service, done: hasService },
       { key: 'workingHours', label: COMPLETION_LABELS.workingHours, done: hasHours },
     ];
