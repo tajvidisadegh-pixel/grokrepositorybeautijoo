@@ -59,7 +59,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = 'مورد درخواستی یافت نشد';
         error = 'Not Found';
       } else if (code === 'P2022') {
-        // Column does not exist — schema drift; log meta for operators
         const meta = (exception as { meta?: { column?: string; modelName?: string } }).meta;
         this.logger.error(
           `Prisma P2022 missing column model=${meta?.modelName ?? '?'} column=${meta?.column ?? '?'}`,
@@ -70,6 +69,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       } else if (code === 'P2010') {
         this.logger.error(`Prisma P2010 raw query failed: ${exception.message}`);
       }
+    }
+
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      this.logger.warn(
+        `429 rate-limit path=${request.method} ${request.url} ip=${request.ip || request.headers['x-forwarded-for'] || '?'}`,
+      );
     }
 
     if (status >= 400 && request.url?.includes('/media')) {

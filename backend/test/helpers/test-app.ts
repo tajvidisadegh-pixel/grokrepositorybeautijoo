@@ -22,15 +22,27 @@ class AllowAllThrottlerStorage {
   }
 }
 
-export async function createTestApp(): Promise<INestApplication> {
-  const moduleFixture: TestingModule = await Test.createTestingModule({
+export type CreateTestAppOptions = {
+  /** When true, keep real Throttler storage so rate-limit behavior can be asserted (#17). */
+  enableThrottle?: boolean;
+};
+
+export async function createTestApp(
+  options: CreateTestAppOptions = {},
+): Promise<INestApplication> {
+  const builder = Test.createTestingModule({
     imports: [AppModule],
-  })
-    .overrideProvider(getStorageToken())
-    .useClass(AllowAllThrottlerStorage)
-    .overrideProvider(ThrottlerStorage)
-    .useClass(AllowAllThrottlerStorage)
-    .compile();
+  });
+
+  if (!options.enableThrottle) {
+    builder
+      .overrideProvider(getStorageToken())
+      .useClass(AllowAllThrottlerStorage)
+      .overrideProvider(ThrottlerStorage)
+      .useClass(AllowAllThrottlerStorage);
+  }
+
+  const moduleFixture: TestingModule = await builder.compile();
 
   const app = moduleFixture.createNestApplication();
   app.setGlobalPrefix('api/v1');

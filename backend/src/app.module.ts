@@ -27,7 +27,8 @@ import { RolesGuard } from './common/guards/roles.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
+    // Global default: 120 req/min. Public endpoints override to 40/min via @Throttle (#17).
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
     HealthModule,
     SmsModule,

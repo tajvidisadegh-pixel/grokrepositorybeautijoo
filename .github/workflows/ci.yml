@@ -104,6 +104,12 @@ jobs:
       - name: E2E Bookings race
         run: npm run test:e2e -- --testPathPattern=bookings/race
 
+      - name: E2E Public professionals smoke
+        run: npm run test:e2e -- --testPathPattern=professionals/public-smoke
+
+      - name: E2E Public rate-limit
+        run: npm run test:e2e -- --testPathPattern=security/public-rate-limit
+
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
