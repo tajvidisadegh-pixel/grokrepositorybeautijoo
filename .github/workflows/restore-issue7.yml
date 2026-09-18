@@ -13,30 +13,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore service-filters.service from good commit and patch
+      - name: Restore and patch advanced search
         run: |
           set -e
-          # Restore full service-filters.service from before placeholder
+          # 1) service-filters.service from good commit + pass-through patch
           git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/service-filters/service-filters.service.ts > backend/src/service-filters/service-filters.service.ts
-          # Patch searchProfessionalsByFilter to pass advanced params
           python3 << 'PY'
           from pathlib import Path
           p = Path('backend/src/service-filters/service-filters.service.ts')
           t = p.read_text()
-          old = '''async searchProfessionalsByFilter(params: { q?: string; city?: string; category?: string; page?: number; limit?: number }) {
-    if (!params.category) return this.professionals.search(params);
-    const matched = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT DISTINCT p.id FROM professionals p JOIN professional_services ps ON ps.professional_id = p.id AND ps.is_active = true JOIN professional_service_categories psc ON psc.professional_service_id = ps.id AND psc.status = 'approved' JOIN service_categories c ON c.id = psc.category_id AND c.is_active = true WHERE c.slug = ${params.category} AND p.status = 'approved' AND p.published_at IS NOT NULL`);
-    const ids = matched.map((x) => x.id); const page = params.page || 1; const limit = Math.min(params.limit || 20, 50); const skip = (page - 1) * limit;
-    const where: Prisma.ProfessionalWhereInput = { id: { in: ids }, status: 'approved', publishedAt: { not: null } };
-    if (params.q) where.OR = [{ title: { contains: params.q, mode: 'insensitive' } }, { bio: { contains: params.q, mode: 'insensitive' } }, { slug: { contains: params.q, mode: 'insensitive' } }];
-    if (params.city) where.locations = { some: { location: { city: { contains: params.city, mode: 'insensitive' } } } };
-    const [items, total] = await Promise.all([
-      this.prisma.professional.findMany({ where, skip, take: limit, orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }], include: { user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } }, locations: { include: { location: true }, where: { isPrimary: true }, take: 1 }, professionalServices: { where: { isActive: true }, take: 5, include: { service: { select: { name: true, slug: true } } } } } }),
-      this.prisma.professional.count({ where }),
-    ]);
-    return { items, meta: { page, limit, total } };
-  }'''
-          new = '''async searchProfessionalsByFilter(params: {
+          start = t.find('async searchProfessionalsByFilter')
+          if start < 0: raise SystemExit('method not found')
+          end = t.rfind('}')
+          # replace from method start to last closing brace of class
+          # find the method body end: last }; before final }
+          method_end = t.find('\n  }\n}', start)
+          if method_end < 0:
+            method_end = t.rfind('  }')
+          new_method = '''async searchProfessionalsByFilter(params: {
     q?: string;
     city?: string;
     category?: string;
@@ -54,38 +48,268 @@ jobs:
     const matched = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT DISTINCT p.id FROM professionals p
       JOIN professional_services ps ON ps.professional_id = p.id AND ps.is_active = true
-      JOIN professional_service_categories psc ON psc.professional_service_id = ps.id AND psc.status = 'approved'
+      JOIN professional_service_categories psc ON psc.professional_service_id = ps.id AND psc.status = \'approved\'
       JOIN service_categories c ON c.id = psc.category_id AND c.is_active = true
       WHERE c.slug = ${params.category}
-        AND p.status = 'approved' AND p.published_at IS NOT NULL
+        AND p.status = \'approved\' AND p.published_at IS NOT NULL
     `);
     const ids = matched.map((x) => x.id);
     return this.professionals.search({ ...params, category: undefined, ids });
   }'''
-          if old not in t:
-            raise SystemExit('old method not found')
-          p.write_text(t.replace(old, new, 1))
-          print('patched service-filters.service')
+          # simpler: replace signature and body via regex
+          import re
+          t2, n = re.subn(
+            r'async searchProfessionalsByFilter\(params: \{[^}]+\}\) \{[\s\S]*?\n  \}\n\}',
+            new_method + '\n}\n',
+            t,
+            count=1,
+          )
+          if n != 1:
+            # fallback: append-style replace of the whole ending
+            idx = t.find('async searchProfessionalsByFilter')
+            t2 = t[:idx] + new_method + '\n}\n'
+          p.write_text(t2)
+          print('patched service-filters', 'minRating' in t2)
           PY
           grep -q minRating backend/src/service-filters/service-filters.service.ts
-      - name: Restore professionals.service from parts or known good
-        run: |
-          set -e
-          # Try restore from commit that had full service with earnings (before latest placeholder)
-          # Use the search-capable version from local artifacts pattern via git log
-          if git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/professionals/professionals.service.ts 2>/dev/null | grep -q getEarnings; then
-            git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/professionals/professionals.service.ts > backend/src/professionals/professionals.service.ts
-          fi
-          # If still placeholder or missing advanced search, leave for manual
-          if grep -q PLACEHOLDER backend/src/professionals/professionals.service.ts 2>/dev/null; then
-            echo 'WARNING: professionals.service still placeholder'
-            exit 1
-          fi
+
+          # 2) professionals.service from earnings commit + advanced search method
+          git show 6e0504b891999deb5b0d025f3e58844c29ea1b0e:backend/src/professionals/professionals.service.ts > backend/src/professionals/professionals.service.ts
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/professionals/professionals.service.ts')
+          t = p.read_text()
+          if 'PLACEHOLDER' in t:
+            raise SystemExit('still placeholder')
+          old = '''async search(params: {
+    q?: string; city?: string; category?: string; page?: number; limit?: number;
+  }) {
+    const page = params.page || 1;
+    const limit = Math.min(params.limit || 20, 50);
+    const skip = (page - 1) * limit;
+    const where: Prisma.ProfessionalWhereInput = { status: ProfessionalStatus.approved, publishedAt: { not: null } };
+    if (params.q) {
+      where.OR = [
+        { title: { contains: params.q, mode: 'insensitive' } },
+        { slug: { contains: params.q, mode: 'insensitive' } },
+      ];
+    }
+    if (params.city) {
+      where.locations = {
+        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
+      };
+    }
+    if (params.category) {
+      where.professionalServices = {
+        some: { service: { category: { slug: params.category } }, isActive: true },
+      };
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.professional.findMany({
+        where, skip, take: limit,
+        orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
+        include: {
+          user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+          locations: { include: { location: true }, where: { isPrimary: true }, take: 1 },
+          professionalServices: {
+            where: { isActive: true }, take: 5,
+            include: { service: { select: { name: true, slug: true } } },
+          },
+        },
+      }),
+      this.prisma.professional.count({ where }),
+    ]);
+    return { items, meta: { page, limit, total } };
+  }'''
+          new = '''async search(params: {
+    q?: string;
+    city?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+    minRating?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    sort?: string;
+    availableDate?: string;
+    ids?: string[];
+  }) {
+    const page = params.page || 1;
+    const limit = Math.min(params.limit || 20, 50);
+    const skip = (page - 1) * limit;
+    const where: Prisma.ProfessionalWhereInput = {
+      status: ProfessionalStatus.approved,
+      publishedAt: { not: null },
+    };
+    if (params.ids) {
+      if (params.ids.length === 0) {
+        return {
+          items: [],
+          meta: {
+            page, limit, total: 0, sort: params.sort || 'featured',
+            filters: {
+              minRating: params.minRating ?? null,
+              minPrice: params.minPrice ?? null,
+              maxPrice: params.maxPrice ?? null,
+              availableDate: params.availableDate ?? null,
+            },
+          },
+        };
+      }
+      where.id = { in: params.ids };
+    }
+    if (params.q?.trim()) {
+      const q = params.q.trim();
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { slug: { contains: q, mode: 'insensitive' } },
+        { bio: { contains: q, mode: 'insensitive' } },
+        {
+          professionalServices: {
+            some: {
+              isActive: true,
+              service: { name: { contains: q, mode: 'insensitive' } },
+            },
+          },
+        },
+        {
+          user: {
+            profile: { displayName: { contains: q, mode: 'insensitive' } },
+          },
+        },
+      ];
+    }
+    if (params.city?.trim()) {
+      where.locations = {
+        some: {
+          location: { city: { contains: params.city.trim(), mode: 'insensitive' } },
+        },
+      };
+    }
+    if (params.category?.trim()) {
+      where.professionalServices = {
+        some: {
+          isActive: true,
+          service: { category: { slug: params.category.trim() } },
+        },
+      };
+    }
+    if (params.minRating != null && Number.isFinite(params.minRating)) {
+      where.ratingAvg = { gte: params.minRating };
+    }
+    const priceFilter: Prisma.ProfessionalServiceWhereInput = { isActive: true };
+    if (params.minPrice != null && Number.isFinite(params.minPrice)) {
+      priceFilter.price = { ...(priceFilter.price as object), gte: params.minPrice };
+    }
+    if (params.maxPrice != null && Number.isFinite(params.maxPrice)) {
+      priceFilter.price = {
+        ...((priceFilter.price as object) || {}),
+        lte: params.maxPrice,
+      };
+    }
+    if (params.minPrice != null || params.maxPrice != null) {
+      if (where.professionalServices && typeof where.professionalServices === 'object' && 'some' in where.professionalServices) {
+        const prev = (where.professionalServices as { some: Prisma.ProfessionalServiceWhereInput }).some;
+        where.professionalServices = { some: { ...prev, ...priceFilter, price: priceFilter.price } };
+      } else {
+        where.professionalServices = { some: priceFilter };
+      }
+    }
+    if (params.availableDate?.trim()) {
+      const d = new Date(params.availableDate.trim() + 'T12:00:00+03:30');
+      if (!Number.isNaN(d.getTime())) {
+        const jsDay = d.getUTCDay();
+        const map: Record<number, string> = {
+          0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
+          4: 'thursday', 5: 'friday', 6: 'saturday',
+        };
+        const dayOfWeek = map[jsDay];
+        const dayStart = new Date(params.availableDate.trim() + 'T00:00:00+03:30');
+        const dayEnd = new Date(params.availableDate.trim() + 'T23:59:59+03:30');
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+          {
+            workingHours: {
+              some: {
+                dayOfWeek: dayOfWeek as never,
+                isActive: true,
+                isClosed: false,
+              },
+            },
+          },
+          {
+            NOT: {
+              timeOffs: {
+                some: {
+                  startAt: { lte: dayEnd },
+                  endAt: { gte: dayStart },
+                },
+              },
+            },
+          },
+        ];
+      }
+    }
+    const sort = (params.sort || 'featured').toLowerCase();
+    let orderBy: Prisma.ProfessionalOrderByWithRelationInput[] = [
+      { isFeatured: 'desc' },
+      { ratingAvg: 'desc' },
+    ];
+    if (sort === 'rating') {
+      orderBy = [{ ratingAvg: 'desc' }, { ratingCount: 'desc' }];
+    } else if (sort === 'newest') {
+      orderBy = [{ publishedAt: 'desc' }];
+    } else if (sort === 'reviews') {
+      orderBy = [{ ratingCount: 'desc' }, { ratingAvg: 'desc' }];
+    }
+    const include = {
+      user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+      locations: { include: { location: true }, where: { isPrimary: true }, take: 1 },
+      professionalServices: {
+        where: { isActive: true },
+        take: 5,
+        include: { service: { select: { name: true, slug: true } } },
+        orderBy: { price: 'asc' as const },
+      },
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.professional.findMany({ where, skip, take: limit, orderBy, include }),
+      this.prisma.professional.count({ where }),
+    ]);
+    let sorted = items;
+    if (sort === 'price_asc' || sort === 'price_desc') {
+      const dir = sort === 'price_asc' ? 1 : -1;
+      sorted = [...items].sort((a, b) => {
+        const pa = a.professionalServices?.[0]?.price ?? Number.POSITIVE_INFINITY;
+        const pb = b.professionalServices?.[0]?.price ?? Number.POSITIVE_INFINITY;
+        return (pa - pb) * dir;
+      });
+    }
+    return {
+      items: sorted,
+      meta: {
+        page, limit, total, sort,
+        filters: {
+          minRating: params.minRating ?? null,
+          minPrice: params.minPrice ?? null,
+          maxPrice: params.maxPrice ?? null,
+          availableDate: params.availableDate ?? null,
+        },
+      },
+    };
+  }'''
+          if old not in t:
+            raise SystemExit('old search not found for patch')
+          p.write_text(t.replace(old, new, 1))
+          print('patched professionals search')
+          PY
+          grep -q minRating backend/src/professionals/professionals.service.ts
+          grep -q getEarnings backend/src/professionals/professionals.service.ts
           wc -c backend/src/professionals/professionals.service.ts backend/src/service-filters/service-filters.service.ts
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/service-filters/service-filters.service.ts backend/src/professionals/professionals.service.ts
-          git diff --staged --quiet || git commit -m "feat(#7): restore services + advanced search pass-through"
+          git diff --staged --quiet || git commit -m "feat(#7): advanced search (rating/price/availability/sort) + restore services"
           git push
