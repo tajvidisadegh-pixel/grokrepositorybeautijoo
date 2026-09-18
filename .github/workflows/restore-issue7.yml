@@ -3,8 +3,6 @@ on:
   push:
     paths:
       - '.github/workflows/restore-issue7.yml'
-      - 'scripts/pro_full.p*.b64'
-      - 'scripts/sf_full.p*.b64'
   workflow_dispatch:
 jobs:
   restore:
@@ -13,21 +11,37 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Decode professionals.service + service-filters.service
+      - name: Restore service from known-good commit
         run: |
           set -e
-          cat scripts/pro_full.p*.b64 | tr -d '\n' | base64 -d > backend/src/professionals/professionals.service.ts
-          cat scripts/sf_full.p*.b64 | tr -d '\n' | base64 -d > backend/src/service-filters/service-filters.service.ts
+          git show 6e0504b891999deb5b0d025f3e58844c29ea1b0e:backend/src/professionals/professionals.service.ts > backend/src/professionals/professionals.service.ts
+          git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/service-filters/service-filters.service.ts > backend/src/service-filters/service-filters.service.ts
+          # Expand search signatures so controller advanced params typecheck
+          python3 << 'PY'
+from pathlib import Path
+pro = Path('backend/src/professionals/professionals.service.ts')
+sf = Path('backend/src/service-filters/service-filters.service.ts')
+pro_t = pro.read_text()
+old = '  async search(params: {\n    q?: string; city?: string; category?: string; page?: number; limit?: number;\n  }) {'
+new = '  async search(params: {\n    q?: string; city?: string; category?: string; page?: number; limit?: number;\n    minRating?: number; minPrice?: number; maxPrice?: number; sort?: string; availableDate?: string; ids?: string[];\n  }) {'
+if old not in pro_t:
+    raise SystemExit('pro sig not found')
+pro.write_text(pro_t.replace(old, new, 1))
+sf_t = sf.read_text()
+old_sf = 'async searchProfessionalsByFilter(params: { q?: string; city?: string; category?: string; page?: number; limit?: number })'
+new_sf = 'async searchProfessionalsByFilter(params: { q?: string; city?: string; category?: string; page?: number; limit?: number; minRating?: number; minPrice?: number; maxPrice?: number; sort?: string; availableDate?: string })'
+if old_sf not in sf_t:
+    raise SystemExit('sf sig not found')
+sf.write_text(sf_t.replace(old_sf, new_sf, 1))
+print('signatures expanded')
+PY
           grep -q minRating backend/src/professionals/professionals.service.ts
-          grep -q availableDate backend/src/professionals/professionals.service.ts
           grep -q getEarnings backend/src/professionals/professionals.service.ts
-          grep -q requestPayout backend/src/professionals/professionals.service.ts
-          grep -q minRating backend/src/service-filters/service-filters.service.ts
           wc -c backend/src/professionals/professionals.service.ts backend/src/service-filters/service-filters.service.ts
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/professionals/professionals.service.ts backend/src/service-filters/service-filters.service.ts
-          git diff --staged --quiet || git commit -m "feat(#7): ProfessionalsService advanced search + service-filters pass-through"
+          git diff --staged --quiet || git commit -m "fix(#7): restore ProfessionalsService + expand search param types"
           git push
