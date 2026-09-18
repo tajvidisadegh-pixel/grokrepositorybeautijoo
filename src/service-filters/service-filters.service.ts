@@ -114,17 +114,30 @@ export class ServiceFiltersService {
     return { professionalServiceId, categoryId, status };
   }
 
-  async searchProfessionalsByFilter(params: { q?: string; city?: string; category?: string; page?: number; limit?: number }) {
-    if (!params.category) return this.professionals.search(params);
-    const matched = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT DISTINCT p.id FROM professionals p JOIN professional_services ps ON ps.professional_id = p.id AND ps.is_active = true JOIN professional_service_categories psc ON psc.professional_service_id = ps.id AND psc.status = 'approved' JOIN service_categories c ON c.id = psc.category_id AND c.is_active = true WHERE c.slug = ${params.category} AND p.status = 'approved' AND p.published_at IS NOT NULL`);
-    const ids = matched.map((x) => x.id); const page = params.page || 1; const limit = Math.min(params.limit || 20, 50); const skip = (page - 1) * limit;
-    const where: Prisma.ProfessionalWhereInput = { id: { in: ids }, status: 'approved', publishedAt: { not: null } };
-    if (params.q) where.OR = [{ title: { contains: params.q, mode: 'insensitive' } }, { bio: { contains: params.q, mode: 'insensitive' } }, { slug: { contains: params.q, mode: 'insensitive' } }];
-    if (params.city) where.locations = { some: { location: { city: { contains: params.city, mode: 'insensitive' } } } };
-    const [items, total] = await Promise.all([
-      this.prisma.professional.findMany({ where, skip, take: limit, orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }], include: { user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } }, locations: { include: { location: true }, where: { isPrimary: true }, take: 1 }, professionalServices: { where: { isActive: true }, take: 5, include: { service: { select: { name: true, slug: true } } } } } }),
-      this.prisma.professional.count({ where }),
-    ]);
-    return { items, meta: { page, limit, total } };
+  async searchProfessionalsByFilter(params: {
+    q?: string;
+    city?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+    minRating?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    sort?: string;
+    availableDate?: string;
+  }) {
+    if (!params.category) {
+      return this.professionals.search(params);
+    }
+    const matched = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT DISTINCT p.id FROM professionals p
+      JOIN professional_services ps ON ps.professional_id = p.id AND ps.is_active = true
+      JOIN professional_service_categories psc ON psc.professional_service_id = ps.id AND psc.status = 'approved'
+      JOIN service_categories c ON c.id = psc.category_id AND c.is_active = true
+      WHERE c.slug = ${params.category}
+        AND p.status = 'approved' AND p.published_at IS NOT NULL
+    `);
+    const ids = matched.map((x) => x.id);
+    return this.professionals.search({ ...params, category: undefined, ids });
   }
 }
