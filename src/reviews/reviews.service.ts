@@ -111,4 +111,26 @@ export class ReviewsService {
     });
     return review;
   }
+
+  /** Professional replies to a review on their profile (#9) */
+  async replyAsProfessional(userId: string, reviewId: string, reply: string) {
+    const text = (reply || '').trim();
+    if (text.length < 2) throw new BadRequestException('پاسخ باید حداقل ۲ کاراکتر باشد');
+    if (text.length > 2000) throw new BadRequestException('پاسخ بیش از حد طولانی است');
+
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+
+    const review = await this.prisma.review.findUnique({ where: { id: reviewId } });
+    if (!review) throw new NotFoundException('نظر یافت نشد');
+    if (review.professionalId !== pro.id) throw new ForbiddenException('این نظر متعلق به شما نیست');
+
+    return this.prisma.review.update({
+      where: { id: reviewId },
+      data: {
+        professionalReply: text,
+        repliedAt: new Date(),
+      },
+    });
+  }
 }
