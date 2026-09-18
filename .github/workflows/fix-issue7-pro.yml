@@ -1,13 +1,9 @@
 name: Fix issue 7 professionals service
 on:
+  workflow_dispatch:
   push:
     paths:
-      - '.github/workflows/fix-issue7-pro.yml'
       - 'scripts/z0.b64'
-      - 'scripts/z1.b64'
-      - 'scripts/z2.b64'
-      - 'scripts/z3.b64'
-  workflow_dispatch:
 jobs:
   fix:
     runs-on: ubuntu-latest
