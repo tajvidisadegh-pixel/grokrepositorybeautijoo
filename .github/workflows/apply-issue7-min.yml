@@ -3,7 +3,6 @@ on:
   push:
     paths:
       - '.github/workflows/apply-issue7-min.yml'
-      - 'scripts/apply_issue7_min.p*.b64'
   workflow_dispatch:
 jobs:
   apply:
@@ -12,11 +11,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Decode and apply
+      - name: Patch search signatures
         run: |
           set -e
-          cat scripts/apply_issue7_min.p*.b64 | tr -d '\n' | base64 -d > scripts/apply_issue7_min.py
-          python3 scripts/apply_issue7_min.py
+          echo 'IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwpmcm9tIHBhdGhsaWIgaW1wb3J0IFBhdGgKcHJvID0gUGF0aCgiYmFja2VuZC9zcmMvcHJvZmVzc2lvbmFscy9wcm9mZXNzaW9uYWxzLnNlcnZpY2UudHMiKQpzZiA9IFBhdGgoImJhY2tlbmQvc3JjL3NlcnZpY2UtZmlsdGVycy9zZXJ2aWNlLWZpbHRlcnMuc2VydmljZS50cyIpCnByb190ID0gcHJvLnJlYWRfdGV4dCgpCm9sZCA9ICIgIGFzeW5jIHNlYXJjaChwYXJhbXM6IHtcbiAgICBxPzogc3RyaW5nOyBjaXR5Pzogc3RyaW5nOyBjYXRlZ29yeT86IHN0cmluZzsgcGFnZT86IG51bWJlcjsgbGltaXQ/OiBudW1iZXI7XG4gIH0pIHsiCm5ldyA9ICIgIGFzeW5jIHNlYXJjaChwYXJhbXM6IHtcbiAgICBxPzogc3RyaW5nOyBjaXR5Pzogc3RyaW5nOyBjYXRlZ29yeT86IHN0cmluZzsgcGFnZT86IG51bWJlcjsgbGltaXQ/OiBudW1iZXI7XG4gICAgbWluUmF0aW5nPzogbnVtYmVyOyBtaW5QcmljZT86IG51bWJlcjsgbWF4UHJpY2U/OiBudW1iZXI7IHNvcnQ/OiBzdHJpbmc7IGF2YWlsYWJsZURhdGU/OiBzdHJpbmc7IGlkcz86IHN0cmluZ1tdO1xuICB9KSB7IgppZiBvbGQgbm90IGluIHByb190OgogICAgcmFpc2UgU3lzdGVtRXhpdCgicHJvIHNpZyBub3QgZm91bmQiKQpwcm9fdCA9IHByb190LnJlcGxhY2Uob2xkLCBuZXcsIDEpCnByby53cml0ZV90ZXh0KHByb190KQpwcmludCgicHJvIHNpZyBvayIpCnNmX3QgPSBzZi5yZWFkX3RleHQoKQpvbGRfc2YgPSAiYXN5bmMgc2VhcmNoUHJvZmVzc2lvbmFsc0J5RmlsdGVyKHBhcmFtczogeyBxPzogc3RyaW5nOyBjaXR5Pzogc3RyaW5nOyBjYXRlZ29yeT86IHN0cmluZzsgcGFnZT86IG51bWJlcjsgbGltaXQ/OiBudW1iZXIgfSkiCm5ld19zZiA9ICJhc3luYyBzZWFyY2hQcm9mZXNzaW9uYWxzQnlGaWx0ZXIocGFyYW1zOiB7IHE/OiBzdHJpbmc7IGNpdHk/OiBzdHJpbmc7IGNhdGVnb3J5Pzogc3RyaW5nOyBwYWdlPzogbnVtYmVyOyBsaW1pdD86IG51bWJlcjsgbWluUmF0aW5nPzogbnVtYmVyOyBtaW5QcmljZT86IG51bWJlcjsgbWF4UHJpY2U/OiBudW1iZXI7IHNvcnQ/OiBzdHJpbmc7IGF2YWlsYWJsZURhdGU/OiBzdHJpbmcgfSkiCmlmIG9sZF9zZiBub3QgaW4gc2ZfdDoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInNmIHNpZyBub3QgZm91bmQiKQpzZl90ID0gc2ZfdC5yZXBsYWNlKG9sZF9zZiwgbmV3X3NmLCAxKQpzZi53cml0ZV90ZXh0KHNmX3QpCnByaW50KCJzZiBzaWcgb2siKQpwcmludCgiRE9ORSIpCg==' | base64 -d > /tmp/apply.py
+          python3 /tmp/apply.py
           grep -q minRating backend/src/professionals/professionals.service.ts
           grep -q minRating backend/src/service-filters/service-filters.service.ts
       - name: Commit
@@ -24,5 +23,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/professionals/professionals.service.ts backend/src/service-filters/service-filters.service.ts
-          git diff --staged --quiet || git commit -m "feat(#7): advanced search filters (rating/price/availability/sort)"
+          git diff --staged --quiet || git commit -m "feat(#7): expand search param types for advanced filters"
           git push
