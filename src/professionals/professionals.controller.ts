@@ -46,11 +46,23 @@ export class ProfessionalsController {
     @Query('category') category?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('minRating') minRating?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('sort') sort?: string,
+    @Query('availableDate') availableDate?: string,
   ) {
     return this.service.search({
-      q, city, category,
+      q,
+      city,
+      category,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
+      minRating: minRating != null && minRating !== '' ? parseFloat(minRating) : undefined,
+      minPrice: minPrice != null && minPrice !== '' ? parseInt(minPrice, 10) : undefined,
+      maxPrice: maxPrice != null && maxPrice !== '' ? parseInt(maxPrice, 10) : undefined,
+      sort,
+      availableDate,
     });
   }
 
