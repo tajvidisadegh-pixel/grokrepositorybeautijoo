@@ -3,10 +3,6 @@ on:
   push:
     paths:
       - '.github/workflows/restore-issue7.yml'
-      - 'scripts/search_page.p*.b64'
-      - 'scripts/sf_ctrl.p*.b64'
-      - 'scripts/sf_svc.p*.b64'
-      - 'scripts/pro_svc.p*.b64'
   workflow_dispatch:
 jobs:
   restore:
@@ -15,23 +11,81 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Decode and write all #7 files
+        with:
+          fetch-depth: 0
+      - name: Restore service-filters.service from good commit and patch
         run: |
           set -e
-          cat scripts/search_page.p*.b64 | tr -d '\n' | base64 -d > frontend/src/app/search/page.tsx
-          cat scripts/sf_ctrl.p*.b64 | tr -d '\n' | base64 -d > backend/src/service-filters/service-filters.controller.ts
-          cat scripts/sf_svc.p*.b64 | tr -d '\n' | base64 -d > backend/src/service-filters/service-filters.service.ts
-          cat scripts/pro_svc.p*.b64 | tr -d '\n' | base64 -d > backend/src/professionals/professionals.service.ts
-          grep -q minRating frontend/src/app/search/page.tsx
-          grep -q availableDate backend/src/service-filters/service-filters.controller.ts
+          # Restore full service-filters.service from before placeholder
+          git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/service-filters/service-filters.service.ts > backend/src/service-filters/service-filters.service.ts
+          # Patch searchProfessionalsByFilter to pass advanced params
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/service-filters/service-filters.service.ts')
+          t = p.read_text()
+          old = '''async searchProfessionalsByFilter(params: { q?: string; city?: string; category?: string; page?: number; limit?: number }) {
+    if (!params.category) return this.professionals.search(params);
+    const matched = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT DISTINCT p.id FROM professionals p JOIN professional_services ps ON ps.professional_id = p.id AND ps.is_active = true JOIN professional_service_categories psc ON psc.professional_service_id = ps.id AND psc.status = 'approved' JOIN service_categories c ON c.id = psc.category_id AND c.is_active = true WHERE c.slug = ${params.category} AND p.status = 'approved' AND p.published_at IS NOT NULL`);
+    const ids = matched.map((x) => x.id); const page = params.page || 1; const limit = Math.min(params.limit || 20, 50); const skip = (page - 1) * limit;
+    const where: Prisma.ProfessionalWhereInput = { id: { in: ids }, status: 'approved', publishedAt: { not: null } };
+    if (params.q) where.OR = [{ title: { contains: params.q, mode: 'insensitive' } }, { bio: { contains: params.q, mode: 'insensitive' } }, { slug: { contains: params.q, mode: 'insensitive' } }];
+    if (params.city) where.locations = { some: { location: { city: { contains: params.city, mode: 'insensitive' } } } };
+    const [items, total] = await Promise.all([
+      this.prisma.professional.findMany({ where, skip, take: limit, orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }], include: { user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } }, locations: { include: { location: true }, where: { isPrimary: true }, take: 1 }, professionalServices: { where: { isActive: true }, take: 5, include: { service: { select: { name: true, slug: true } } } } } }),
+      this.prisma.professional.count({ where }),
+    ]);
+    return { items, meta: { page, limit, total } };
+  }'''
+          new = '''async searchProfessionalsByFilter(params: {
+    q?: string;
+    city?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+    minRating?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    sort?: string;
+    availableDate?: string;
+  }) {
+    if (!params.category) {
+      return this.professionals.search(params);
+    }
+    const matched = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT DISTINCT p.id FROM professionals p
+      JOIN professional_services ps ON ps.professional_id = p.id AND ps.is_active = true
+      JOIN professional_service_categories psc ON psc.professional_service_id = ps.id AND psc.status = 'approved'
+      JOIN service_categories c ON c.id = psc.category_id AND c.is_active = true
+      WHERE c.slug = ${params.category}
+        AND p.status = 'approved' AND p.published_at IS NOT NULL
+    `);
+    const ids = matched.map((x) => x.id);
+    return this.professionals.search({ ...params, category: undefined, ids });
+  }'''
+          if old not in t:
+            raise SystemExit('old method not found')
+          p.write_text(t.replace(old, new, 1))
+          print('patched service-filters.service')
+          PY
           grep -q minRating backend/src/service-filters/service-filters.service.ts
-          grep -q minRating backend/src/professionals/professionals.service.ts
-          grep -q getEarnings backend/src/professionals/professionals.service.ts
-          wc -c frontend/src/app/search/page.tsx backend/src/service-filters/service-filters.controller.ts backend/src/service-filters/service-filters.service.ts backend/src/professionals/professionals.service.ts
+      - name: Restore professionals.service from parts or known good
+        run: |
+          set -e
+          # Try restore from commit that had full service with earnings (before latest placeholder)
+          # Use the search-capable version from local artifacts pattern via git log
+          if git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/professionals/professionals.service.ts 2>/dev/null | grep -q getEarnings; then
+            git show f654f0adf3c06a14e32d182d0622b792b62560c6:backend/src/professionals/professionals.service.ts > backend/src/professionals/professionals.service.ts
+          fi
+          # If still placeholder or missing advanced search, leave for manual
+          if grep -q PLACEHOLDER backend/src/professionals/professionals.service.ts 2>/dev/null; then
+            echo 'WARNING: professionals.service still placeholder'
+            exit 1
+          fi
+          wc -c backend/src/professionals/professionals.service.ts backend/src/service-filters/service-filters.service.ts
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/search/page.tsx backend/src/service-filters/service-filters.controller.ts backend/src/service-filters/service-filters.service.ts backend/src/professionals/professionals.service.ts
-          git diff --staged --quiet || git commit -m "feat(#7): advanced search (rating/price/availability/sort) + restore ProfessionalsService"
+          git add backend/src/service-filters/service-filters.service.ts backend/src/professionals/professionals.service.ts
+          git diff --staged --quiet || git commit -m "feat(#7): restore services + advanced search pass-through"
           git push
