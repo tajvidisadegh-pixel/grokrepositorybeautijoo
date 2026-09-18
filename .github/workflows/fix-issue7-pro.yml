@@ -3,7 +3,10 @@ on:
   push:
     paths:
       - '.github/workflows/fix-issue7-pro.yml'
-      - 'scripts/z*.b64'
+      - 'scripts/z0.b64'
+      - 'scripts/z1.b64'
+      - 'scripts/z2.b64'
+      - 'scripts/z3.b64'
   workflow_dispatch:
 jobs:
   fix:
@@ -16,9 +19,9 @@ jobs:
         run: |
           set -e
           python3 -c "
-import base64,zlib,pathlib,glob
-parts = sorted(glob.glob('scripts/z*.b64'))
-b = ''.join(pathlib.Path(p).read_text().strip() for p in parts)
+import base64,zlib,pathlib
+parts = [pathlib.Path(f'scripts/z{i}.b64').read_text().strip() for i in range(4)]
+b = ''.join(parts)
 pathlib.Path('backend/src/professionals/professionals.service.ts').write_bytes(zlib.decompress(base64.b64decode(b)))
 "
           grep -q minRating backend/src/professionals/professionals.service.ts
