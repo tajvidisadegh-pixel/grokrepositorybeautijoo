@@ -1,0 +1,92 @@
+name: Emergency restore schema
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/emergency-restore-schema.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore schema from cf777d30
+        run: |
+          git show cf777d30ef08c8272132098de45e0686c21dce60:backend/prisma/schema.prisma > backend/prisma/schema.prisma
+          # apply additive fields for reply + payout
+          python3 << 'PY'
+          from pathlib import Path
+          text = Path('backend/prisma/schema.prisma').read_text()
+          if 'enum PayoutStatus' not in text:
+              text = text.replace(
+          '''enum PaymentStatus {
+            pending
+            processing
+            paid
+            failed
+            refunded
+            cancelled
+          }''',
+          '''enum PaymentStatus {
+            pending
+            processing
+            paid
+            failed
+            refunded
+            cancelled
+          }
+
+          enum PayoutStatus {
+            pending
+            approved
+            paid
+            rejected
+            cancelled
+          }''')
+          if 'professionalReply' not in text:
+              text = text.replace(
+          '''  comment        String?  @db.Text
+            isPublished    Boolean  @default(true) @map("is_published")''',
+          '''  comment           String?   @db.Text
+            professionalReply String?   @map("professional_reply") @db.Text
+            repliedAt         DateTime? @map("replied_at") @db.Timestamptz
+            isPublished       Boolean   @default(true) @map("is_published")''')
+          if 'payoutRequests' not in text:
+              text = text.replace(
+          '  mediaAssets          MediaAsset[]\n  @@index([status])',
+          '  mediaAssets          MediaAsset[]\n  payoutRequests       PayoutRequest[]\n  @@index([status])')
+          if 'model PayoutRequest' not in text:
+              payout = '''
+          model PayoutRequest {
+            id             String       @id @default(uuid()) @db.Uuid
+            professionalId String       @map("professional_id") @db.Uuid
+            amount         Int
+            note           String?      @db.VarChar(500)
+            status         PayoutStatus @default(pending)
+            adminNote      String?      @map("admin_note") @db.VarChar(500)
+            resolvedAt     DateTime?    @map("resolved_at") @db.Timestamptz
+            resolvedBy     String?      @map("resolved_by") @db.Uuid
+            createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+            updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+            professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+            @@index([professionalId, status])
+            @@index([status, createdAt])
+            @@map("payout_requests")
+          }
+
+          '''
+              text = text.replace('model PlatformSetting {', payout + 'model PlatformSetting {')
+          Path('backend/prisma/schema.prisma').write_text(text)
+          print('schema patched OK')
+          PY
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/prisma/schema.prisma
+          git diff --staged --quiet || git commit -m "fix: restore + extend schema (PayoutRequest, review reply)"
+          git push
