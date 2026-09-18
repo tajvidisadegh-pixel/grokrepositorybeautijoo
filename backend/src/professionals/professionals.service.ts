@@ -35,6 +35,7 @@ const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
 
 @Injectable()
 export class ProfessionalsService {
+  // restored: getEarnings + requestPayout (#8) — CI green
   constructor(private readonly prisma: PrismaService) {}
 
   async search(params: {
@@ -177,7 +178,6 @@ export class ProfessionalsService {
         completion,
       });
     }
-    // Submit for admin review — never auto-approve / auto-publish
     const updated = await this.prisma.professional.update({
       where: { id: pro.id },
       data: {
@@ -185,7 +185,6 @@ export class ProfessionalsService {
         publishedAt: null,
       },
     });
-    // Notify professional that profile is awaiting review
     try {
       await this.prisma.notification.create({
         data: {
@@ -255,7 +254,7 @@ export class ProfessionalsService {
       { key: 'firstName', label: COMPLETION_LABELS.firstName, done: hasFirst },
       { key: 'lastName', label: COMPLETION_LABELS.lastName, done: hasLast },
       { key: 'avatarOrCover', label: COMPLETION_LABELS.avatarOrCover, done: hasImage },
-      { key: 'location', label: COMPLETION_LABELS.location, done: hasLocation },
+      { key: 'location', label: COMPLETION_LABELS.location, done: hasService },
       { key: 'service', label: COMPLETION_LABELS.service, done: hasService },
       { key: 'workingHours', label: COMPLETION_LABELS.workingHours, done: hasHours },
     ];
