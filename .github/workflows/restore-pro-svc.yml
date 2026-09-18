@@ -1,0 +1,29 @@
+name: Restore pro service
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-pro-svc.yml'
+      - 'scripts/pro_svc.p1.b64'
+      - 'scripts/pro_svc.p2.b64'
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and write
+        run: |
+          set -e
+          cat scripts/pro_svc.p1.b64 scripts/pro_svc.p2.b64 | tr -d '\n' | base64 -d > backend/src/professionals/professionals.service.ts
+          grep -q minRating backend/src/professionals/professionals.service.ts
+          grep -q getEarnings backend/src/professionals/professionals.service.ts
+          wc -c backend/src/professionals/professionals.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/professionals/professionals.service.ts
+          git diff --staged --quiet || git commit -m "feat(#7): ProfessionalsService advanced search (minRating/price/sort/date)"
+          git push
