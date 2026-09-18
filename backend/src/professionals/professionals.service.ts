@@ -38,45 +38,30 @@ export class ProfessionalsService {
   // restored: getEarnings + requestPayout (#8) — CI green
   constructor(private readonly prisma: PrismaService) {}
 
-  async search(params: {
-    q?: string; city?: string; category?: string; page?: number; limit?: number;
-  }) {
-    const page = params.page || 1;
-    const limit = Math.min(params.limit || 20, 50);
-    const skip = (page - 1) * limit;
-    const where: Prisma.ProfessionalWhereInput = { status: ProfessionalStatus.approved, publishedAt: { not: null } };
-    if (params.q) {
-      where.OR = [
-        { title: { contains: params.q, mode: 'insensitive' } },
-        { slug: { contains: params.q, mode: 'insensitive' } },
-      ];
+{
+      const dir = sort === 'price_asc' ? 1 : -1;
+      sorted = [...items].sort((a, b) => {
+        const pa = a.professionalServices?.[0]?.price ?? Number.POSITIVE_INFINITY;
+        const pb = b.professionalServices?.[0]?.price ?? Number.POSITIVE_INFINITY;
+        return (pa - pb) * dir;
+      });
     }
-    if (params.city) {
-      where.locations = {
-        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
-      };
-    }
-    if (params.category) {
-      where.professionalServices = {
-        some: { service: { category: { slug: params.category } }, isActive: true },
-      };
-    }
-    const [items, total] = await Promise.all([
-      this.prisma.professional.findMany({
-        where, skip, take: limit,
-        orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
-        include: {
-          user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
-          locations: { include: { location: true }, where: { isPrimary: true }, take: 1 },
-          professionalServices: {
-            where: { isActive: true }, take: 5,
-            include: { service: { select: { name: true, slug: true } } },
-          },
+
+    return {
+      items: sorted,
+      meta: {
+        page,
+        limit,
+        total,
+        sort,
+        filters: {
+          minRating: params.minRating ?? null,
+          minPrice: params.minPrice ?? null,
+          maxPrice: params.maxPrice ?? null,
+          availableDate: params.availableDate ?? null,
         },
-      }),
-      this.prisma.professional.count({ where }),
-    ]);
-    return { items, meta: { page, limit, total } };
+      },
+    };
   }
 
   async findBySlug(slug: string) {
