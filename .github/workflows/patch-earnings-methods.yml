@@ -1,0 +1,45 @@
+name: Patch earnings methods
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-earnings-methods.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply getEarnings/requestPayout patch
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import base64
+          path = Path('backend/src/professionals/professionals.service.ts')
+          text = path.read_text()
+          idx = text.find('  async getEarnings(')
+          if idx < 0:
+              raise SystemExit('getEarnings not found')
+          head = text[:idx]
+          # payload loaded from companion file if present, else embedded minimal fallback
+          payload = Path('scripts/apply-payload/earnings_methods_tail.b64')
+          if payload.exists():
+              tail = base64.b64decode(payload.read_text().strip()).decode()
+          else:
+              raise SystemExit('missing earnings_methods_tail.b64')
+          path.write_text(head + tail)
+          body = path.read_text()
+          assert 'totalEarned' in body
+          assert 'available' in body
+          print('patched OK', path.stat().st_size)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/professionals/professionals.service.ts
+          git diff --staged --quiet || git commit -m "feat(#8): automatic earnings balance day/week/month + paid/unpaid"
+          git push
