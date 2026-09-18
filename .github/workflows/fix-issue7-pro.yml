@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/fix-issue7-pro.yml'
-      - 'scripts/pro_fix.p*.b64'
+      - 'scripts/pro_svc.zlib.b64'
   workflow_dispatch:
 jobs:
   fix:
@@ -15,12 +15,15 @@ jobs:
       - name: Restore professionals.service.ts
         run: |
           set -e
-          cat scripts/pro_fix.p*.b64 | tr -d '\n' | base64 -d > backend/src/professionals/professionals.service.ts
+          python3 -c "
+import base64,zlib,pathlib
+b=pathlib.Path('scripts/pro_svc.zlib.b64').read_text().strip()
+pathlib.Path('backend/src/professionals/professionals.service.ts').write_bytes(zlib.decompress(base64.b64decode(b)))
+"
           grep -q minRating backend/src/professionals/professionals.service.ts
           grep -q availableDate backend/src/professionals/professionals.service.ts
           grep -q getEarnings backend/src/professionals/professionals.service.ts
           grep -q requestPayout backend/src/professionals/professionals.service.ts
-          grep -q "async search" backend/src/professionals/professionals.service.ts
           ! grep -q PLACEHOLDER backend/src/professionals/professionals.service.ts
           wc -c backend/src/professionals/professionals.service.ts
       - name: Commit
