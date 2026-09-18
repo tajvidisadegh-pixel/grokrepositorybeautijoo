@@ -46,7 +46,7 @@ export class LocationsController {
 
   @Post('locations')
   addLocation(@CurrentUser('id') userId: string, @Body() dto: AddLocationDto) {
-    return this.service.addOrUpdatePrimary(userId, dto);
+    return this.service.createLocation(userId, dto);
   }
 
   @Patch('locations/:id')
@@ -56,6 +56,11 @@ export class LocationsController {
     @Body() dto: AddLocationDto,
   ) {
     return this.service.updateLocation(userId, id, dto);
+  }
+
+  @Delete('locations/:id')
+  deleteLocation(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.service.deleteLocation(userId, id);
   }
 
   @Get('working-hours')
