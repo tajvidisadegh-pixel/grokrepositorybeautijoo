@@ -1,0 +1,32 @@
+name: Fix issue 7 professionals service
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-issue7-pro.yml'
+      - 'scripts/pro_fix.p*.b64'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore professionals.service.ts
+        run: |
+          set -e
+          cat scripts/pro_fix.p*.b64 | tr -d '\n' | base64 -d > backend/src/professionals/professionals.service.ts
+          grep -q minRating backend/src/professionals/professionals.service.ts
+          grep -q availableDate backend/src/professionals/professionals.service.ts
+          grep -q getEarnings backend/src/professionals/professionals.service.ts
+          grep -q requestPayout backend/src/professionals/professionals.service.ts
+          grep -q "async search" backend/src/professionals/professionals.service.ts
+          ! grep -q PLACEHOLDER backend/src/professionals/professionals.service.ts
+          wc -c backend/src/professionals/professionals.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/professionals/professionals.service.ts
+          git diff --staged --quiet || git commit -m "fix(#7): restore real ProfessionalsService advanced search (no PLACEHOLDER)"
+          git push
