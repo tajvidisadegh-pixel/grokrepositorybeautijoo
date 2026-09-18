@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ProfessionalsService } from './professionals.service';
@@ -35,7 +36,9 @@ class PayoutRequestDto {
 export class ProfessionalsController {
   constructor(private readonly service: ProfessionalsService) {}
 
+  /** Public list/search — stricter throttle against scraping (#17) */
   @Public()
+  @Throttle({ default: { limit: 40, ttl: 60_000 } })
   @Get()
   search(
     @Query('q') q?: string,
@@ -95,7 +98,9 @@ export class ProfessionalsController {
     return this.service.requestPayout(userId, dto.amount, dto.note);
   }
 
+  /** Public profile by slug — stricter throttle (#17) */
   @Public()
+  @Throttle({ default: { limit: 40, ttl: 60_000 } })
   @Get(':slug')
   bySlug(@Param('slug') slug: string) {
     return this.service.findBySlug(slug);
