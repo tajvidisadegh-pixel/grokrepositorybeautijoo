@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/apply-issue7-min.yml'
-      - 'scripts/apply_issue7_min.py'
+      - 'scripts/apply_issue7_min.p*.b64'
   workflow_dispatch:
 jobs:
   apply:
@@ -12,9 +12,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Apply min patch
+      - name: Decode and apply
         run: |
           set -e
+          cat scripts/apply_issue7_min.p*.b64 | tr -d '\n' | base64 -d > scripts/apply_issue7_min.py
           python3 scripts/apply_issue7_min.py
           grep -q minRating backend/src/professionals/professionals.service.ts
           grep -q minRating backend/src/service-filters/service-filters.service.ts
