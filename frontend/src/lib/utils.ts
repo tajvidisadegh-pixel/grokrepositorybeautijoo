@@ -80,6 +80,7 @@ export function priceToWords(amount: number): string {
  * Canonical site-wide Jalali (Solar Hijri) date formatter.
  * Uses fa-IR-u-ca-persian so year/month/day are always شمسی.
  * Time is always 24-hour (e.g. ۱۳:۰۰ not ۱ PM).
+ * Calendar day/time interpreted in Asia/Tehran.
  */
 export function formatDate(
   iso?: string | Date | null,
@@ -91,6 +92,7 @@ export function formatDate(
     if (Number.isNaN(d.getTime())) return String(iso);
     const style = opts?.style ?? 'long';
     const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'Asia/Tehran',
       year: 'numeric',
       month: style === 'short' ? 'short' : 'long',
       day: 'numeric',
@@ -118,7 +120,8 @@ export function formatTime24(iso?: string | Date | null): string {
   try {
     const d = typeof iso === 'string' || typeof iso === 'number' ? new Date(iso) : iso;
     if (Number.isNaN(d.getTime())) return String(iso);
-    return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
