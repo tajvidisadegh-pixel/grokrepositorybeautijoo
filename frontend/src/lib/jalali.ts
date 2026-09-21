@@ -117,9 +117,8 @@ export function addJalaliMonths(jy: number, jm: number, delta: number): { jy: nu
 /** ISO date YYYY-MM-DD in Tehran calendar day → DayOfWeekValue (Sat=0 in Persian week) */
 export function dayOfWeekFromIso(iso: string): DayOfWeekValue {
   const [y, m, d] = iso.split('-').map(Number);
-  // Use UTC noon to avoid DST edge; map JS getUTCDay (0=Sun) to Persian order
   const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
-  const js = dt.getUTCDay(); // 0 Sun .. 6 Sat
+  const js = dt.getUTCDay();
   const map: DayOfWeekValue[] = [
     'sunday',
     'monday',
@@ -140,9 +139,36 @@ export function isoToJalaliLabel(iso: string): string {
 
 /** Today as YYYY-MM-DD in Asia/Tehran */
 export function todayIsoTehran(): string {
-  const offsetMs = 3.5 * 60 * 60 * 1000;
-  const tehran = new Date(Date.now() + offsetMs);
-  return `${tehran.getUTCFullYear()}-${pad2(tehran.getUTCMonth() + 1)}-${pad2(tehran.getUTCDate())}`;
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tehran',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    const offsetMs = 3.5 * 60 * 60 * 1000;
+    const tehran = new Date(Date.now() + offsetMs);
+    return `${tehran.getUTCFullYear()}-${pad2(tehran.getUTCMonth() + 1)}-${pad2(tehran.getUTCDate())}`;
+  }
+}
+
+/** Asia/Tehran calendar date YYYY-MM-DD for any instant. */
+export function tehranDateStr(d: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tehran',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+export function tehranTodayIso(): string {
+  return todayIsoTehran();
 }
 
 export type MonthCell = {
@@ -169,12 +195,10 @@ export function buildJalaliMonthGrid(jy: number, jm: number): MonthCell[] {
   ];
   const startOffset = order.indexOf(firstDow);
 
-  // days in Jalali month
   const daysInMonth =
-    jm <= 6 ? 31 : jm <= 11 ? 30 : /* Esfand */ isJalaliLeap(jy) ? 30 : 29;
+    jm <= 6 ? 31 : jm <= 11 ? 30 : isJalaliLeap(jy) ? 30 : 29;
 
   const cells: MonthCell[] = [];
-  // previous month fillers
   const prev = addJalaliMonths(jy, jm, -1);
   const prevDays =
     prev.jm <= 6 ? 31 : prev.jm <= 11 ? 30 : isJalaliLeap(prev.jy) ? 30 : 29;
@@ -199,7 +223,6 @@ export function buildJalaliMonthGrid(jy: number, jm: number): MonthCell[] {
       inMonth: true,
     });
   }
-  // next month fillers to 42
   const next = addJalaliMonths(jy, jm, 1);
   let n = 1;
   while (cells.length < 42) {
@@ -217,7 +240,6 @@ export function buildJalaliMonthGrid(jy: number, jm: number): MonthCell[] {
 }
 
 function isJalaliLeap(jy: number): boolean {
-  // approximate: cycle of 33 years
   const breaks = [1, 5, 9, 13, 17, 22, 26, 30];
   const cy = jy % 33;
   return breaks.includes(cy);
