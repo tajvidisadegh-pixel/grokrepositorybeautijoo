@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { BookingStatus, NotificationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { JobLeaseService } from '../jobs/job-lease.service';
 
 export type ReminderStats = {
   reminders24h: number;
@@ -28,6 +29,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly notifications: NotificationsService,
+    private readonly jobLease: JobLeaseService,
   ) {}
 
   onModuleInit() {
@@ -58,7 +60,11 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      const stats = await this.runAll();
+      // Lease ~15 min — multi-instance safe (#18.2); work itself is idempotent via notification dedup
+      const stats = await this.jobLease.withLease('reminders', 15 * 60_000, () =>
+        this.runAllWithRetry(),
+      );
+      if (!stats) return;
       this.logger.log(
         `Reminders done: 24h=${stats.reminders24h} 2h=${stats.reminders2h} review=${stats.reviewRequests}`,
       );
@@ -66,6 +72,16 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`Reminders failed: ${(err as Error)?.message}`);
     } finally {
       this.running = false;
+    }
+  }
+
+  private async runAllWithRetry(): Promise<ReminderStats> {
+    try {
+      return await this.runAll();
+    } catch (err) {
+      this.logger.warn(`Reminders attempt 1 failed, retrying: ${(err as Error)?.message}`);
+      await new Promise((r) => setTimeout(r, 2_000));
+      return await this.runAll();
     }
   }
 
