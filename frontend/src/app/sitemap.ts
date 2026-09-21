@@ -40,7 +40,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   let categoryRoutes: MetadataRoute.Sitemap = [];
-  let proRoutes: MetadataRoute.Sitemap = [];
+  const proRoutes: MetadataRoute.Sitemap = [];
   let cityRoutes: MetadataRoute.Sitemap = [];
 
   try {
