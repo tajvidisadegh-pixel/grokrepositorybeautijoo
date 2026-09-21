@@ -1,0 +1,27 @@
+name: apply-issue13-bookings
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-issue13-bookings.yml'
+      - 'scripts/bookings13.patch'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore base and apply patch
+        run: |
+          git show e5f8b8d8e5982b46add9442b30c6b1848c644542:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          patch -p1 < scripts/bookings13.patch
+          grep -q CANCEL_MIN_HOURS_BEFORE backend/src/bookings/bookings.service.ts
+          ! grep -q PLACEHOLDER backend/src/bookings/bookings.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git diff --cached --quiet || git commit -m "fix(#13): bookings.service cancel window + refund"
+          git push

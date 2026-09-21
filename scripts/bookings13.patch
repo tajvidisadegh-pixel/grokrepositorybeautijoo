@@ -1,0 +1,105 @@
+--- a/backend/src/bookings/bookings.service.ts
++++ b/backend/src/bookings/bookings.service.ts
+@@ -4,11 +4,13 @@
+   ForbiddenException,
+   BadRequestException,
+   ConflictException,
++  Logger,
+ } from '@nestjs/common';
+ import { PrismaService } from '../prisma/prisma.service';
+ import { BookingStatus, NotificationType, Prisma } from '@prisma/client';
+ import { AvailabilityService } from '../availability/availability.service';
+ import { NotificationsService } from '../notifications/notifications.service';
++import { PaymentsService } from '../payments/payments.service';
+ import { tehranDateStr, tehranHHMM } from '../common/timezone';
+ 
+ export type ProBookingListQuery = {
+@@ -23,10 +25,12 @@
+ 
+ @Injectable()
+ export class BookingsService {
++  private readonly logger = new Logger(BookingsService.name);
+   constructor(
+     private readonly prisma: PrismaService,
+     private readonly availability: AvailabilityService,
+     private readonly notifications: NotificationsService,
++    private readonly payments: PaymentsService,
+   ) {}
+ 
+   async create(
+@@ -490,6 +494,23 @@
+       if (!allowedForCancel.includes(b.status)) {
+         throw new BadRequestException('این رزرو قابل لغو نیست');
+       }
++
++      // Customer time window: must cancel at least CANCEL_MIN_HOURS_BEFORE start (default 2h).
++      // Admin / professional can always cancel. Issue #13.
++      if (isCustomer && !isAdmin) {
++        const minHours = parseInt(process.env.CANCEL_MIN_HOURS_BEFORE || '2', 10);
++        const hours =
++          Number.isFinite(minHours) && minHours >= 0 ? minHours : 2;
++        const msLeft = b.startAt.getTime() - Date.now();
++        if (msLeft < hours * 3600_000) {
++          throw new BadRequestException(
++            hours === 0
++              ? 'امکان لغو این رزرو وجود ندارد.'
++              : `لغو رزرو فقط تا ${hours} ساعت قبل از نوبت امکان‌پذیر است.`,
++          );
++        }
++      }
++
+       const updated = await this.prisma.booking.update({
+         where: { id },
+         data: {
+@@ -498,6 +519,34 @@
+           cancelReason: reason ?? null,
+         },
+       });
++
++      // If payment was paid, attempt refund via same admin path (PaymentsService.refund).
++      // Gateway connection remains out of scope; mock/disabled providers handle themselves.
++      let refundResult: { status?: string; refundRef?: string | null } | null = null;
++      try {
++        const payment = await this.prisma.payment.findUnique({
++          where: { bookingId: id },
++        });
++        if (payment?.status === 'paid') {
++          refundResult = await this.payments.refund(
++            payment.id,
++            reason ?? 'لغو رزرو توسط کاربر',
++            isAdmin ? userId : undefined,
++          );
++        } else if (payment?.status === 'pending' || payment?.status === 'processing') {
++          await this.prisma.payment.update({
++            where: { id: payment.id },
++            data: { status: 'cancelled' },
++          });
++        }
++      } catch (err) {
++        // Booking already cancelled; surface refund failure without rolling back cancel.
++        // Caller still gets cancelled booking; payment stays paid for admin retry.
++        this.logger?.warn?(
++          `cancel refund failed booking=${id}: ${(err as Error)?.message}`,
++        );
++      }
++
+       const notifyUserId = isCustomer ? b.professional.userId : b.customerId;
+       await this.notifications.notify({
+         userId: notifyUserId,
+@@ -506,10 +555,14 @@
+         body: reason?.trim()
+           ? `رزرو لغو شد. دلیل: ${reason.trim()}`
+           : 'رزرو لغو شد.',
+-        data: { bookingId: id, reason: reason ?? null },
++        data: {
++          bookingId: id,
++          reason: reason ?? null,
++          refundStatus: refundResult?.status ?? null,
++        },
+         sms: true,
+       });
+-      return updated;
++      return { ...updated, refund: refundResult };
+     }
+ 
+     if (action === 'complete') {
