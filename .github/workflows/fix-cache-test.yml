@@ -1,0 +1,52 @@
+name: fix-cache-test
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-cache-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch AppCacheService
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/cache/app-cache.service.ts')
+          t = p.read_text()
+          old = '''  constructor() {
+    const raw = process.env.APP_CACHE_TTL_SECONDS;
+    if (raw !== undefined && raw !== '') {
+      const sec = parseInt(raw, 10);
+      this.defaultTtlMs = !Number.isNaN(sec) && sec >= 0 ? sec * 1000 : 60_000;
+    } else {
+      this.defaultTtlMs = 60_000;
+    }
+  }'''
+          new = '''  constructor() {
+    const raw = process.env.APP_CACHE_TTL_SECONDS;
+    if (raw !== undefined && raw !== '') {
+      const sec = parseInt(raw, 10);
+      this.defaultTtlMs = !Number.isNaN(sec) && sec >= 0 ? sec * 1000 : 60_000;
+    } else if ((process.env.NODE_ENV || '').toLowerCase() === 'test') {
+      // Avoid stale catalog in e2e (tests often mutate DB outside AdminService)
+      this.defaultTtlMs = 0;
+    } else {
+      this.defaultTtlMs = 60_000;
+    }
+  }'''
+          if old not in t:
+              raise SystemExit('constructor block not found')
+          p.write_text(t.replace(old, new, 1))
+          print('patched')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/cache/app-cache.service.ts
+          git commit -m "fix(#18.3): disable AppCache by default when NODE_ENV=test"
+          git push
