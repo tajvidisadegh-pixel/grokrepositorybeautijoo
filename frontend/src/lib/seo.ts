@@ -16,6 +16,37 @@ export function appUrl() {
   return APP_URL;
 }
 
+/** Shared metadata for public pages: canonical + Open Graph + Twitter */
+export function pageMetadata(opts: {
+  title: string;
+  description: string;
+  path: string;
+  noIndex?: boolean;
+}): import('next').Metadata {
+  const url = absoluteUrl(opts.path);
+  return {
+    title: opts.title,
+    description: opts.description,
+    alternates: { canonical: url },
+    robots: opts.noIndex
+      ? { index: false, follow: false }
+      : { index: true, follow: true },
+    openGraph: {
+      type: 'website',
+      locale: 'fa_IR',
+      siteName: APP_NAME,
+      title: opts.title,
+      description: opts.description,
+      url,
+    },
+    twitter: {
+      card: 'summary',
+      title: opts.title,
+      description: opts.description,
+    },
+  };
+}
+
 /** Minimal LocalBusiness/Person-style JSON-LD from real professional data */
 export function professionalJsonLd(pro: {
   slug: string;
