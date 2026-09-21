@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Restores professionals.service.ts from scripts/z0..z3.b64 (zlib+base64)
 import base64, zlib, pathlib, sys
 parts = [pathlib.Path(f"scripts/z{i}.b64").read_text().strip() for i in range(4)]
 data = zlib.decompress(base64.b64decode("".join(parts)))
