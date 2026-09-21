@@ -4,6 +4,7 @@ import {
   Get,
   Patch,
   Post,
+  Delete,
   Param,
   HttpCode,
   Req,
@@ -147,7 +148,7 @@ export class AuthController {
     @CurrentUser('id') userId: string,
     @Body() dto: ChangePasswordDto,
   ) {
-    return this.auth.changePassword(userId, dto.currentPassword, dto.newPassword);
+    return this.auth.changePassword(userId, dto);
   }
 
   @ApiBearerAuth()
@@ -157,7 +158,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
-  @Post('sessions/:id/revoke')
+  @Delete('sessions/:id')
   @HttpCode(200)
   revokeSession(
     @CurrentUser('id') userId: string,
@@ -182,8 +183,9 @@ export class AuthController {
     @Body() dto: DeleteAccountDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.auth.deleteAccount(userId, dto.password);
+    const result = await this.auth.deleteAccount(userId, dto);
     clearRefreshCookie(res);
     return result;
   }
+
 }
