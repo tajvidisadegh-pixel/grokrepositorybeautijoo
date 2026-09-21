@@ -23,6 +23,7 @@ import { MediaModule } from './media/media.module';
 import { CleanupModule } from './cleanup/cleanup.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { ObservabilityModule } from './observability/observability.module';
+import { JobsModule } from './jobs/jobs.module';
 import { CorrelationIdMiddleware } from './observability/correlation-id.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -34,6 +35,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
     ObservabilityModule,
+    JobsModule,
     HealthModule,
     SmsModule,
     StorageModule,
