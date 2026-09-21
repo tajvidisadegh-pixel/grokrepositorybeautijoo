@@ -20,6 +20,7 @@ import {
   STORAGE_PROVIDER,
   type StorageProvider,
 } from '../storage/storage.provider';
+import { AppCacheService } from '../cache/app-cache.service';
 
 @Injectable()
 export class AdminService {
@@ -28,6 +29,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly cache: AppCacheService,
   ) {}
 
   private async audit(
@@ -578,6 +580,7 @@ export class AdminService {
     }
 
     const updated = await this.prisma.professional.update({ where: { id }, data });
+    this.cache.invalidateCatalog();
 
     // On approve, publish draft portfolio media so it becomes visible
     if (status === ProfessionalStatus.approved) {

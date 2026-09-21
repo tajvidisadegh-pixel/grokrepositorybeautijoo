@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppCacheService } from '../cache/app-cache.service';
 import { ProfessionalStatus, Prisma } from '@prisma/client';
 
 export type CompletionFieldKey =
@@ -36,7 +37,10 @@ const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
 @Injectable()
 export class ProfessionalsService {
   // restored: getEarnings + requestPayout (#8) — CI green
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: AppCacheService,
+  ) {}
 
   async search(params: {
     q?: string;
@@ -54,6 +58,26 @@ export class ProfessionalsService {
     const page = params.page || 1;
     const limit = Math.min(params.limit || 20, 50);
     const skip = (page - 1) * limit;
+
+    const cacheKey =
+      !params.ids || params.ids.length === 0
+        ? `catalog:search:${JSON.stringify({
+            q: params.q || '',
+            city: params.city || '',
+            category: params.category || '',
+            page,
+            limit,
+            minRating: params.minRating ?? null,
+            minPrice: params.minPrice ?? null,
+            maxPrice: params.maxPrice ?? null,
+            sort: params.sort || '',
+            availableDate: params.availableDate || '',
+          })}`
+        : null;
+    if (cacheKey) {
+      const hit = this.cache.get<{ items: unknown; meta: unknown }>(cacheKey);
+      if (hit) return hit as Awaited<ReturnType<ProfessionalsService['search']>>;
+    }
     const where: Prisma.ProfessionalWhereInput = {
       status: ProfessionalStatus.approved,
       publishedAt: { not: null },
@@ -203,7 +227,7 @@ export class ProfessionalsService {
       });
     }
 
-    return {
+    const result = {
       items: sorted,
       meta: {
         page,
@@ -218,9 +242,15 @@ export class ProfessionalsService {
         },
       },
     };
+    if (cacheKey) this.cache.set(cacheKey, result);
+    return result;
   }
 
   async findBySlug(slug: string) {
+    const cacheKey = `catalog:slug:${slug}`;
+    const hit = this.cache.get<unknown>(cacheKey);
+    if (hit) return hit as Awaited<ReturnType<ProfessionalsService['findBySlug']>>;
+
     const pro = await this.prisma.professional.findUnique({
       where: { slug },
       include: this.publicInclude(),
@@ -228,6 +258,7 @@ export class ProfessionalsService {
     if (!pro || pro.status !== ProfessionalStatus.approved || !pro.publishedAt) {
       throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
     }
+    this.cache.set(cacheKey, pro, 120_000);
     return pro;
   }
 
@@ -292,6 +323,7 @@ export class ProfessionalsService {
 
     if (Object.keys(proData).length) {
       await this.prisma.professional.update({ where: { id: pro.id }, data: proData });
+      this.cache.invalidateCatalog();
     }
     if (Object.keys(profileData).length) {
       await this.prisma.profile.upsert({
@@ -326,6 +358,7 @@ export class ProfessionalsService {
         publishedAt: null,
       },
     });
+    this.cache.invalidateCatalog();
     try {
       await this.prisma.notification.create({
         data: {
@@ -349,6 +382,7 @@ export class ProfessionalsService {
       where: { id: pro.id },
       data: { status: ProfessionalStatus.draft, publishedAt: null },
     });
+    this.cache.invalidateCatalog();
     return this.getOwn(userId);
   }
 
