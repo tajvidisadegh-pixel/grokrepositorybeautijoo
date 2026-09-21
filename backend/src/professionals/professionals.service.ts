@@ -76,7 +76,7 @@ export class ProfessionalsService {
         : null;
     if (cacheKey) {
       const hit = this.cache.get<{ items: unknown; meta: unknown }>(cacheKey);
-      if (hit) return hit as Awaited<ReturnType<ProfessionalsService['search']>>;
+      if (hit) return hit as any;
     }
     const where: Prisma.ProfessionalWhereInput = {
       status: ProfessionalStatus.approved,
@@ -249,7 +249,7 @@ export class ProfessionalsService {
   async findBySlug(slug: string) {
     const cacheKey = `catalog:slug:${slug}`;
     const hit = this.cache.get<unknown>(cacheKey);
-    if (hit) return hit as Awaited<ReturnType<ProfessionalsService['findBySlug']>>;
+    if (hit) return hit as any;
 
     const pro = await this.prisma.professional.findUnique({
       where: { slug },
