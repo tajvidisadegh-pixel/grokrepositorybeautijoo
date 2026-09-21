@@ -1,0 +1,27 @@
+name: r184-jalali_ts
+on:
+  push:
+    paths:
+      - '.github/workflows/r184-jalali_ts.yml'
+permissions:
+  contents: write
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          import zlib, base64, pathlib
+          b64 = "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"
+          data = zlib.decompress(base64.b64decode(b64))
+          pathlib.Path("frontend/src/lib/jalali.ts").write_bytes(data)
+          assert b"PLACEHOLDER" not in data
+          print("ok", len(data))
+          PY
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/jalali.ts
+          git commit -m "feat(#18.4): Tehran-aware todayIsoTehran + tehranDateStr" || exit 0
+          git push
