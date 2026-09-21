@@ -21,6 +21,7 @@ import { AdminModule } from './admin/admin.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { MediaModule } from './media/media.module';
 import { CleanupModule } from './cleanup/cleanup.module';
+import { RemindersModule } from './reminders/reminders.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -47,6 +48,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     FavoritesModule,
     MediaModule,
     CleanupModule,
+    RemindersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
