@@ -4,15 +4,29 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
-import { fetchMyBookings, createReview, type BookingListItem } from '@/lib/panel-api';
-import { persianBookingStatus } from '@/lib/persian-status';
+import {
+  fetchMyBookings,
+  createReview,
+  transitionBooking,
+  type BookingListItem,
+} from '@/lib/panel-api';
+import { persianBookingStatus, persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate } from '@/lib/utils';
 
 type BookingWithReview = BookingListItem & {
   review?: { id?: string } | null;
   hasReview?: boolean;
+  payment?: { id?: string; status?: string; amount?: number } | null;
 };
+
+/** Customer may cancel pending/confirmed if start is at least ~2h away (server enforces). */
+function canCustomerCancel(b: BookingWithReview): boolean {
+  if (b.status !== 'pending' && b.status !== 'confirmed') return false;
+  const start = new Date(b.startAt).getTime();
+  if (Number.isNaN(start)) return false;
+  return start - Date.now() > 2 * 3600_000;
+}
 
 export default function PanelBookingsPage() {
   const [items, setItems] = useState<BookingWithReview[]>([]);
@@ -24,6 +38,8 @@ export default function PanelBookingsPage() {
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +77,29 @@ export default function PanelBookingsPage() {
     }
   }
 
+  async function handleCancel(b: BookingWithReview) {
+    const paid = b.payment?.status === 'paid';
+    const msg = paid
+      ? 'آیا از لغو این رزرو مطمئن هستید؟ در صورت پرداخت موفق، درخواست استرداد ثبت می‌شود.'
+      : 'آیا از لغو این رزرو مطمئن هستید؟';
+    if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    setCancellingId(b.id);
+    setActionMsg(null);
+    try {
+      await transitionBooking(b.id, 'cancel', 'لغو توسط مشتری');
+      setActionMsg(
+        paid
+          ? 'رزرو لغو شد. در صورت پرداخت موفق، استرداد در حال پردازش است.'
+          : 'رزرو با موفقیت لغو شد.',
+      );
+      await load();
+    } catch (e) {
+      setActionMsg(friendlyApiError(e));
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   if (loading) return <PanelLoading />;
   if (error) return <PanelError message={error} onRetry={load} />;
 
@@ -72,6 +111,9 @@ export default function PanelBookingsPage() {
       </div>
       {reviewMsg && (
         <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{reviewMsg}</p>
+      )}
+      {actionMsg && (
+        <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{actionMsg}</p>
       )}
       {items.length === 0 ? (
         <PanelEmpty
@@ -92,6 +134,8 @@ export default function PanelBookingsPage() {
               'زیباگر';
             const alreadyReviewed =
               reviewedIds.has(b.id) || !!b.review || !!b.hasReview;
+            const payStatus = b.payment?.status;
+            const showCancel = canCustomerCancel(b);
             return (
               <li key={b.id}>
                 <Card className="space-y-2">
@@ -102,12 +146,37 @@ export default function PanelBookingsPage() {
                         {formatDate(b.startAt, { style: 'short', includeTime: true })}
                       </p>
                     </div>
-                    <span className="rounded-full bg-coral-soft px-3 py-1 text-xs font-medium text-coral">
-                      {persianBookingStatus(b.status)}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="rounded-full bg-coral-soft px-3 py-1 text-xs font-medium text-coral">
+                        {persianBookingStatus(b.status)}
+                      </span>
+                      {payStatus && (
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            payStatus === 'refunded'
+                              ? 'bg-green-100 text-green-800'
+                              : payStatus === 'paid'
+                                ? 'bg-blue-100 text-blue-800'
+                                : payStatus === 'failed'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          پرداخت: {persianPaymentStatus(payStatus)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {b.totalPrice != null && (
                     <p className="text-sm text-gray">{formatPrice(b.totalPrice)}</p>
+                  )}
+                  {b.status === 'cancelled' && payStatus === 'refunded' && (
+                    <p className="text-xs text-green-700">مبلغ این رزرو مسترد شده است.</p>
+                  )}
+                  {b.status === 'cancelled' && payStatus === 'paid' && (
+                    <p className="text-xs text-amber-700">
+                      رزرو لغو شده؛ استرداد هنوز نهایی نشده (در صورت نیاز با پشتیبانی تماس بگیرید).
+                    </p>
                   )}
                   <div className="flex flex-wrap gap-2">
                     <Link href={`/booking/confirmation/${b.id}`}>
@@ -115,6 +184,16 @@ export default function PanelBookingsPage() {
                         جزئیات
                       </Button>
                     </Link>
+                    {showCancel && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        loading={cancellingId === b.id}
+                        onClick={() => handleCancel(b)}
+                      >
+                        {payStatus === 'paid' ? 'لغو و درخواست بازپرداخت' : 'لغو رزرو'}
+                      </Button>
+                    )}
                     {b.status === 'completed' && !alreadyReviewed && (
                       <Button
                         size="sm"
