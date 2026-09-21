@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { BookingStatus, MediaStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_PROVIDER, type StorageProvider } from '../storage/storage.provider';
+import { JobLeaseService } from '../jobs/job-lease.service';
 
 export type CleanupStats = {
   otpsDeleted: number;
@@ -22,6 +23,7 @@ export class CleanupService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly jobLease: JobLeaseService,
   ) {}
 
   onModuleInit() {
@@ -51,7 +53,11 @@ export class CleanupService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      const stats = await this.runAll();
+      // Lease ~10 min so multi-instance deploys do not double-run cleanup (#18.2)
+      const stats = await this.jobLease.withLease('cleanup', 10 * 60_000, () =>
+        this.runAllWithRetry(),
+      );
+      if (!stats) return;
       this.logger.log(
         `Cleanup done: otp=${stats.otpsDeleted} refresh=${stats.refreshTokensDeleted} ` +
           `sessions=${stats.sessionsDeleted} bookingsCompleted=${stats.bookingsCompleted} ` +
@@ -61,6 +67,17 @@ export class CleanupService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`Cleanup failed: ${(err as Error)?.message}`);
     } finally {
       this.running = false;
+    }
+  }
+
+  /** One retry on transient failure (idempotent deletes/updates). */
+  private async runAllWithRetry(): Promise<CleanupStats> {
+    try {
+      return await this.runAll();
+    } catch (err) {
+      this.logger.warn(`Cleanup attempt 1 failed, retrying: ${(err as Error)?.message}`);
+      await new Promise((r) => setTimeout(r, 2_000));
+      return await this.runAll();
     }
   }
 
