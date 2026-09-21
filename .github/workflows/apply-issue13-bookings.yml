@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/apply-issue13-bookings.yml'
       - 'scripts/bookings13.patch'
+permissions:
+  contents: write
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -12,10 +14,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Restore base and apply patch
         run: |
           git show e5f8b8d8e5982b46add9442b30c6b1848c644542:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
           patch -p1 < scripts/bookings13.patch
+          # fix accidental optional-call typo if present
+          sed -i 's/this\.logger?\.warn?(/this.logger.warn(/g' backend/src/bookings/bookings.service.ts
           grep -q CANCEL_MIN_HOURS_BEFORE backend/src/bookings/bookings.service.ts
           ! grep -q PLACEHOLDER backend/src/bookings/bookings.service.ts
       - name: Commit
