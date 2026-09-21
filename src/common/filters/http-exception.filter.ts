@@ -83,6 +83,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
+    if (status >= 500) {
+      this.logger.error(
+        JSON.stringify({
+          msg: 'http_exception',
+          statusCode: status,
+          path: request.url,
+          method: request.method,
+          correlationId,
+          error:
+            typeof message === 'string'
+              ? message
+              : Array.isArray(message)
+                ? message.join(';')
+                : error,
+        }),
+      );
+    }
+
     response.status(status).json({
       statusCode: status,
       message,

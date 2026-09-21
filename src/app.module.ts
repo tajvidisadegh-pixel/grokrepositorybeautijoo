@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -22,6 +22,8 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { MediaModule } from './media/media.module';
 import { CleanupModule } from './cleanup/cleanup.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { ObservabilityModule } from './observability/observability.module';
+import { CorrelationIdMiddleware } from './observability/correlation-id.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -31,6 +33,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     // Global default: 120 req/min. Public endpoints override to 40/min via @Throttle (#17).
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
+    ObservabilityModule,
     HealthModule,
     SmsModule,
     StorageModule,
@@ -56,4 +59,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}
