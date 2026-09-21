@@ -26,9 +26,12 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'expired', label: 'منقضی' },
 ];
 
+const TEHRAN_TZ = 'Asia/Tehran';
+
 function dateKeyFa(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString('fa-IR', {
+      timeZone: TEHRAN_TZ,
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -42,6 +45,7 @@ function dateKeyFa(iso: string): string {
 function timeFa(iso: string): string {
   try {
     return new Date(iso).toLocaleTimeString('fa-IR', {
+      timeZone: TEHRAN_TZ,
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -53,6 +57,34 @@ function timeFa(iso: string): string {
 
 function dayKey(d: Date): string {
   return tehranDateStr(d);
+}
+
+/** Start of current Persian week (Saturday) in Asia/Tehran calendar. */
+function tehranWeekStartSaturday(): Date {
+  const now = new Date();
+  // Weekday in Tehran: 0=Sun … 6=Sat
+  const wdStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: TEHRAN_TZ,
+    weekday: 'short',
+  }).format(now);
+  const map: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  const day = map[wdStr] ?? now.getUTCDay();
+  const toSat = (day + 1) % 7; // days since Saturday
+  // Build noon Tehran on today's Tehran date, then subtract days
+  const todayIso = tehranDateStr(now);
+  const [y, m, d] = todayIso.split('-').map(Number);
+  // Approximate: UTC noon shifted so local Tehran is around noon
+  const base = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  base.setUTCDate(base.getUTCDate() - toSat);
+  return base;
 }
 
 export default function ZibagarBookingsPage() {
@@ -71,14 +103,7 @@ export default function ZibagarBookingsPage() {
   const [reportText, setReportText] = useState('');
   const [reportMsg, setReportMsg] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'week'>('list');
-  const [weekStart, setWeekStart] = useState(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    const day = d.getDay(); // 0 Sun .. 6 Sat
-    const toSat = (day + 1) % 7;
-    d.setDate(d.getDate() - toSat);
-    return d;
-  });
+  const [weekStart, setWeekStart] = useState(() => tehranWeekStartSaturday());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,10 +168,15 @@ export default function ZibagarBookingsPage() {
     const days: { key: string; label: string; date: Date }[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(weekStart);
-      d.setDate(weekStart.getDate() + i);
+      d.setUTCDate(weekStart.getUTCDate() + i);
       days.push({
         key: dayKey(d),
-        label: d.toLocaleDateString('fa-IR', { weekday: 'short', day: 'numeric', month: 'short' }),
+        label: d.toLocaleDateString('fa-IR', {
+          timeZone: TEHRAN_TZ,
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+        }),
         date: d,
       });
     }
@@ -176,7 +206,7 @@ export default function ZibagarBookingsPage() {
   function shiftWeek(delta: number) {
     setWeekStart((prev) => {
       const n = new Date(prev);
-      n.setDate(n.getDate() + delta * 7);
+      n.setUTCDate(n.getUTCDate() + delta * 7);
       return n;
     });
   }
