@@ -2,10 +2,7 @@ name: Restore auth service
 on:
   push:
     paths:
-      - 'scripts/auth_pa0.b64'
-      - 'scripts/auth_pa1.b64'
-      - 'scripts/auth_pa2.b64'
-      - 'scripts/auth_pa3.b64'
+      - 'scripts/restore_auth_service.py'
       - '.github/workflows/restore-auth.yml'
   workflow_dispatch:
 jobs:
@@ -15,24 +12,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Restore auth.service.ts
-        run: |
-          set -euo pipefail
-          python3 -c "
-import base64,zlib,pathlib
-parts=[pathlib.Path(f'scripts/auth_pa{i}.b64').read_text().strip() for i in range(4)]
-data=zlib.decompress(base64.b64decode(''.join(parts)))
-pathlib.Path('backend/src/auth/auth.service.ts').write_bytes(data)
-t=data.decode()
-assert 'PLACEHOLDER' not in t
-assert 'changePassword' in t
-assert 'UserStatus' in t
-assert 'export class AuthService' in t
-assert t.count('{')==t.count('}')
-print('OK', len(data))
-"
-      - name: Commit
-        run: |
+      - run: python3 scripts/restore_auth_service.py
+      - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/auth/auth.service.ts
