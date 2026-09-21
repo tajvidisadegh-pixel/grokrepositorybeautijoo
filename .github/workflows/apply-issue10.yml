@@ -3,7 +3,9 @@ on:
   push:
     paths:
       - '.github/workflows/apply-issue10.yml'
-      - 'scripts/i10_*.b64'
+      - 'scripts/i10_auth_methods.ts'
+      - 'scripts/i10_panel_helpers.ts'
+      - 'scripts/i10.settings.zlib.b64'
   workflow_dispatch:
 jobs:
   apply:
@@ -12,32 +14,52 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Restore issue 10 files
+      - name: Apply
         run: |
           set -e
-          python3 - <<'PY'
-          import base64, zlib, pathlib
-          mapping = {
-            'scripts/i10_auth_ctrl.b64': 'backend/src/auth/auth.controller.ts',
-            'scripts/i10_auth_svc.b64': 'backend/src/auth/auth.service.ts',
-            'scripts/i10_settings.b64': 'frontend/src/app/panel/settings/page.tsx',
-            'scripts/i10_panel_api.b64': 'frontend/src/lib/panel-api.ts',
-          }
-          for src, dst in mapping.items():
-            data = zlib.decompress(base64.b64decode(pathlib.Path(src).read_text().strip()))
-            pathlib.Path(dst).write_bytes(data)
-            print(dst, len(data))
-          assert 'ChangePasswordDto' in pathlib.Path('backend/src/auth/dto/auth.dto.ts').read_text()
-          assert 'changePassword' in pathlib.Path('backend/src/auth/auth.service.ts').read_text()
-          assert 'change-password' in pathlib.Path('backend/src/auth/auth.controller.ts').read_text()
-          assert 'changePassword' in pathlib.Path('frontend/src/lib/panel-api.ts').read_text()
-          assert 'تغییر رمز عبور' in pathlib.Path('frontend/src/app/panel/settings/page.tsx').read_text()
-          print('OK')
+          python3 <<'PY'
+          import base64, zlib, pathlib, re
+          root = pathlib.Path('.')
+          svc = root.joinpath('backend/src/auth/auth.service.ts')
+          text = svc.read_text()
+          if 'UserStatus' not in text:
+              text = text.replace(
+                  "import { AccountType, ProfessionalStatus } from '@prisma/client';",
+                  "import { AccountType, ProfessionalStatus, UserStatus } from '@prisma/client';",
+              )
+          if 'ChangePasswordDto' not in text:
+              text = text.replace(
+                  "UpdateProfileDto } from './dto/auth.dto';",
+                  "UpdateProfileDto, ChangePasswordDto, DeleteAccountDto } from './dto/auth.dto';",
+              )
+          methods = root.joinpath('scripts/i10_auth_methods.ts').read_text()
+          if 'async changePassword' not in text:
+              idx = text.rstrip().rfind('}')
+              text = text[:idx] + methods + '\n' + text[idx:]
+          svc.write_text(text)
+          assert 'changePassword' in svc.read_text()
+          print('service OK', svc.stat().st_size)
+          b64 = root.joinpath('scripts/i10.settings.zlib.b64').read_text().strip()
+          data = zlib.decompress(base64.b64decode(b64))
+          sp = root / 'frontend/src/app/panel/settings/page.tsx'
+          sp.write_bytes(data)
+          assert 'changePassword'.encode() in data or 'تغییر رمز'.encode() in data
+          print('settings OK', len(data))
+          pa = root / 'frontend/src/lib/panel-api.ts'
+          t = pa.read_text()
+          if 'changePassword' not in t:
+              helpers = root.joinpath('scripts/i10_panel_helpers.ts').read_text()
+              pa.write_text(t.rstrip() + '\n' + helpers)
+          assert 'changePassword' in pa.read_text()
+          print('panel-api OK')
+          assert 'change-password' in root.joinpath('backend/src/auth/auth.controller.ts').read_text()
+          assert 'ChangePasswordDto' in root.joinpath('backend/src/auth/dto/auth.dto.ts').read_text()
+          print('ALL OK')
           PY
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/auth/auth.controller.ts backend/src/auth/auth.service.ts frontend/src/app/panel/settings/page.tsx frontend/src/lib/panel-api.ts
-          git diff --staged --quiet || git commit -m "feat(#10): auth settings endpoints + full settings UI"
+          git add backend/src/auth/auth.service.ts frontend/src/app/panel/settings/page.tsx frontend/src/lib/panel-api.ts
+          git diff --staged --quiet || git commit -m "feat(#10): auth settings service methods + settings UI + panel-api"
           git push
