@@ -1,13 +1,10 @@
 name: Apply issue 10 settings
 on:
-  workflow_dispatch:
   push:
     paths:
-      - ".github/workflows/apply-issue10.yml"
-      - "scripts/apply_issue10.py"
-      - "scripts/i10_auth_methods.ts"
-      - "scripts/i10_panel_helpers.ts"
-      - "scripts/i10.settings.zlib.b64"
+      - '.github/workflows/apply-issue10.yml'
+      - 'scripts/i10_*.b64'
+  workflow_dispatch:
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -15,14 +12,32 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 100
-      - name: Apply
-        run: python3 scripts/apply_issue10.py
+      - name: Restore issue 10 files
+        run: |
+          set -e
+          python3 - <<'PY'
+          import base64, zlib, pathlib
+          mapping = {
+            'scripts/i10_auth_ctrl.b64': 'backend/src/auth/auth.controller.ts',
+            'scripts/i10_auth_svc.b64': 'backend/src/auth/auth.service.ts',
+            'scripts/i10_settings.b64': 'frontend/src/app/panel/settings/page.tsx',
+            'scripts/i10_panel_api.b64': 'frontend/src/lib/panel-api.ts',
+          }
+          for src, dst in mapping.items():
+            data = zlib.decompress(base64.b64decode(pathlib.Path(src).read_text().strip()))
+            pathlib.Path(dst).write_bytes(data)
+            print(dst, len(data))
+          assert 'ChangePasswordDto' in pathlib.Path('backend/src/auth/dto/auth.dto.ts').read_text()
+          assert 'changePassword' in pathlib.Path('backend/src/auth/auth.service.ts').read_text()
+          assert 'change-password' in pathlib.Path('backend/src/auth/auth.controller.ts').read_text()
+          assert 'changePassword' in pathlib.Path('frontend/src/lib/panel-api.ts').read_text()
+          assert 'تغییر رمز عبور' in pathlib.Path('frontend/src/app/panel/settings/page.tsx').read_text()
+          print('OK')
+          PY
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/auth/auth.service.ts frontend/src/app/panel/settings/page.tsx frontend/src/lib/panel-api.ts
-          git diff --staged --quiet || git commit -m "feat(#10): account settings (password, sessions, delete) + UI"
+          git add backend/src/auth/auth.controller.ts backend/src/auth/auth.service.ts frontend/src/app/panel/settings/page.tsx frontend/src/lib/panel-api.ts
+          git diff --staged --quiet || git commit -m "feat(#10): auth settings endpoints + full settings UI"
           git push
