@@ -13,7 +13,8 @@ import {
 } from '@/lib/panel-api';
 import { persianBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, formatDate, formatTime24 } from '@/lib/utils';
+import { tehranDateStr } from '@/lib/jalali';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'همه وضعیت‌ها' },
@@ -51,7 +52,7 @@ function timeFa(iso: string): string {
 }
 
 function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return tehranDateStr(d);
 }
 
 export default function ZibagarBookingsPage() {

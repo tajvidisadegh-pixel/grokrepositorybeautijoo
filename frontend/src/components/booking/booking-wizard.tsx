@@ -18,6 +18,7 @@ import {
 } from '@/lib/booking-draft';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice } from '@/lib/utils';
+import { tehranTodayIso, isoToJalaliLabel } from '@/lib/jalali';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { AvailabilitySlot, BookingRecord } from '@/types/booking';
@@ -67,7 +68,7 @@ const STEP_LABELS: Record<Step, string> = {
 };
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return tehranTodayIso();
 }
 
 export function BookingWizard({
@@ -588,7 +589,7 @@ export function BookingWizard({
             )}
             <div className="flex justify-between gap-2">
               <dt className="text-gray">تاریخ</dt>
-              <dd dir="ltr">{date}</dd>
+              <dd>{isoToJalaliLabel(date)} <span className="text-xs text-gray" dir="ltr">({date})</span></dd>
             </div>
             <div className="flex justify-between gap-2">
               <dt className="text-gray">ساعت</dt>
