@@ -16,12 +16,21 @@ export const metadata: Metadata = {
   description:
     'رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای — آرایش، ناخن، پوست و بیشتر در سراسر ایران.',
   robots: { index: true, follow: true },
+  alternates: { canonical: appUrl },
   openGraph: {
     type: 'website',
     locale: 'fa_IR',
     siteName: appName,
-    title: appName,
-    description: 'پلتفرم رزرو آنلاین زیباگر',
+    title: `${appName} | رزرو آنلاین خدمات زیبایی`,
+    description:
+      'رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای — آرایش، ناخن، پوست و بیشتر در سراسر ایران.',
+    url: appUrl,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${appName} | رزرو آنلاین خدمات زیبایی`,
+    description:
+      'رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای در سراسر ایران.',
   },
 };
 
