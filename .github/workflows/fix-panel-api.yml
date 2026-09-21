@@ -1,0 +1,44 @@
+name: Fix panel-api PLACEHOLDER
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-panel-api.yml'
+      - 'scripts/fix_pa0.b64'
+      - 'scripts/fix_pa1.b64'
+      - 'scripts/fix_pa2.b64'
+      - 'scripts/fix_pa3.b64'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore panel-api.ts from zlib parts
+        run: |
+          set -euo pipefail
+          python3 -c "
+import base64, zlib, pathlib
+parts = [pathlib.Path(f'scripts/fix_pa{i}.b64').read_text().strip() for i in range(4)]
+data = zlib.decompress(base64.b64decode(''.join(parts)))
+path = pathlib.Path('frontend/src/lib/panel-api.ts')
+path.write_bytes(data)
+text = data.decode()
+assert 'PLACEHOLDER' not in text
+assert 'apiClient' in text
+assert 'changePassword' in text
+assert 'adminSoftDeleteUser' in text
+print('OK', len(data))
+"
+          wc -c frontend/src/lib/panel-api.ts
+          head -c 80 frontend/src/lib/panel-api.ts
+          echo
+      - name: Commit only panel-api.ts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/panel-api.ts
+          git diff --staged --quiet && echo "no change" && exit 0
+          git commit -m "fix: restore full panel-api.ts (remove PLACEHOLDER, keep #10 methods)"
+          git push
