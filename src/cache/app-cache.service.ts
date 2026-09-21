@@ -6,6 +6,7 @@ type Entry = { value: unknown; expiresAt: number };
  * Process-local TTL cache for public catalog (search, categories, slug).
  * Optional Redis can replace this later when REDIS_URL is available.
  * Disable with APP_CACHE_TTL_SECONDS=0.
+ * In NODE_ENV=test, disabled by default so e2e sees fresh DB state.
  */
 @Injectable()
 export class AppCacheService {
@@ -19,6 +20,8 @@ export class AppCacheService {
     if (raw !== undefined && raw !== '') {
       const sec = parseInt(raw, 10);
       this.defaultTtlMs = !Number.isNaN(sec) && sec >= 0 ? sec * 1000 : 60_000;
+    } else if ((process.env.NODE_ENV || '').toLowerCase() === 'test') {
+      this.defaultTtlMs = 0;
     } else {
       this.defaultTtlMs = 60_000;
     }
@@ -36,7 +39,6 @@ export class AppCacheService {
       this.store.delete(key);
       return undefined;
     }
-    // touch for LRU-ish order
     this.store.delete(key);
     this.store.set(key, entry);
     return entry.value as T;
@@ -57,14 +59,12 @@ export class AppCacheService {
     this.store.delete(key);
   }
 
-  /** Drop all keys starting with prefix (e.g. catalog:) */
   invalidatePrefix(prefix: string): void {
     for (const k of [...this.store.keys()]) {
       if (k.startsWith(prefix)) this.store.delete(k);
     }
   }
 
-  /** Catalog search / slug / categories share this prefix for bulk invalidation. */
   invalidateCatalog(): void {
     this.invalidatePrefix('catalog:');
     this.logger.debug('catalog cache invalidated');
