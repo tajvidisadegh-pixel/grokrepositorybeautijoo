@@ -24,6 +24,7 @@ import { CleanupModule } from './cleanup/cleanup.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { JobsModule } from './jobs/jobs.module';
+import { CacheModule } from './cache/cache.module';
 import { CorrelationIdMiddleware } from './observability/correlation-id.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -36,6 +37,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     PrismaModule,
     ObservabilityModule,
     JobsModule,
+    CacheModule,
     HealthModule,
     SmsModule,
     StorageModule,
