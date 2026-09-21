@@ -1,98 +1,33 @@
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.status === UserStatus.deleted) {
-      throw new UnauthorizedException('حساب یافت نشد');
+    if (!user || !user.passwordHash) {
+      throw new BadRequestException('امکان تغییر رمز برای این حساب وجود ندارد');
     }
-    if (!user.passwordHash) {
-      throw new BadRequestException('این حساب با رمز عبور تنظیم نشده است. از ورود با کد یکبارمصرف استفاده کنید.');
+    const ok = await argon2.verify(user.passwordHash, dto.currentPassword);
+    if (!ok) {
+      throw new UnauthorizedException('رمز فعلی اشتباه است');
     }
-    const ok = await argon2.verify(user.passwordHash, currentPassword);
-    if (!ok) throw new BadRequestException('رمز فعلی نادرست است');
-    if (currentPassword === newPassword) {
+    if (dto.currentPassword === dto.newPassword) {
       throw new BadRequestException('رمز جدید باید با رمز فعلی متفاوت باشد');
     }
-    if (newPassword.length < 8) {
+    if (dto.newPassword.length < 8) {
       throw new BadRequestException('رمز جدید باید حداقل ۸ کاراکتر باشد');
     }
-    const passwordHash = await argon2.hash(newPassword);
-    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
-    // Revoke all refresh tokens so other devices re-login
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    userAuthCache.invalidate(userId);
-    return { message: 'رمز عبور با موفقیت تغییر کرد. لطفاً دوباره وارد شوید.' };
-  }
-
-  async listSessions(userId: string) {
-    const tokens = await this.prisma.refreshToken.findMany({
-      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, createdAt: true, expiresAt: true },
-    });
-    return {
-      items: tokens.map((t) => ({
-        id: t.id,
-        createdAt: t.createdAt,
-        expiresAt: t.expiresAt,
-      })),
-    };
-  }
-
-  async revokeSession(userId: string, sessionId: string) {
-    const row = await this.prisma.refreshToken.findFirst({
-      where: { id: sessionId, userId, revokedAt: null },
-    });
-    if (!row) throw new BadRequestException('نشست یافت نشد');
-    await this.prisma.refreshToken.update({
-      where: { id: sessionId },
-      data: { revokedAt: new Date() },
-    });
-    return { message: 'نشست باطل شد' };
-  }
-
-  async revokeAllSessions(userId: string) {
-    const result = await this.prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    userAuthCache.invalidate(userId);
-    return { message: 'همه نشست‌ها باطل شد', count: result.count };
-  }
-
-  async deleteAccount(userId: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.status === UserStatus.deleted) {
-      throw new UnauthorizedException('حساب یافت نشد');
-    }
-    if (user.passwordHash) {
-      const ok = await argon2.verify(user.passwordHash, password);
-      if (!ok) throw new BadRequestException('رمز عبور نادرست است');
-    } else if (!password || password.trim().length < 4) {
-      // OTP-only accounts: require confirmation phrase
-      if (password.trim() !== 'حذف') {
-        throw new BadRequestException('برای تأیید حذف، کلمه «حذف» را وارد کنید');
-      }
-    }
+    const passwordHash = await argon2.hash(dto.newPassword);
     await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      });
       await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      });
-      await tx.session.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      await tx.user.update({
-        where: { id: userId },
-        data: { status: UserStatus.deleted, passwordHash: null },
       });
       try {
         await tx.auditLog.create({
           data: {
             actorId: userId,
-            action: 'user.delete_account',
+            action: 'user.password_change',
             entityType: 'user',
             entityId: userId,
           },
@@ -102,5 +37,89 @@
       }
     });
     userAuthCache.invalidate(userId);
-    return { message: 'حساب کاربری حذف شد' };
+    return { message: 'رمز عبور با موفقیت تغییر کرد. لطفاً دوباره وارد شوید.' };
   }
+
+  async listSessions(userId: string) {
+    const tokens = await this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
+    return tokens.map((t) => ({
+      id: t.id,
+      createdAt: t.createdAt.toISOString(),
+      expiresAt: t.expiresAt.toISOString(),
+    }));
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    const result = await this.prisma.refreshToken.updateMany({
+      where: { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (result.count === 0) {
+      throw new BadRequestException('نشست یافت نشد یا قبلاً لغو شده است');
+    }
+    return { message: 'نشست با موفقیت لغو شد' };
+  }
+
+  async revokeAllSessions(userId: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    userAuthCache.invalidate(userId);
+    return { message: 'همه نشست‌ها لغو شدند. لطفاً دوباره وارد شوید.' };
+  }
+
+  async deleteAccount(userId: string, dto: DeleteAccountDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    if (user.status === UserStatus.deleted) {
+      throw new BadRequestException('این حساب قبلاً حذف شده است');
+    }
+    if (user.passwordHash) {
+      const ok = await argon2.verify(user.passwordHash, dto.password);
+      if (!ok) {
+        throw new UnauthorizedException('رمز عبور اشتباه است');
+      }
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { status: UserStatus.deleted },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.session.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      try {
+        await tx.auditLog.create({
+          data: {
+            actorId: userId,
+            action: 'user.account_delete',
+            entityType: 'user',
+            entityId: userId,
+          },
+        });
+      } catch {
+        /* non-blocking */
+      }
+    });
+    userAuthCache.invalidate(userId);
+    return { message: 'حساب کاربری با موفقیت حذف شد' };
+  }
+
