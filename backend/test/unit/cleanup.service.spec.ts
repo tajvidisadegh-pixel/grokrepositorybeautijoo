@@ -32,8 +32,13 @@ describe('CleanupService (unit)', () => {
     const storage = {
       delete: jest.fn().mockResolvedValue(undefined),
     };
-    const svc = new CleanupService(prisma, config, storage as any);
-    return { svc, prisma, storage };
+    const jobLease = {
+      withLease: jest.fn((_name: string, _ttl: number, fn: () => Promise<unknown>) => fn()),
+      tryAcquire: jest.fn().mockResolvedValue(true),
+      release: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = new CleanupService(prisma, config, storage as any, jobLease as any);
+    return { svc, prisma, storage, jobLease };
   }
 
   it('runAll aggregates counts', async () => {
