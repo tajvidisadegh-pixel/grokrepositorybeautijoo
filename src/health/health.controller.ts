@@ -27,26 +27,12 @@ export class HealthController {
       database = 'down';
     }
 
-    let storage: 'up' | 'down' | 'unconfigured' = 'unconfigured';
-    try {
-      if (
-        this.storage &&
-        typeof (this.storage as { healthCheck?: () => Promise<boolean> }).healthCheck ===
-          'function'
-      ) {
-        const ok = await (this.storage as { healthCheck: () => Promise<boolean> }).healthCheck();
-        storage = ok ? 'up' : 'down';
-      } else if (this.storage) {
-        // Provider exists — report configured without remote probe
-        storage = 'up';
-      }
-    } catch {
-      storage = 'down';
-    }
+    // StorageProvider has no healthCheck in interface — report configured vs missing only.
+    const storage: 'up' | 'unconfigured' = this.storage ? 'up' : 'unconfigured';
 
     const ok = database === 'up';
     return {
-      status: ok ? (storage === 'down' ? 'degraded' : 'ok') : 'degraded',
+      status: ok ? 'ok' : 'degraded',
       database,
       storage,
       uptimeSec: Math.round(process.uptime()),
