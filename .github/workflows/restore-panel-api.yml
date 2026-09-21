@@ -1,0 +1,34 @@
+name: Restore panel-api full
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-panel-api.yml'
+      - 'scripts/panel_api.zlib.b64'
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore panel-api.ts
+        run: |
+          set -e
+          python3 -c "
+import base64,zlib,pathlib
+b=pathlib.Path('scripts/panel_api.zlib.b64').read_text().strip()
+pathlib.Path('frontend/src/lib/panel-api.ts').write_bytes(zlib.decompress(base64.b64decode(b)))
+"
+          grep -q apiClient frontend/src/lib/panel-api.ts
+          grep -q changePassword frontend/src/lib/panel-api.ts
+          grep -q adminSoftDeleteUser frontend/src/lib/panel-api.ts
+          ! grep -q PLACEHOLDER frontend/src/lib/panel-api.ts
+          wc -c frontend/src/lib/panel-api.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/panel-api.ts
+          git diff --staged --quiet || git commit -m "fix(#10): restore full panel-api.ts (remove PLACEHOLDER)"
+          git push
