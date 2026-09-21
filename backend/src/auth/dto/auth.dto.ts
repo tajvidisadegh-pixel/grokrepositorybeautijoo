@@ -99,7 +99,6 @@ export class RefreshDto {
   refreshToken?: string;
 }
 
-/** Customer/professional self-service profile update */
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'مریم رضایی' })
   @IsOptional()
@@ -141,17 +140,17 @@ export class UpdateProfileDto {
 export class ChangePasswordDto {
   @ApiProperty({ example: 'OldPass123' })
   @IsString()
-  @MinLength(1)
+  @MinLength(8)
   currentPassword!: string;
 
   @ApiProperty({ example: 'NewSecurePass1' })
   @IsString()
-  @MinLength(8, { message: 'رمز جدید باید حداقل ۸ کاراکتر باشد' })
+  @MinLength(8)
   newPassword!: string;
 }
 
 export class DeleteAccountDto {
-  @ApiProperty({ description: 'رمز فعلی برای تأیید حذف حساب' })
+  @ApiProperty({ example: 'MyPassword1', description: 'رمز فعلی برای تأیید حذف حساب' })
   @IsString()
   @MinLength(1)
   password!: string;
