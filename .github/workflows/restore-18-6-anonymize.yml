@@ -1,0 +1,34 @@
+name: restore-18-6-anonymize
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and write files
+        run: |
+          python3 -c "
+          import base64, pathlib
+          mapping = {
+            'backend/src/auth/auth.service.ts': pathlib.Path('scripts/b64_auth_18_6.txt').read_text().strip(),
+            'frontend/src/app/panel/settings/page.tsx': pathlib.Path('scripts/b64_settings_18_6.txt').read_text().strip(),
+            'frontend/src/lib/panel-api.ts': pathlib.Path('scripts/b64_panel_18_6.txt').read_text().strip(),
+          }
+          for path, b64 in mapping.items():
+            data = base64.b64decode(b64)
+            p = pathlib.Path(path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+            print('wrote', path, len(data))
+          "
+      - name: Commit and push
+        run: |
+          git config user.name "grok-bot"
+          git config user.email "bot@x.ai"
+          git add backend/src/auth/auth.service.ts frontend/src/app/panel/settings/page.tsx frontend/src/lib/panel-api.ts
+          git status
+          git commit -m "feat(18.6): soft-delete with PII anonymization" || echo "no changes"
+          git push origin HEAD:main
