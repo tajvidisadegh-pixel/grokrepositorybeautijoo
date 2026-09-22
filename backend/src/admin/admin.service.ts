@@ -834,18 +834,64 @@ export class AdminService {
     const page = Math.max(1, Number(q?.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q?.limit) || 50));
     const where: Prisma.AuditLogWhereInput = {};
-    if (q?.action) where.action = q.action;
-    if (q?.entityType) where.entityType = q.entityType;
-    if (q?.entityId) where.entityId = q.entityId;
-    const [items, total] = await Promise.all([
+    if (q?.action?.trim()) {
+      where.action = { contains: String(q.action).trim(), mode: 'insensitive' };
+    }
+    if (q?.entityType?.trim()) where.entityType = String(q.entityType).trim();
+    if (q?.entityId?.trim()) where.entityId = String(q.entityId).trim();
+    if (q?.actorId?.trim()) where.actorId = String(q.actorId).trim();
+    if (q?.startDate || q?.endDate) {
+      where.createdAt = {};
+      if (q?.startDate) {
+        const d = new Date(q.startDate);
+        if (!Number.isNaN(d.getTime())) where.createdAt.gte = d;
+      }
+      if (q?.endDate) {
+        const d = new Date(q.endDate);
+        if (!Number.isNaN(d.getTime())) {
+          if (String(q.endDate).length <= 10) d.setHours(23, 59, 59, 999);
+          where.createdAt.lte = d;
+        }
+      }
+    }
+    const [rows, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
+        include: {
+          actor: {
+            select: {
+              id: true,
+              phone: true,
+              profile: { select: { displayName: true } },
+            },
+          },
+        },
       }),
       this.prisma.auditLog.count({ where }),
     ]);
+    const items = rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      entity: r.entityType,
+      entityType: r.entityType,
+      entityId: r.entityId,
+      actorId: r.actorId,
+      actor: r.actor
+        ? {
+            id: r.actor.id,
+            phone: r.actor.phone,
+            displayName: r.actor.profile?.displayName ?? null,
+          }
+        : null,
+      before: r.before,
+      after: r.after,
+      meta: r.after ?? r.before,
+      ipAddress: r.ipAddress,
+      createdAt: r.createdAt,
+    }));
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }
 
