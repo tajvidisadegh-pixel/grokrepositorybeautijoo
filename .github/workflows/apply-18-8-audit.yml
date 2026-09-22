@@ -1,0 +1,26 @@
+name: apply-18-8-audit
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply service + panel-api patches
+        run: |
+          set -euo pipefail
+          python3 scripts/apply_18_8_audit.py
+          grep -n 'actorId?.trim\|displayName: r.actor' backend/src/admin/admin.service.ts | head -10
+          grep -n 'AuditLogsQuery\|pageOrQuery' frontend/src/lib/panel-api.ts | head -10
+          # sanity: no PLACEHOLDER
+          grep -q PLACEHOLDER frontend/src/lib/panel-api.ts && exit 1 || true
+          test -f frontend/src/app/admin/audit/page.tsx
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/src/admin/admin.service.ts frontend/src/lib/panel-api.ts frontend/src/app/admin/audit/page.tsx scripts/apply_18_8_audit.py
+          if git diff --staged --quiet; then echo nochange; else git commit -m 'feat(18.8): admin audit filters (date/actor/action) + enriched API' && git push; fi
