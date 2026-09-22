@@ -1,0 +1,87 @@
+name: restore-panel-settings-placeholder
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-panel-settings-placeholder.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore files from known-good commit
+        run: |
+          set -euo pipefail
+          GOOD=ae0878862b275ac149b1af34a1359e4c34f1f0e1
+          git show "$GOOD:frontend/src/lib/panel-api.ts" > frontend/src/lib/panel-api.ts
+          git show "$GOOD:frontend/src/app/panel/settings/page.tsx" > frontend/src/app/panel/settings/page.tsx
+          # optional password for 18.6
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text()
+          old = '''export async function deleteAccount(payload: { password: string }) {
+            return apiClient.post<{ message: string }>('/auth/delete-account', payload);
+          }'''
+          new = '''export async function deleteAccount(payload?: { password?: string }) {
+            return apiClient.post<{ message: string }>('/auth/delete-account', payload ?? {});
+          }'''
+          # normalize whitespace variants
+          import re
+          t2 = re.sub(
+            r"export async function deleteAccount\(payload: \{ password: string \}\) \{\s*return apiClient\.post<\{ message: string \}>\('/auth/delete-account', payload\);\s*\}",
+            "export async function deleteAccount(payload?: { password?: string }) {\n  return apiClient.post<{ message: string }>('/auth/delete-account', payload ?? {});\n}",
+            t,
+            count=1,
+          )
+          if t2 == t:
+            print('WARN: deleteAccount not patched')
+          else:
+            p.write_text(t2)
+            print('panel-api deleteAccount optional')
+          s = Path('frontend/src/app/panel/settings/page.tsx')
+          st = s.read_text()
+          st2 = st.replace(
+            """    if (!deletePassword) {
+      setDelErr('رمز عبور الزامی است');
+      return;
+    }
+    setDelLoading(true);
+    try {
+      const res = await deleteAccount({ password: deletePassword });""",
+            """    setDelLoading(true);
+    try {
+      const res = await deleteAccount(deletePassword ? { password: deletePassword } : {});""",
+          )
+          if st2 != st:
+            print('settings delete flow patched')
+            st = st2
+          st = st.replace(
+            'رمز عبور برای تأیید',
+            'رمز عبور برای تأیید (اختیاری برای حساب فقط-OTP)',
+            1,
+          )
+          s.write_text(st)
+          PY
+          # sanity
+          grep -q PLACEHOLDER frontend/src/lib/panel-api.ts && { echo BAD_PLACEHOLDER; exit 1; } || true
+          grep -q PLACEHOLDER frontend/src/app/panel/settings/page.tsx && { echo BAD_PLACEHOLDER; exit 1; } || true
+          grep -q 'export async function deleteAccount' frontend/src/lib/panel-api.ts
+          grep -q PanelSettingsPage frontend/src/app/panel/settings/page.tsx
+          wc -c frontend/src/lib/panel-api.ts frontend/src/app/panel/settings/page.tsx
+      - name: Commit if changed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/lib/panel-api.ts frontend/src/app/panel/settings/page.tsx
+          if git diff --staged --quiet; then
+            echo 'No changes'
+          else
+            git commit -m 'fix: restore panel-api + settings (remove PLACEHOLDER)'
+            git push
+          fi
