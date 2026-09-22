@@ -70,6 +70,9 @@ export class ServiceFiltersController {
       maxPrice: maxPrice != null && maxPrice !== '' ? parseInt(maxPrice, 10) : undefined,
       sort,
       availableDate,
+      lat,
+      lng,
+      radiusKm,
     });
   }
 
