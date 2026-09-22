@@ -1,6 +1,6 @@
 name: restore-files-now
+# Emergency only — was running on every push and overwriting panel-api (broke 18.8 types).
 on:
-  push:
   workflow_dispatch:
 jobs:
   restore:
@@ -15,12 +15,10 @@ jobs:
           set -eux
           git show ae0878862b275ac149b1af34a1359e4c34f1f0e1:frontend/src/lib/panel-api.ts > frontend/src/lib/panel-api.ts
           git show ae0878862b275ac149b1af34a1359e4c34f1f0e1:frontend/src/app/panel/settings/page.tsx > frontend/src/app/panel/settings/page.tsx
-          # optional password patch
           sed -i "s/payload: { password: string }/payload?: { password?: string }/" frontend/src/lib/panel-api.ts || true
           sed -i "s/payload)/payload ?? {})/" frontend/src/lib/panel-api.ts || true
           grep -v PLACEHOLDER frontend/src/lib/panel-api.ts > /dev/null
           grep PanelSettingsPage frontend/src/app/panel/settings/page.tsx
-          wc -c frontend/src/lib/panel-api.ts frontend/src/app/panel/settings/page.tsx
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add frontend/src/lib/panel-api.ts frontend/src/app/panel/settings/page.tsx
