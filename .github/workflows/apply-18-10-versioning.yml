@@ -1,0 +1,25 @@
+name: apply-18-10-versioning
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch main + health
+        run: |
+          set -euo pipefail
+          test -f backend/src/common/api-version.ts
+          test -f backend/src/common/api-version.middleware.ts
+          python3 scripts/apply_18_10_versioning.py
+          grep -n 'apiVersionHeaders\|openapi.json\|API_VERSION_LABEL' backend/src/main.ts | head -20
+          grep -n 'apiVersion\|APP_VERSION' backend/src/health/health.controller.ts | head -10
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/src/main.ts backend/src/health/health.controller.ts backend/src/common/api-version.ts backend/src/common/api-version.middleware.ts docs/API_VERSIONING.md scripts/apply_18_10_versioning.py
+          if git diff --staged --quiet; then echo nochange; else git commit -m 'feat(18.10): wire version headers + OpenAPI JSON export' && git push; fi
