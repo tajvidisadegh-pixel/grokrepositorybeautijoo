@@ -50,17 +50,17 @@ export function findSuspiciousReason(buf: Buffer): string | null {
   const head = buf.subarray(0, Math.min(buf.length, 512));
   const ascii = head.toString('latin1').toLowerCase();
 
-  // HTML / script polyglot
-  if (/<\s*(html|script|svg|iframe|embed|object|link|meta)\b/.test(ascii)) {
+  // SVG first (XML-based; not in allowed raster set)
+  if (ascii.includes('<svg') || (ascii.includes('<?xml') && ascii.includes('svg'))) {
+    return 'svg';
+  }
+
+  // HTML / script polyglot (svg excluded — handled above)
+  if (/<\s*(html|script|iframe|embed|object|link|meta)\b/.test(ascii)) {
     return 'html_or_script';
   }
   if (ascii.includes('<?php') || ascii.includes('<%=') || ascii.includes('<jsp:')) {
     return 'server_script';
-  }
-
-  // SVG (XML-based; not in allowed raster set)
-  if (ascii.includes('<svg') || (ascii.includes('<?xml') && ascii.includes('svg'))) {
-    return 'svg';
   }
 
   // Windows PE
