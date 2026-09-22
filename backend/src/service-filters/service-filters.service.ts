@@ -125,6 +125,9 @@ export class ServiceFiltersService {
     maxPrice?: number;
     sort?: string;
     availableDate?: string;
+    lat?: string;
+    lng?: string;
+    radiusKm?: string;
   }) {
     if (!params.category) {
       return this.professionals.search(params);

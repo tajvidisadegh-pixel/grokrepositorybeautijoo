@@ -51,6 +51,9 @@ export class ProfessionalsController {
     @Query('maxPrice') maxPrice?: string,
     @Query('sort') sort?: string,
     @Query('availableDate') availableDate?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('radiusKm') radiusKm?: string,
   ) {
     return this.service.search({
       q,
@@ -63,6 +66,9 @@ export class ProfessionalsController {
       maxPrice: maxPrice != null && maxPrice !== '' ? parseInt(maxPrice, 10) : undefined,
       sort,
       availableDate,
+      lat,
+      lng,
+      radiusKm,
     });
   }
 

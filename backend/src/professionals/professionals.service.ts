@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AppCacheService } from '../cache/app-cache.service';
 import { ProfessionalStatus, Prisma } from '@prisma/client';
+import { boundingBox, haversineKm, parseGeoQuery } from '../common/geo';
 
 export type CompletionFieldKey =
   | 'title'
@@ -54,6 +55,9 @@ export class ProfessionalsService {
     sort?: string;
     availableDate?: string;
     ids?: string[];
+    lat?: string | number;
+    lng?: string | number;
+    radiusKm?: string | number;
   }) {
     const page = params.page || 1;
     const limit = Math.min(params.limit || 20, 50);
@@ -72,6 +76,9 @@ export class ProfessionalsService {
             maxPrice: params.maxPrice ?? null,
             sort: params.sort || '',
             availableDate: params.availableDate || '',
+            lat: params.lat ?? '',
+            lng: params.lng ?? '',
+            radiusKm: params.radiusKm ?? '',
           })}`
         : null;
     if (cacheKey) {
@@ -113,6 +120,30 @@ export class ProfessionalsService {
       where.locations = {
         some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
       };
+    }
+
+    const geo = parseGeoQuery({
+      lat: params.lat as any,
+      lng: params.lng as any,
+      radiusKm: params.radiusKm as any,
+    });
+    if (geo) {
+      const box = boundingBox(geo.lat, geo.lng, geo.radiusKm);
+      const locFilter: Prisma.LocationWhereInput = {
+        latitude: { gte: box.minLat, lte: box.maxLat },
+        longitude: { gte: box.minLng, lte: box.maxLng },
+      };
+      if (where.locations && typeof where.locations === 'object' && 'some' in where.locations) {
+        const prev = (where.locations as any).some || {};
+        where.locations = {
+          some: {
+            ...prev,
+            location: { ...(prev.location || {}), ...locFilter },
+          },
+        };
+      } else {
+        where.locations = { some: { location: locFilter } };
+      }
     }
 
     // Price + category filter on professionalServices
@@ -227,8 +258,31 @@ export class ProfessionalsService {
       });
     }
 
+    let withDistance: any[] = sorted;
+    if (geo) {
+      withDistance = sorted
+        .map((item) => {
+          const loc = item.locations?.[0]?.location;
+          const plat = loc?.latitude != null ? Number(loc.latitude) : NaN;
+          const plng = loc?.longitude != null ? Number(loc.longitude) : NaN;
+          if (!Number.isFinite(plat) || !Number.isFinite(plng)) {
+            return { ...item, distanceKm: null as number | null };
+          }
+          const distanceKm = Math.round(haversineKm(geo.lat, geo.lng, plat, plng) * 10) / 10;
+          return { ...item, distanceKm };
+        })
+        .filter((item) => item.distanceKm == null || item.distanceKm <= geo.radiusKm);
+      if (params.sort === 'distance' || !params.sort || params.sort === 'featured') {
+        withDistance = [...withDistance].sort((a, b) => {
+          const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+          const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+          return da - db;
+        });
+      }
+    }
+
     const result = {
-      items: sorted,
+      items: withDistance,
       meta: {
         page,
         limit,
@@ -239,6 +293,9 @@ export class ProfessionalsService {
           minPrice: params.minPrice ?? null,
           maxPrice: params.maxPrice ?? null,
           availableDate: params.availableDate ?? null,
+          lat: geo?.lat ?? null,
+          lng: geo?.lng ?? null,
+          radiusKm: geo?.radiusKm ?? null,
         },
       },
     };
