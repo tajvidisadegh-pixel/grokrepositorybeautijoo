@@ -5,6 +5,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { apiVersionHeaders } from './common/api-version.middleware';
+import { API_VERSION_LABEL, APP_VERSION } from './common/api-version';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { isAbsolute, normalize, resolve } from 'path';
 import { existsSync, mkdirSync } from 'fs';
@@ -74,6 +76,7 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Correlation-Id'],
+    exposedHeaders: ['X-API-Version', 'X-App-Version', 'X-Correlation-Id'],
   });
   logger.log(`CORS origins (${isProd ? 'prod' : 'dev'}): ${corsOrigins.join(', ')}`);
 
@@ -91,6 +94,7 @@ async function bootstrap() {
     );
   }
 
+  app.use(apiVersionHeaders);
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -102,18 +106,33 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  if (!isProd) {
+  {
     const swagger = new DocumentBuilder()
       .setTitle('Beautijoo API')
-      .setDescription('Persian RTL beauty marketplace — زیباگر booking platform')
-      .setVersion('1.0')
+      .setDescription(
+        'Persian RTL beauty marketplace — زیباگر booking platform. ' +
+          'Versioning: path /api/v1 · headers X-API-Version / X-App-Version. ' +
+          'See docs/API_VERSIONING.md.',
+      )
+      .setVersion(API_VERSION_LABEL)
       .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, swagger);
-    SwaggerModule.setup('api/docs', app, document);
-    logger.log('Swagger UI enabled at /api/docs (non-production)');
-  } else {
-    logger.log('Swagger UI disabled in production');
+    if (!isProd) {
+      SwaggerModule.setup('api/docs', app, document);
+      logger.log('Swagger UI enabled at /api/docs (non-production)');
+    } else {
+      logger.log('Swagger UI disabled in production');
+    }
+    // Public OpenAPI JSON in all environments (codegen / external clients)
+    const http = app.getHttpAdapter().getInstance();
+    if (http && typeof http.get === 'function') {
+      http.get('/api/v1/openapi.json', (_req: unknown, res: { type: (t: string) => void; json: (b: unknown) => void }) => {
+        res.type('application/json');
+        res.json(document);
+      });
+      logger.log(`OpenAPI JSON at /api/v1/openapi.json (api=${API_VERSION_LABEL}, app=${APP_VERSION})`);
+    }
   }
 
   const port = config.get<number>('port') || 3000;
