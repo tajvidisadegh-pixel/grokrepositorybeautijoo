@@ -1,17 +1,16 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches: [main, master]
+  pull_request:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  backend:
+  backend-build:
     name: Backend build
     runs-on: ubuntu-latest
     defaults:
@@ -22,10 +21,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install
-        run: npm install
+        run: npm ci
 
       - name: Prisma generate
         run: npx prisma generate --schema=./prisma/schema.prisma
@@ -36,8 +37,8 @@ jobs:
       - name: Assert dist output
         run: test -f dist/main.js || test -f dist/src/main.js
 
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Unit tests (with coverage thresholds)
+        run: npm run test:unit:coverage
 
   backend-e2e:
     name: Backend e2e
@@ -69,16 +70,17 @@ jobs:
       OTP_COOLDOWN_SECONDS: "60"
       OTP_MAX_PER_HOUR: "3"
       OTP_MAX_PER_DAY: "8"
-      CLEANUP_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install
-        run: npm install
+        run: npm ci
 
       - name: Prisma generate
         run: npx prisma generate --schema=./prisma/schema.prisma
@@ -121,10 +123,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install
-        run: npm install
+        run: npm ci
 
       - name: Typecheck
         run: npm run typecheck
@@ -133,8 +137,6 @@ jobs:
         run: npm run lint
 
       - name: Build
-        env:
-          NEXT_PUBLIC_API_URL: https://api.beautijoo.ir/api/v1
-          NEXT_PUBLIC_APP_URL: https://beautijoo.ir
-          NEXT_PUBLIC_APP_NAME: Beautijoo
         run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
