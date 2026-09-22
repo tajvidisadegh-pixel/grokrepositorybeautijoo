@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/contexts/auth-context';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -32,6 +32,23 @@ export const metadata: Metadata = {
     description:
       'رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای در سراسر ایران.',
   },
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: appName,
+  },
+  icons: {
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#fc7074',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -52,9 +69,14 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col antialiased">
+        <a href="#main-content" className="skip-link">
+          پرش به محتوای اصلی
+        </a>
         <AuthProvider>
           <Header />
-          <main className="flex-1">{children}</main>
+          <main id="main-content" className="flex-1" tabIndex={-1}>
+            {children}
+          </main>
           <Footer />
         </AuthProvider>
       </body>

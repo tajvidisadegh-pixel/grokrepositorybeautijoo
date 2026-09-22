@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Search, Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/brand/logo';
@@ -10,16 +10,45 @@ import { Logo } from '@/components/brand/logo';
 export function Header() {
   const { user, loading, logout, isAuthenticated, hasRole } = useAuth();
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   const displayName =
     user?.profile?.displayName || user?.phone || 'کاربر';
+
+  // Escape closes mobile menu; restore focus to toggle
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    // Focus first link in mobile nav
+    const t = window.setTimeout(() => {
+      const first = menuRef.current?.querySelector<HTMLElement>(
+        'a[href], button:not([disabled])',
+      );
+      first?.focus();
+    }, 0);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.clearTimeout(t);
+    };
+  }, [open]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-white/95 backdrop-blur-md shadow-[0_1px_0_0_rgba(252,112,116,0.08)]">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:h-16 sm:gap-4">
         <Logo />
 
-        <nav className="hidden items-center gap-1 text-sm font-medium text-gray md:flex">
+        <nav
+          className="hidden items-center gap-1 text-sm font-medium text-gray md:flex"
+          aria-label="اصلی"
+        >
           <Link
             href="/professionals"
             className="rounded-xl px-3 py-2 transition-colors hover:bg-coral-soft hover:text-coral"
@@ -43,10 +72,10 @@ export function Header() {
         <div className="flex items-center gap-1.5 sm:gap-2">
           <Link
             href="/search"
-            className="flex size-10 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
+            className="flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
             aria-label="جستجو"
           >
-            <Search className="size-5" />
+            <Search className="size-5" aria-hidden />
           </Link>
 
           {!loading && isAuthenticated ? (
@@ -56,7 +85,7 @@ export function Header() {
                   href="/admin"
                   className="flex items-center gap-1.5 rounded-xl border border-blue/30 bg-blue-soft px-3 py-1.5 text-xs font-bold text-blue shadow-sm transition-all hover:bg-blue hover:text-white sm:text-sm"
                 >
-                  <span>👑</span>
+                  <span aria-hidden>👑</span>
                   <span>پنل سوپر ادمین</span>
                 </Link>
               )}
@@ -99,7 +128,7 @@ export function Header() {
               <div className="hidden items-center gap-2 sm:flex">
                 <Link
                   href="/login"
-                  className="inline-flex h-9 items-center rounded-xl px-3 text-sm font-medium text-foreground transition-colors hover:bg-gray-light"
+                  className="inline-flex h-11 min-h-11 items-center rounded-xl px-3 text-sm font-medium text-foreground transition-colors hover:bg-gray-light"
                 >
                   ورود
                 </Link>
@@ -111,19 +140,27 @@ export function Header() {
           )}
 
           <button
+            ref={menuButtonRef}
             type="button"
-            className="flex size-10 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
+            className="flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
             onClick={() => setOpen((v) => !v)}
-            aria-label={open ? 'بستن منو' : 'منو'}
+            aria-label={open ? 'بستن منو' : 'باز کردن منو'}
             aria-expanded={open}
+            aria-controls="mobile-nav"
           >
-            {open ? <X className="size-5" /> : <Menu className="size-5" />}
+            {open ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
           </button>
         </div>
       </div>
 
       {open && (
-        <div className="border-t border-border bg-white md:hidden">
+        <div
+          id="mobile-nav"
+          ref={menuRef}
+          className="border-t border-border bg-white md:hidden"
+          role="navigation"
+          aria-label="منوی موبایل"
+        >
           <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3 text-sm font-medium">
             <Link
               href="/professionals"
@@ -172,7 +209,7 @@ export function Header() {
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-2 rounded-xl border border-blue/30 bg-blue-soft px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
                   >
-                    <span>👑</span>
+                    <span aria-hidden>👑</span>
                     <span>پنل سوپر ادمین</span>
                   </Link>
                 )}
@@ -199,7 +236,7 @@ export function Header() {
                 <Link
                   href="/register"
                   onClick={() => setOpen(false)}
-                  className="mt-1 flex h-11 items-center justify-center rounded-2xl bg-coral text-center font-medium text-white shadow-sm hover:bg-coral-dark"
+                  className="mt-1 flex h-11 min-h-11 items-center justify-center rounded-2xl bg-coral text-center font-medium text-white shadow-sm hover:bg-coral-dark"
                 >
                   ثبت‌نام
                 </Link>

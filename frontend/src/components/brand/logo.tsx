@@ -63,7 +63,11 @@ export function Logo({
   }
 
   return (
-    <Link href={href} className={`flex shrink-0 items-center gap-2.5 ${className}`.trim()}>
+    <Link
+      href={href}
+      className={`flex shrink-0 items-center gap-2.5 ${className}`.trim()}
+      aria-label="صفحه اصلی بیوتی‌جو"
+    >
       {inner}
     </Link>
   );
