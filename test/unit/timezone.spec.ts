@@ -35,14 +35,36 @@ describe('timezone helpers (Asia/Tehran)', () => {
     expect(dayOfWeek).toBe(6); // Sat
     expect(dayStart.getTime()).toBeLessThan(dayEnd.getTime());
     expect(tehranDateStr(dayStart)).toBe('2024-06-15');
-    // dayEnd is still on same Tehran calendar day
     expect(tehranDateStr(dayEnd)).toBe('2024-06-15');
   });
 
   it('crossing UTC midnight does not shift Tehran date wrongly', () => {
-    // 01:30 Tehran = previous evening UTC
     const utc = tehranLocalToUtc('2024-01-10', '01:30');
     expect(tehranDateStr(utc)).toBe('2024-01-10');
     expect(tehranHHMM(utc)).toBe('01:30');
+  });
+
+  it('rejects invalid local input', () => {
+    expect(() => tehranLocalToUtc('not-a-date', '12:00')).toThrow();
+    expect(() => tehranLocalToUtc('2024-01-01', 'xx:yy')).toThrow();
+  });
+
+  it('fixed offset +03:30 for sample winter date (no DST since 2022)', () => {
+    const utc = tehranLocalToUtc('2024-01-15', '12:00');
+    // 12:00 Tehran = 08:30 UTC
+    expect(utc.toISOString()).toBe('2024-01-15T08:30:00.000Z');
+  });
+
+  it('fixed offset +03:30 for sample summer date', () => {
+    const utc = tehranLocalToUtc('2024-07-15', '12:00');
+    expect(utc.toISOString()).toBe('2024-07-15T08:30:00.000Z');
+  });
+
+  it('day bounds span almost 24h', () => {
+    const { dayStart, dayEnd } = tehranDayBounds('2024-03-21');
+    const spanMs = dayEnd.getTime() - dayStart.getTime();
+    // just under 24h (dayEnd is last instant of day)
+    expect(spanMs).toBeGreaterThan(23 * 3600 * 1000);
+    expect(spanMs).toBeLessThanOrEqual(24 * 3600 * 1000);
   });
 });

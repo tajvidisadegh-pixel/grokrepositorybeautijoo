@@ -14,7 +14,8 @@
     "prisma:seed-catalog": "node prisma/seed-catalog.cjs",
     "test:e2e": "NODE_ENV=test jest --config ./test/jest-e2e.json --runInBand --forceExit",
     "test:e2e:watch": "NODE_ENV=test jest --config ./test/jest-e2e.json --runInBand --watch",
-    "test:unit": "NODE_ENV=test jest --config ./test/jest-unit.json --runInBand --forceExit"
+    "test:unit": "NODE_ENV=test jest --config ./test/jest-unit.json --runInBand --forceExit",
+    "test:unit:coverage": "NODE_ENV=test jest --config ./test/jest-unit.json --runInBand --forceExit --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",

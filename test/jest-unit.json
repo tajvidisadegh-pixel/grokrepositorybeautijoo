@@ -7,5 +7,26 @@
   "moduleNameMapper": {
     "^src/(.*)$": "<rootDir>/src/$1"
   },
-  "testTimeout": 15000
+  "testTimeout": 15000,
+  "collectCoverageFrom": [
+    "src/payments/financial.util.ts",
+    "src/availability/slot-math.ts",
+    "src/common/timezone.ts"
+  ],
+  "coverageDirectory": "coverage/unit",
+  "coverageReporters": ["text-summary", "lcov"],
+  "coverageThreshold": {
+    "./src/payments/financial.util.ts": {
+      "statements": 90,
+      "branches": 80,
+      "functions": 90,
+      "lines": 90
+    },
+    "./src/availability/slot-math.ts": {
+      "statements": 85,
+      "branches": 75,
+      "functions": 85,
+      "lines": 85
+    }
+  }
 }
