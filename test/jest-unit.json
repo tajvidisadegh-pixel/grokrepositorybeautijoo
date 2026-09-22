@@ -1,6 +1,6 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
+  "rootDir": "..",
   "testEnvironment": "node",
   "testRegex": "test/unit/.*\\.spec\\.ts$",
   "transform": { "^.+\\.(t|j)s$": "ts-jest" },
@@ -16,6 +16,9 @@
   "coverageDirectory": "coverage/unit",
   "coverageReporters": ["text-summary", "lcov"],
   "coverageThreshold": {
+    "global": {
+      "statements": 0
+    },
     "./src/payments/financial.util.ts": {
       "statements": 90,
       "branches": 80,
