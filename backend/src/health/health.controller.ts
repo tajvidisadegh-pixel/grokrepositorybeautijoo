@@ -2,6 +2,7 @@ import { Controller, Get, Inject, Optional } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
+import { API_VERSION_LABEL, APP_VERSION } from '../common/api-version';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetricsRegistry } from '../observability/metrics.registry';
 import { STORAGE_PROVIDER, type StorageProvider } from '../storage/storage.provider';
@@ -33,6 +34,8 @@ export class HealthController {
     const ok = database === 'up';
     return {
       status: ok ? 'ok' : 'degraded',
+      apiVersion: API_VERSION_LABEL,
+      appVersion: APP_VERSION,
       database,
       storage,
       uptimeSec: Math.round(process.uptime()),
