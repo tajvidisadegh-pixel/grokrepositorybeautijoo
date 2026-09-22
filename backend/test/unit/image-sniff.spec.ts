@@ -12,8 +12,8 @@ describe('sniffImage', () => {
   });
 
   it('detects gif87a / gif89a', () => {
-    expect(sniffImage(Buffer.from('GIF87a......')).?.kind).toBe('gif');
-    expect(sniffImage(Buffer.from('GIF89a......')).?.kind).toBe('gif');
+    expect(sniffImage(Buffer.from('GIF87a......'))?.kind).toBe('gif');
+    expect(sniffImage(Buffer.from('GIF89a......'))?.kind).toBe('gif');
   });
 
   it('detects webp', () => {
