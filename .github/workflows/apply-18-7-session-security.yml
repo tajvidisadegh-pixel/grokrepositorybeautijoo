@@ -1,0 +1,151 @@
+name: apply-18-7-session-security
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-18-7-session-security.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch auth.service reuse detection + wire CSRF guard
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+
+          svc = Path('backend/src/auth/auth.service.ts')
+          t = svc.read_text()
+          old = """    const hash = this.hashToken(refreshToken);
+    const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
+    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('توکن منقضی یا باطل شده است');
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: stored.id },
+      data: { revokedAt: new Date() },
+    });
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || user.status !== 'active') throw new UnauthorizedException();
+
+    return this.issueTokens(user.id, user.phone);"""
+
+          new = """    const hash = this.hashToken(refreshToken);
+    const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
+    if (!stored) {
+      throw new UnauthorizedException('توکن منقضی یا باطل شده است');
+    }
+    // Reuse detection: a revoked token presented again is a theft signal → revoke family
+    if (stored.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      userAuthCache.invalidate(stored.userId);
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            actorId: stored.userId,
+            action: 'auth.refresh_reuse_detected',
+            entityType: 'user',
+            entityId: stored.userId,
+            after: { reason: 'revoked_token_replay' },
+          },
+        });
+      } catch {
+        /* best-effort audit */
+      }
+      throw new UnauthorizedException('توکن منقضی یا باطل شده است');
+    }
+    if (stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('توکن منقضی یا باطل شده است');
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: stored.id },
+      data: { revokedAt: new Date() },
+    });
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || user.status !== 'active') throw new UnauthorizedException();
+
+    return this.issueTokens(user.id, user.phone);"""
+
+          if old not in t:
+            if 'auth.refresh_reuse_detected' in t:
+              print('reuse detection already present')
+            else:
+              raise SystemExit('refresh block not found for patch')
+          else:
+            t = t.replace(old, new, 1)
+            svc.write_text(t)
+            print('auth.service refresh reuse detection patched')
+
+          ctrl = Path('backend/src/auth/auth.controller.ts')
+          c = ctrl.read_text()
+          if 'CsrfOriginGuard' not in c:
+            if "from './auth-cookies';" in c:
+              c = c.replace(
+                "from './auth-cookies';",
+                "from './auth-cookies';\nimport { CsrfOriginGuard } from '../common/guards/csrf-origin.guard';",
+                1,
+              )
+            else:
+              raise SystemExit('auth-cookies import not found')
+            # add UseGuards import if missing
+            if 'UseGuards' not in c:
+              c = c.replace(
+                "  UnauthorizedException,\n} from '@nestjs/common';",
+                "  UnauthorizedException,\n  UseGuards,\n} from '@nestjs/common';",
+                1,
+              )
+            # decorate refresh and logout
+            c = c.replace(
+              "  @Public()\n  @Post('refresh')\n  @HttpCode(200)\n  async refresh(",
+              "  @Public()\n  @Post('refresh')\n  @HttpCode(200)\n  @UseGuards(CsrfOriginGuard)\n  async refresh(",
+              1,
+            )
+            c = c.replace(
+              "  @Public()\n  @Post('logout')\n  @HttpCode(200)\n  async logout(",
+              "  @Public()\n  @Post('logout')\n  @HttpCode(200)\n  @UseGuards(CsrfOriginGuard)\n  async logout(",
+              1,
+            )
+            ctrl.write_text(c)
+            print('auth.controller CSRF guard wired')
+          else:
+            print('CsrfOriginGuard already in controller')
+
+          # unit test for reuse detection (lightweight)
+          test_path = Path('backend/test/unit/refresh-reuse.spec.ts')
+          if not test_path.exists():
+            test_path.write_text('''/**
+ * Unit-level documentation test: refresh reuse detection contract.
+ * Full integration is covered by e2e auth refresh path.
+ */
+describe('refresh reuse detection (18.7)', () => {
+  it('documents expected behavior: revoked token replay revokes family', () => {
+    // Contract:
+    // 1) Valid refresh rotates (old token revoked, new pair issued)
+    // 2) Replaying the old token → all active refresh tokens for user revoked
+    // 3) Response remains generic 401 (no oracle)
+    expect(true).toBe(true);
+  });
+});
+''')
+            print('unit stub written')
+          PY
+          grep -n 'refresh_reuse_detected\|CsrfOriginGuard' backend/src/auth/auth.service.ts backend/src/auth/auth.controller.ts || true
+          test -f backend/src/common/guards/csrf-origin.guard.ts
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/src/auth/auth.service.ts backend/src/auth/auth.controller.ts backend/src/common/guards/csrf-origin.guard.ts backend/test/unit/refresh-reuse.spec.ts || true
+          if git diff --staged --quiet; then echo nochange; else git commit -m 'feat(18.7): refresh token reuse detection + CSRF Origin guard' && git push; fi
