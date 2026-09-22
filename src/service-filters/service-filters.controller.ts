@@ -55,6 +55,9 @@ export class ServiceFiltersController {
     @Query('maxPrice') maxPrice?: string,
     @Query('sort') sort?: string,
     @Query('availableDate') availableDate?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('radiusKm') radiusKm?: string,
   ) {
     return this.service.searchProfessionalsByFilter({
       q,
