@@ -1,0 +1,49 @@
+name: restore-panel-settings-v2
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-panel-settings-v2.yml'
+      - 'scripts/fix_pa0.b64'
+      - 'scripts/fix_pa1.b64'
+      - 'scripts/fix_pa2.b64'
+      - 'scripts/fix_pa3.b64'
+      - 'scripts/settings_18_6.zlib.b64'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Decode and write files
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          import base64, zlib, pathlib
+          parts = [pathlib.Path(f'scripts/fix_pa{i}.b64').read_text().strip() for i in range(4)]
+          data = zlib.decompress(base64.b64decode(''.join(parts)))
+          path = pathlib.Path('frontend/src/lib/panel-api.ts')
+          path.write_bytes(data)
+          text = data.decode()
+          assert 'PLACEHOLDER' not in text, 'panel still PLACEHOLDER'
+          assert 'apiClient' in text
+          assert 'deleteAccount' in text
+          print('panel-api OK', len(data))
+          sdata = zlib.decompress(base64.b64decode(pathlib.Path('scripts/settings_18_6.zlib.b64').read_text().strip()))
+          sp = pathlib.Path('frontend/src/app/panel/settings/page.tsx')
+          sp.write_bytes(sdata)
+          st = sdata.decode()
+          assert 'PLACEHOLDER' not in st, 'settings still PLACEHOLDER'
+          assert 'PanelSettingsPage' in st
+          print('settings OK', len(sdata))
+          PY
+          wc -c frontend/src/lib/panel-api.ts frontend/src/app/panel/settings/page.tsx
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/lib/panel-api.ts frontend/src/app/panel/settings/page.tsx
+          if git diff --staged --quiet; then echo nochange; else git commit -m 'fix: restore panel-api + settings (remove PLACEHOLDER)' && git push; fi
