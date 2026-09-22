@@ -364,7 +364,32 @@ export class AuthService {
 
     const hash = this.hashToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+    if (!stored) {
+      throw new UnauthorizedException('توکن منقضی یا باطل شده است');
+    }
+    // Reuse detection: revoked token replay → revoke entire family (theft signal)
+    if (stored.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      userAuthCache.invalidate(stored.userId);
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            actorId: stored.userId,
+            action: 'auth.refresh_reuse_detected',
+            entityType: 'user',
+            entityId: stored.userId,
+            after: { reason: 'revoked_token_replay' },
+          },
+        });
+      } catch {
+        /* best-effort audit */
+      }
+      throw new UnauthorizedException('توکن منقضی یا باطل شده است');
+    }
+    if (stored.expiresAt < new Date()) {
       throw new UnauthorizedException('توکن منقضی یا باطل شده است');
     }
 

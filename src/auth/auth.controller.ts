@@ -10,6 +10,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -33,6 +34,7 @@ import {
   clearRefreshCookie,
   readRefreshFromRequest,
 } from './auth-cookies';
+import { CsrfOriginGuard } from '../common/guards/csrf-origin.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -90,6 +92,7 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(200)
+  @UseGuards(CsrfOriginGuard)
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -109,6 +112,7 @@ export class AuthController {
   @Public()
   @Post('logout')
   @HttpCode(200)
+  @UseGuards(CsrfOriginGuard)
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
