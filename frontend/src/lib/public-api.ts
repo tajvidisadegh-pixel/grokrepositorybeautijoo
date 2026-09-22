@@ -4,13 +4,11 @@ import type {
   ProfessionalsSearchResponse,
   ServiceCategory,
   ServiceItem,
-  PublishedSiteConfig,
 } from '@/types/public';
 
-const API_BASE =
+const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ||
-  process.env.API_URL?.replace(/\/$/, '') ||
-  'http://localhost:3001/api/v1';
+  'http://localhost:3000/api/v1';
 
 export class PublicApiError extends Error {
   constructor(
@@ -23,20 +21,20 @@ export class PublicApiError extends Error {
 }
 
 async function publicGet<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
   const res = await fetch(url, {
     ...init,
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers || {}),
-    },
+    headers: { Accept: 'application/json', ...(init?.headers || {}) },
     next: init?.next ?? { revalidate: 60 },
   });
+  const text = await res.text();
   let data: unknown = null;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
   }
   if (!res.ok) {
     const msg =
@@ -107,6 +105,47 @@ export function listServices(categorySlug?: string) {
   );
 }
 
+/** Published homepage CMS (draft is never returned). */
+export type PublishedSiteConfig = {
+  content: {
+    hero?: {
+      enabled?: boolean;
+      title?: string;
+      subtitle?: string;
+      description?: string;
+      ctaText?: string;
+      ctaLink?: string;
+      badge?: string;
+      desktopImageUrl?: string | null;
+      mobileImageUrl?: string | null;
+    };
+    texts?: {
+      categoriesTitle?: string;
+      categoriesLinkText?: string;
+      featuredTitle?: string;
+      featuredLinkText?: string;
+      ctaTitle?: string;
+      ctaDescription?: string;
+      ctaPrimaryText?: string;
+      ctaPrimaryLink?: string;
+      ctaSecondaryText?: string;
+      ctaSecondaryLink?: string;
+    };
+    features?: {
+      showCategories?: boolean;
+      showFeaturedProfessionals?: boolean;
+      showBottomCta?: boolean;
+      showSearchInHero?: boolean;
+    };
+    publishedAt?: string | null;
+  };
+  sections: Array<{ id: string; label: string; enabled: boolean; sortOrder: number }>;
+};
+
 export function getPublishedSiteConfig() {
-  return publicGet<PublishedSiteConfig>('/site-config/public');
+  return publicGet<PublishedSiteConfig>('/public/site-config', {
+    next: { revalidate: 30, tags: ['site-cms'] },
+  });
 }
+
+export { API_URL };
