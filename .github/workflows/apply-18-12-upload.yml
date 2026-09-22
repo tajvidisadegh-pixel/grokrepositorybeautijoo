@@ -1,0 +1,33 @@
+name: apply-18-12-upload
+on:
+  push:
+    paths:
+      - 'scripts/apply_18_12_upload_security.py'
+      - '.github/workflows/apply-18-12-upload.yml'
+      - 'backend/src/media/upload-security.ts'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch media controller + service
+        run: |
+          set -euo pipefail
+          test -f backend/src/media/upload-security.ts
+          python3 scripts/apply_18_12_upload_security.py
+          grep -n 'uploadMaxBytes\|assertUploadSize\|assertNotSuspicious\|uploadMaxPortfolio' backend/src/media/media.controller.ts backend/src/media/media.service.ts | head -20
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/src/media/media.controller.ts backend/src/media/media.service.ts
+          if git diff --staged --quiet; then echo nochange; exit 0; fi
+          git commit -m 'feat(18.12): wire upload size/polyglot checks into media pipeline'
+          git pull --rebase origin main
+          git push
