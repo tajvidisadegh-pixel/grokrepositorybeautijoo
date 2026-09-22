@@ -1,0 +1,26 @@
+{
+  "name": "Beautijoo — بیوتی‌جو",
+  "short_name": "Beautijoo",
+  "description": "رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#fc7074",
+  "lang": "fa",
+  "dir": "rtl",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
