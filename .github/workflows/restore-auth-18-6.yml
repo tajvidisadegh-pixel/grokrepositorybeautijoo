@@ -1,0 +1,15 @@
+name: restore-auth-18-6
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-auth-18-6.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder marker
+        run: echo 'will be replaced'
