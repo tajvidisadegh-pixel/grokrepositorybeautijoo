@@ -16,6 +16,7 @@ import { diskStorage } from 'multer';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { MediaKind } from '@prisma/client';
 import { MediaService } from './media.service';
+import { uploadMaxBytes } from './upload-security';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import * as os from 'os';
@@ -76,7 +77,7 @@ export class MediaController {
           cb(null, `bj-${Date.now()}-${randomBytes(6).toString('hex')}-${safe}`);
         },
       }),
-      limits: { fileSize: Number.MAX_SAFE_INTEGER },
+      limits: { fileSize: uploadMaxBytes(), files: 1 },
       fileFilter: (_req, file, cb) => {
         if (!file) {
           return cb(new BadRequestException('\u0641\u0627\u06cc\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a') as unknown as Error, false);

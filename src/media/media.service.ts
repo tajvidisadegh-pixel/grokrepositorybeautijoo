@@ -13,6 +13,11 @@ import {
 } from '../storage/storage.provider';
 import { MediaKind, MediaStatus, type MediaAsset } from '@prisma/client';
 import { sniffImage } from './image-sniff';
+import {
+  assertNotSuspicious,
+  assertUploadSize,
+  uploadMaxPortfolio,
+} from './upload-security';
 import * as fs from 'fs/promises';
 import sharp from 'sharp';
 
@@ -133,6 +138,9 @@ export class MediaService {
         throw new BadRequestException('فایل خالی است');
       }
 
+      assertUploadSize(raw.length);
+      assertNotSuspicious(raw);
+
       const processed = await this.processImage(raw);
 
       let pro = await this.prisma.professional.findUnique({ where: { userId } });
@@ -170,6 +178,17 @@ export class MediaService {
           where: { id: professionalServiceId, professionalId: pro.id },
         });
         if (!ps) throw new ForbiddenException('خدمت متعلق به شما نیست');
+      }
+
+      if (kind === MediaKind.portfolio) {
+        const count = await this.prisma.mediaAsset.count({
+          where: { professionalId: pro.id, kind: MediaKind.portfolio },
+        });
+        if (count >= uploadMaxPortfolio()) {
+          throw new BadRequestException(
+            `تعداد تصاویر نمونه کار به سقف مجاز (${uploadMaxPortfolio()}) رسیده است`,
+          );
+        }
       }
 
       await this.replaceOldAssets(pro.id, kind);
