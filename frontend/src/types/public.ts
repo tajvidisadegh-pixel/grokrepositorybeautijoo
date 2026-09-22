@@ -12,6 +12,8 @@ export type LocationSnippet = {
   address: string;
   city: string;
   province?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 };
 
 export type ServiceSnippet = {
@@ -83,6 +85,8 @@ export type ProfessionalListItem = {
   isFeatured?: boolean;
   ratingAvg?: number | null;
   ratingCount?: number | null;
+  /** Present when search used lat/lng/radiusKm */
+  distanceKm?: number | null;
   user?: { profile?: ProfileSnippet | null } | null;
   locations?: { location: LocationSnippet; isPrimary?: boolean }[];
   /** List may return a subset; detail uses ProfessionalServiceItem[] */
