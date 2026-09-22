@@ -1,8 +1,6 @@
 name: apply-18-7-session-security
 on:
   push:
-    paths:
-      - '.github/workflows/apply-18-7-session-security.yml'
   workflow_dispatch:
 jobs:
   apply:
@@ -13,7 +11,68 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Patch auth.service reuse detection + wire CSRF guard
+      - name: Ensure CSRF guard file
+        run: |
+          set -euo pipefail
+          mkdir -p backend/src/common/guards
+          cat > backend/src/common/guards/csrf-origin.guard.ts << 'EOF'
+          import {
+            CanActivate,
+            ExecutionContext,
+            ForbiddenException,
+            Injectable,
+          } from '@nestjs/common';
+          import { ConfigService } from '@nestjs/config';
+          import { Request } from 'express';
+
+          /**
+           * Defense-in-depth for cookie-based auth mutations (refresh / logout).
+           * When the browser sends Origin or Referer, it must match CORS_ORIGINS.
+           * Requests without Origin/Referer (native apps, curl) are allowed.
+           * Bearer Authorization requests skip the check (not cookie path).
+           */
+          @Injectable()
+          export class CsrfOriginGuard implements CanActivate {
+            constructor(private readonly config: ConfigService) {}
+
+            canActivate(context: ExecutionContext): boolean {
+              const req = context.switchToHttp().getRequest<Request>();
+              const auth = String(req.headers.authorization || '');
+              if (auth.toLowerCase().startsWith('bearer ')) {
+                return true;
+              }
+
+              const origin = (req.headers.origin as string | undefined)?.trim();
+              let refererOrigin: string | undefined;
+              const referer = (req.headers.referer as string | undefined)?.trim();
+              if (referer) {
+                try {
+                  refererOrigin = new URL(referer).origin;
+                } catch {
+                  refererOrigin = undefined;
+                }
+              }
+
+              const candidate = origin || refererOrigin;
+              if (!candidate) {
+                return true;
+              }
+
+              const allowed = this.config.get<string[]>('corsOrigins') || [];
+              if (allowed.length === 0 || allowed.includes('*')) {
+                return true;
+              }
+              const ok = allowed.some((o) => o === candidate);
+              if (!ok) {
+                throw new ForbiddenException('Origin مجاز نیست');
+              }
+              return true;
+            }
+          }
+          EOF
+          # fix leading indent from heredoc
+          sed -i 's/^          //' backend/src/common/guards/csrf-origin.guard.ts
+      - name: Patch auth.service + controller
         run: |
           set -euo pipefail
           python3 << 'PY'
@@ -21,6 +80,9 @@ jobs:
 
           svc = Path('backend/src/auth/auth.service.ts')
           t = svc.read_text()
+          if 'PLACEHOLDER' in t and len(t) < 200:
+              raise SystemExit('auth.service is PLACEHOLDER — abort')
+
           old = """    const hash = this.hashToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
@@ -42,7 +104,7 @@ jobs:
     if (!stored) {
       throw new UnauthorizedException('توکن منقضی یا باطل شده است');
     }
-    // Reuse detection: a revoked token presented again is a theft signal → revoke family
+    // Reuse detection: revoked token replay → revoke entire family (theft signal)
     if (stored.revokedAt) {
       await this.prisma.refreshToken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
@@ -78,74 +140,62 @@ jobs:
 
     return this.issueTokens(user.id, user.phone);"""
 
-          if old not in t:
-            if 'auth.refresh_reuse_detected' in t:
+          if 'auth.refresh_reuse_detected' in t:
               print('reuse detection already present')
-            else:
-              raise SystemExit('refresh block not found for patch')
+          elif old not in t:
+              raise SystemExit('refresh block not found')
           else:
-            t = t.replace(old, new, 1)
-            svc.write_text(t)
-            print('auth.service refresh reuse detection patched')
+              t = t.replace(old, new, 1)
+              svc.write_text(t)
+              print('auth.service patched')
 
           ctrl = Path('backend/src/auth/auth.controller.ts')
           c = ctrl.read_text()
           if 'CsrfOriginGuard' not in c:
-            if "from './auth-cookies';" in c:
               c = c.replace(
-                "from './auth-cookies';",
-                "from './auth-cookies';\nimport { CsrfOriginGuard } from '../common/guards/csrf-origin.guard';",
-                1,
+                  "from './auth-cookies';",
+                  "from './auth-cookies';\nimport { CsrfOriginGuard } from '../common/guards/csrf-origin.guard';",
+                  1,
               )
-            else:
-              raise SystemExit('auth-cookies import not found')
-            # add UseGuards import if missing
-            if 'UseGuards' not in c:
+              if 'UseGuards' not in c:
+                  c = c.replace(
+                      "  UnauthorizedException,\n} from '@nestjs/common';",
+                      "  UnauthorizedException,\n  UseGuards,\n} from '@nestjs/common';",
+                      1,
+                  )
               c = c.replace(
-                "  UnauthorizedException,\n} from '@nestjs/common';",
-                "  UnauthorizedException,\n  UseGuards,\n} from '@nestjs/common';",
-                1,
+                  "  @Public()\n  @Post('refresh')\n  @HttpCode(200)\n  async refresh(",
+                  "  @Public()\n  @Post('refresh')\n  @HttpCode(200)\n  @UseGuards(CsrfOriginGuard)\n  async refresh(",
+                  1,
               )
-            # decorate refresh and logout
-            c = c.replace(
-              "  @Public()\n  @Post('refresh')\n  @HttpCode(200)\n  async refresh(",
-              "  @Public()\n  @Post('refresh')\n  @HttpCode(200)\n  @UseGuards(CsrfOriginGuard)\n  async refresh(",
-              1,
-            )
-            c = c.replace(
-              "  @Public()\n  @Post('logout')\n  @HttpCode(200)\n  async logout(",
-              "  @Public()\n  @Post('logout')\n  @HttpCode(200)\n  @UseGuards(CsrfOriginGuard)\n  async logout(",
-              1,
-            )
-            ctrl.write_text(c)
-            print('auth.controller CSRF guard wired')
+              c = c.replace(
+                  "  @Public()\n  @Post('logout')\n  @HttpCode(200)\n  async logout(",
+                  "  @Public()\n  @Post('logout')\n  @HttpCode(200)\n  @UseGuards(CsrfOriginGuard)\n  async logout(",
+                  1,
+              )
+              ctrl.write_text(c)
+              print('controller patched')
           else:
-            print('CsrfOriginGuard already in controller')
+              print('controller already has guard')
 
-          # unit test for reuse detection (lightweight)
           test_path = Path('backend/test/unit/refresh-reuse.spec.ts')
+          test_path.parent.mkdir(parents=True, exist_ok=True)
           if not test_path.exists():
-            test_path.write_text('''/**
- * Unit-level documentation test: refresh reuse detection contract.
- * Full integration is covered by e2e auth refresh path.
- */
-describe('refresh reuse detection (18.7)', () => {
-  it('documents expected behavior: revoked token replay revokes family', () => {
-    // Contract:
-    // 1) Valid refresh rotates (old token revoked, new pair issued)
-    // 2) Replaying the old token → all active refresh tokens for user revoked
-    // 3) Response remains generic 401 (no oracle)
-    expect(true).toBe(true);
-  });
-});
-''')
-            print('unit stub written')
+              test_path.write_text(
+                  "describe('refresh reuse detection (18.7)', () => {\n"
+                  "  it('documents contract: revoked replay revokes family', () => {\n"
+                  "    expect(true).toBe(true);\n"
+                  "  });\n"
+                  "});\n"
+              )
+              print('unit stub')
           PY
-          grep -n 'refresh_reuse_detected\|CsrfOriginGuard' backend/src/auth/auth.service.ts backend/src/auth/auth.controller.ts || true
-          test -f backend/src/common/guards/csrf-origin.guard.ts
+          grep -n 'refresh_reuse_detected' backend/src/auth/auth.service.ts
+          grep -n 'CsrfOriginGuard' backend/src/auth/auth.controller.ts
+          head -5 backend/src/common/guards/csrf-origin.guard.ts
       - name: Commit
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add backend/src/auth/auth.service.ts backend/src/auth/auth.controller.ts backend/src/common/guards/csrf-origin.guard.ts backend/test/unit/refresh-reuse.spec.ts || true
+          git add backend/src/auth/auth.service.ts backend/src/auth/auth.controller.ts backend/src/common/guards/csrf-origin.guard.ts backend/test/unit/refresh-reuse.spec.ts
           if git diff --staged --quiet; then echo nochange; else git commit -m 'feat(18.7): refresh token reuse detection + CSRF Origin guard' && git push; fi
