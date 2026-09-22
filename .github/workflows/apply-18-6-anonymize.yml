@@ -1,6 +1,8 @@
 name: apply-18-6-anonymize
+
 on:
   workflow_dispatch:
+
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -10,83 +12,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore auth.service from last good commit and patch anonymize
+      - name: Restore and patch deleteAccount anonymize
         run: |
+          set -e
+          git show e8db68381a14:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
           python3 << 'PY'
-          import pathlib, subprocess
-
-          # 1) restore full file from e8db683
-          good = subprocess.check_output(
-              ["git", "show", "e8db68381a14:backend/src/auth/auth.service.ts"],
-              text=True,
-          )
-          path = pathlib.Path("backend/src/auth/auth.service.ts")
-
-          old = '''  async deleteAccount(userId: string, dto: DeleteAccountDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new UnauthorizedException();
-    if (user.status === UserStatus.deleted) {
-      throw new BadRequestException('این حساب قبلاً حذف شده است');
-    }
-    if (user.passwordHash) {
-      const ok = await argon2.verify(user.passwordHash, dto.password);
-      if (!ok) {
-        throw new UnauthorizedException('رمز عبور اشتباه است');
-      }
-    }
-    await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: userId },
-        data: { status: UserStatus.deleted },
-      });
-      await tx.refreshToken.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      await tx.session.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      try {
-        await tx.auditLog.create({
-          data: {
-            actorId: userId,
-            action: 'user.account_delete',
-            entityType: 'user',
-            entityId: userId,
-          },
-        });
-      } catch {
-        /* non-blocking */
-      }
-    });
-    userAuthCache.invalidate(userId);
-    return { message: 'حساب کاربری با موفقیت حذف شد' };
-  }
-}'''
-
-          new = '''  async deleteAccount(userId: string, dto: DeleteAccountDto) {
+          from pathlib import Path
+          path = Path("backend/src/auth/auth.service.ts")
+          text = path.read_text()
+          start = text.find("  async deleteAccount(")
+          if start < 0:
+              raise SystemExit("deleteAccount not found")
+          end = text.rfind("}")
+          # replace from start to final closing brace of class
+          # find end of method: last "  }\n}" before EOF
+          method_end = text.find("\n  }\n}\n", start)
+          if method_end < 0:
+              method_end = text.rfind("\n}")
+          else:
+              method_end = method_end + len("\n  }")
+          new_method = r'''  async deleteAccount(userId: string, dto: DeleteAccountDto) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { profile: true, professional: true },
     });
     if (!user) throw new UnauthorizedException();
     if (user.status === UserStatus.deleted) {
-      throw new BadRequestException('این حساب قبلاً حذف شده است');
+      throw new BadRequestException("\u0627\u06cc\u0646 \u062d\u0633\u0627\u0628 \u0642\u0628\u0644\u0627\u064b \u062d\u0630\u0641 \u0634\u062f\u0647 \u0627\u0633\u062a");
     }
-    // Password required only when the account has a password (OTP-only users skip)
     if (user.passwordHash) {
       if (!dto.password) {
-        throw new BadRequestException('رمز عبور برای تأیید حذف الزامی است');
+        throw new BadRequestException("\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0631\u0627\u06cc \u062a\u0623\u06cc\u06cc\u062f \u062d\u0630\u0641 \u0627\u0644\u0632\u0627\u0645\u06cc \u0627\u0633\u062a");
       }
       const ok = await argon2.verify(user.passwordHash, dto.password);
       if (!ok) {
-        throw new UnauthorizedException('رمز عبور اشتباه است');
+        throw new UnauthorizedException("\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0627\u0634\u062a\u0628\u0627\u0647 \u0627\u0633\u062a");
       }
     }
-
     await this.prisma.$transaction(async (tx) => {
-      // Soft-delete + anonymize PII
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -98,24 +61,20 @@ jobs:
           emailVerified: false,
         },
       });
-
-      // Wipe profile PII
       if (user.profile) {
         await tx.profile.update({
           where: { userId },
           data: {
-            displayName: 'کاربر حذف\u200cشده',
+            displayName: "\u06a9\u0627\u0631\u0628\u0631 \u062d\u0630\u0641\u200c\u0634\u062f\u0647",
             firstName: null,
             lastName: null,
             bio: null,
             avatarUrl: null,
             birthDate: null,
-            gender: 'undisclosed',
+            gender: "undisclosed",
           },
         });
       }
-
-      // Suspend professional listing if present
       if (user.professional) {
         await tx.professional.update({
           where: { userId },
@@ -126,21 +85,17 @@ jobs:
           },
         });
       }
-
-      // Cancel open bookings as customer
       await tx.booking.updateMany({
         where: {
           customerId: userId,
-          status: { in: ['pending', 'confirmed'] },
+          status: { in: ["pending", "confirmed"] },
         },
         data: {
-          status: 'cancelled',
+          status: "cancelled",
           cancelledAt: new Date(),
-          cancelReason: 'account_deleted',
+          cancelReason: "account_deleted",
         },
       });
-
-      // Revoke all tokens & sessions
       await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -149,80 +104,56 @@ jobs:
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-
       try {
         await tx.auditLog.create({
           data: {
             actorId: userId,
-            action: 'user.account_delete',
-            entityType: 'user',
+            action: "user.account_delete",
+            entityType: "user",
             entityId: userId,
-            after: { anonymized: true, status: 'deleted' } as any,
+            after: { anonymized: true, status: "deleted" } as any,
           },
         });
       } catch {
         /* non-blocking */
       }
     });
-
     userAuthCache.invalidate(userId);
-    return { message: 'حساب کاربری با موفقیت حذف و داده\u200cهای شخصی ناشناس شد' };
-  }
-}'''
+    return { message: "\u062d\u0633\u0627\u0628 \u06a9\u0627\u0631\u0628\u0631\u06cc \u0628\u0627 \u0645\u0648\u0641\u0642\u06cc\u062a \u062d\u0630\u0641 \u0648 \u062f\u0627\u062f\u0647\u200c\u0647\u0627\u06cc \u0634\u062e\u0635\u06cc \u0646\u0627\u0634\u0646\u0627\u0633 \u0634\u062f" };
+  }'''
+          new_text = text[:start] + new_method + "\n}\n"
+          path.write_text(new_text)
+          assert "phone: null" in new_text
+          print("auth patched", len(new_text))
 
-          if old not in good:
-              raise SystemExit('OLD deleteAccount block not found in restored file')
-          patched = good.replace(old, new)
-          path.write_text(patched)
-          print('auth.service.ts written', len(patched), 'phone:null', 'phone: null' in patched)
-
-          # 2) patch settings page if present
-          sp = pathlib.Path('frontend/src/app/panel/settings/page.tsx')
-          if sp.exists():
-              st = sp.read_text()
-              st2 = st
-              # optional password payload
-              st2 = st2.replace(
-                  "if (!deletePassword) {\n      setDelErr('رمز عبور الزامی است');\n      return;\n    }\n    setDelLoading(true);\n    try {\n      const res = await deleteAccount({ password: deletePassword });",
-                  "setDelLoading(true);\n    try {\n      const payload = deletePassword ? { password: deletePassword } : {};\n      const res = await deleteAccount(payload);",
-              )
-              st2 = st2.replace(
-                  'با حذف حساب، دسترسی شما قطع می‌شود و وضعیت حساب به «حذف‌شده» تغییر می‌کند. این عمل\n          قابل بازگشت نیست.',
-                  'با حذف حساب، دسترسی شما قطع می‌شود، داده‌های شخصی (شماره، ایمیل، نام و …) ناشناس\n          می‌شوند و وضعیت حساب به «حذف‌شده» تغییر می‌کند. رزروهای باز لغو می‌شوند. این عمل\n          قابل بازگشت نیست.',
-              )
-              st2 = st2.replace(
-                  'رمز عبور برای تأیید',
-                  'رمز عبور برای تأیید (در صورت داشتن رمز)',
-              )
-              st2 = st2.replace(
-                  'می‌دانم که حذف حساب دائمی است',
-                  'می‌دانم که حذف حساب دائمی است و داده‌های شخصی ناشناس می‌شوند',
-              )
-              if st2 != st:
-                  sp.write_text(st2)
-                  print('settings page patched')
-              else:
-                  print('settings page no change or patterns missed')
-
-          # 3) panel-api optional password
-          api = pathlib.Path('frontend/src/lib/panel-api.ts')
+          # panel-api
+          api = Path("frontend/src/lib/panel-api.ts")
           if api.exists():
               at = api.read_text()
               at2 = at.replace(
-                  'export async function deleteAccount(payload: { password: string })',
-                  'export async function deleteAccount(payload: { password?: string } = {})',
+                  "export async function deleteAccount(payload: { password: string })",
+                  "export async function deleteAccount(payload: { password?: string } = {})",
               )
               if at2 != at:
                   api.write_text(at2)
-                  print('panel-api patched')
-              else:
-                  print('panel-api no change')
+                  print("panel-api ok")
+
+          # settings: optional password + copy
+          sp = Path("frontend/src/app/panel/settings/page.tsx")
+          if sp.exists():
+              st = sp.read_text()
+              st = st.replace(
+                  "if (!deletePassword) {\n      setDelErr('\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0627\u0644\u0632\u0627\u0645\u06cc \u0627\u0633\u062a');\n      return;\n    }\n    setDelLoading(true);\n    try {\n      const res = await deleteAccount({ password: deletePassword });",
+                  "setDelLoading(true);\n    try {\n      const payload = deletePassword ? { password: deletePassword } : {};\n      const res = await deleteAccount(payload);",
+              )
+              sp.write_text(st)
+              print("settings ok")
           PY
-      - name: Commit and push
+      - name: Commit
         run: |
-          git config user.name "grok-bot"
-          git config user.email "bot@x.ai"
-          git add backend/src/auth/auth.service.ts frontend/src/app/panel/settings/page.tsx frontend/src/lib/panel-api.ts || true
+          git config user.name grok-bot
+          git config user.email bot@x.ai
+          git add backend/src/auth/auth.service.ts frontend/src/lib/panel-api.ts frontend/src/app/panel/settings/page.tsx
           git status
-          git commit -m "feat(18.6): soft-delete with PII anonymization" || echo "nothing to commit"
+          git commit -m "feat(18.6): soft-delete with PII anonymization" || true
           git push origin HEAD:main
