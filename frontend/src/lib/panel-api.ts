@@ -91,7 +91,17 @@ export type AdminProfessionalsQuery = {
   page?: number; limit?: number; search?: string; status?: string; city?: string; specialty?: string; categoryId?: string;
   minRating?: number; registeredFrom?: string; registeredTo?: string; sortBy?: string; sortOrder?: string;
 };
-export type AuditLogItem = { id: string; action?: string; entity?: string; entityId?: string; actorId?: string; meta?: unknown; createdAt: string };
+export type AuditLogItem = {
+  id: string; action?: string; entity?: string; entityType?: string; entityId?: string;
+  actorId?: string;
+  actor?: { id?: string; phone?: string | null; displayName?: string | null } | null;
+  meta?: unknown; before?: unknown; after?: unknown; ipAddress?: string | null;
+  createdAt: string;
+};
+export type AuditLogsQuery = {
+  page?: number; limit?: number; action?: string; actorId?: string;
+  entityType?: string; entityId?: string; startDate?: string; endDate?: string;
+};
 export type CompletionField = { key: string; label: string; done: boolean };
 export type ProfileCompletion = { percent: number; complete: boolean; fields: CompletionField[] };
 export type OwnProfessional = {
@@ -473,9 +483,25 @@ export async function fetchAdminBookings(page = 1, limit = 20) {
   const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/admin/bookings?page=${page}&limit=${limit}`);
   return { items: unwrapList(res as Paginated<BookingListItem>), raw: res };
 }
-export async function fetchAuditLogs(page = 1, limit = 30) {
-  const res = await apiClient.get<Paginated<AuditLogItem> | AuditLogItem[]>(`/admin/audit-logs?page=${page}&limit=${limit}`);
-  return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
+export async function fetchAuditLogs(pageOrQuery: number | AuditLogsQuery = 1, limit = 30) {
+  const q: AuditLogsQuery =
+    typeof pageOrQuery === 'number' ? { page: pageOrQuery, limit } : { limit: 30, ...pageOrQuery };
+  const params = new URLSearchParams();
+  if (q.page != null) params.set('page', String(q.page));
+  if (q.limit != null) params.set('limit', String(q.limit));
+  if (q.action) params.set('action', q.action);
+  if (q.actorId) params.set('actorId', q.actorId);
+  if (q.entityType) params.set('entityType', q.entityType);
+  if (q.entityId) params.set('entityId', q.entityId);
+  if (q.startDate) params.set('startDate', q.startDate);
+  if (q.endDate) params.set('endDate', q.endDate);
+  const res = await apiClient.get<Paginated<AuditLogItem> & { meta?: { page?: number; limit?: number; total?: number; totalPages?: number } }>(
+    `/admin/audit-logs?${params.toString()}`,
+  );
+  const items = unwrapList(res as Paginated<AuditLogItem>);
+  const meta = (res as { meta?: { page?: number; limit?: number; total?: number; totalPages?: number } })?.meta
+    ?? { page: q.page ?? 1, limit: q.limit ?? 30, total: items.length, totalPages: 1 };
+  return { items, meta, raw: res };
 }
 export async function adminSetProfessionalStatus(id: string, status: string, reason?: string) {
   return apiClient.patch(`/admin/professionals/${id}/status`, reason ? { status, reason } : { status });
