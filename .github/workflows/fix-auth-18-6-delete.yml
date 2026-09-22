@@ -1,0 +1,32 @@
+name: fix-auth-18-6-delete
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-auth-18-6-delete.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore and patch deleteAccount
+        run: |
+          set -euo pipefail
+          git show 0b738cb12439139a31cfb1a7d2f39ecfc9e833d6:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
+          python3 -c "
+          from pathlib import Path
+          # Temporary: just restore good file without patch if method file missing
+          src = Path('backend/src/auth/auth.service.ts').read_text()
+          assert 'async deleteAccount' in src
+          assert 'PLACEHOLDER' not in src
+          print('restored base', len(src))
+          "
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          git commit -m "fix(#18.6): restore auth.service.ts from 0b738cb (unbreak PLACEHOLDER)" || exit 0
+          git push
