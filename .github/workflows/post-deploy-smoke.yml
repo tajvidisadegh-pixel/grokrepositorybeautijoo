@@ -1,0 +1,61 @@
+# Operator-run smoke after a production deploy (gap 18.15).
+# Does NOT deploy. Set secrets/vars before use.
+name: Post-deploy smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: 'Backend API base (e.g. https://api.beautijoo.ir/api/v1)'
+        required: true
+        type: string
+        default: 'https://api.beautijoo.ir/api/v1'
+      app_url:
+        description: 'Frontend origin (e.g. https://beautijoo.ir)'
+        required: true
+        type: string
+        default: 'https://beautijoo.ir'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health endpoint
+        run: |
+          set -euo pipefail
+          BASE="${{ inputs.api_base }}"
+          BASE="${BASE%/}"
+          echo "GET $BASE/health"
+          code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 30 "$BASE/health" || true)
+          echo "HTTP $code"
+          cat /tmp/health.json || true
+          test "$code" = "200"
+
+      - name: Public professionals list
+        run: |
+          set -euo pipefail
+          BASE="${{ inputs.api_base }}"
+          BASE="${BASE%/}"
+          echo "GET $BASE/professionals?limit=1"
+          code=$(curl -sS -o /tmp/pros.json -w '%{http_code}' --max-time 30 "$BASE/professionals?limit=1" || true)
+          echo "HTTP $code"
+          head -c 400 /tmp/pros.json || true
+          echo
+          test "$code" = "200"
+
+      - name: Frontend reachable
+        run: |
+          set -euo pipefail
+          APP="${{ inputs.app_url }}"
+          APP="${APP%/}"
+          echo "GET $APP/"
+          code=$(curl -sS -o /tmp/home.html -w '%{http_code}' --max-time 30 -L "$APP/" || true)
+          echo "HTTP $code"
+          test "$code" = "200"
+
+      - name: Summary
+        run: |
+          echo "Smoke OK for API=${{ inputs.api_base }} APP=${{ inputs.app_url }}"
