@@ -9,8 +9,6 @@ import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate } from '@/lib/utils';
 
 type EarningsSummary = {
-  grossRevenue: number;
-  platformCommission: number;
   professionalNet: number;
   paidCount: number;
   totalEarned?: number;
@@ -21,13 +19,12 @@ type EarningsSummary = {
   pendingCount?: number;
 };
 
-type PeriodBlock = { earned: number; gross: number; count: number };
+type PeriodBlock = { earned: number; count: number };
 
 type PaymentRow = {
   id: string;
   amount: number;
   professionalNetAmount?: number | null;
-  platformCommissionAmount?: number | null;
   status: string;
   createdAt: string;
   paidAt?: string | null;
@@ -130,7 +127,7 @@ export default function ZibagarEarningsPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-4">
-          <p className="text-xs text-gray">کل درآمد خالص</p>
+          <p className="text-xs text-gray">کل درآمد</p>
           <p className="mt-1 text-lg font-bold">{formatPrice(earned)}</p>
           <p className="text-xs text-gray">{summary?.paidCount ?? 0} تراکنش پرداخت‌شده مشتری</p>
         </Card>
@@ -148,25 +145,45 @@ export default function ZibagarEarningsPage() {
         </Card>
       </div>
 
-      {periods && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Card className="p-4">
-            <p className="text-xs text-gray">امروز</p>
-            <p className="mt-1 font-bold">{formatPrice(periods.today?.earned ?? 0)}</p>
-            <p className="text-xs text-gray">{periods.today?.count ?? 0} نوبت</p>
+      {periods && (() => {
+        const bars = [
+          { key: 'today', label: 'امروز', earned: periods.today?.earned ?? 0, count: periods.today?.count ?? 0 },
+          { key: 'week', label: 'این هفته', earned: periods.week?.earned ?? 0, count: periods.week?.count ?? 0 },
+          { key: 'month', label: 'این ماه', earned: periods.month?.earned ?? 0, count: periods.month?.count ?? 0 },
+          { key: 'allTime', label: 'کل دوره', earned: periods.allTime?.earned ?? 0, count: periods.allTime?.count ?? 0 },
+        ];
+        const maxEarned = Math.max(1, ...bars.map((b) => b.earned));
+        return (
+          <Card className="space-y-4 p-4">
+            <h2 className="font-semibold">درآمد بر اساس بازه زمانی</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {bars.map((b) => (
+                <div key={b.key} className="rounded-xl border border-border/80 bg-gray-light/20 p-3">
+                  <p className="text-xs text-gray">{b.label}</p>
+                  <p className="mt-1 font-bold">{formatPrice(b.earned)}</p>
+                  <p className="text-xs text-gray">{b.count} نوبت</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2" dir="ltr">
+              {bars.map((b) => {
+                const pct = Math.round((b.earned / maxEarned) * 100);
+                return (
+                  <div key={`bar-${b.key}`} className="space-y-1">
+                    <div className="flex justify-between text-xs text-gray" dir="rtl">
+                      <span>{b.label}</span>
+                      <span className="font-medium text-foreground">{formatPrice(b.earned)}</span>
+                    </div>
+                    <div className="h-3 overflow-hidden rounded-full bg-gray-light">
+                      <div className="h-full rounded-full bg-coral" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </Card>
-          <Card className="p-4">
-            <p className="text-xs text-gray">این هفته</p>
-            <p className="mt-1 font-bold">{formatPrice(periods.week?.earned ?? 0)}</p>
-            <p className="text-xs text-gray">{periods.week?.count ?? 0} نوبت</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-gray">این ماه</p>
-            <p className="mt-1 font-bold">{formatPrice(periods.month?.earned ?? 0)}</p>
-            <p className="text-xs text-gray">{periods.month?.count ?? 0} نوبت</p>
-          </Card>
-        </div>
-      )}
+        );
+      })()}
 
       <Card className="space-y-3 p-4">
         <h2 className="font-semibold">درخواست تسویه</h2>
@@ -196,7 +213,7 @@ export default function ZibagarEarningsPage() {
       </Card>
 
       <div>
-        <h2 className="mb-3 font-semibold">تراکنش‌های رزرو (پرداخت مشتری)</h2>
+        <h2 className="mb-3 font-semibold">تراکنش‌های درآمد</h2>
         {items.length === 0 ? (
           <PanelEmpty title="تراکنشی نیست" description="پس از پرداخت موفق رزروها، اینجا نمایش داده می‌شوند." />
         ) : (
@@ -206,7 +223,7 @@ export default function ZibagarEarningsPage() {
                 p.booking?.customer?.profile?.displayName ||
                 p.booking?.customer?.phone ||
                 'مشتری';
-              const net = p.professionalNetAmount ?? Math.max(0, p.amount - (p.platformCommissionAmount || 0));
+              const net = p.professionalNetAmount != null && p.professionalNetAmount >= 0 ? p.professionalNetAmount : p.amount;
               return (
                 <li key={p.id}>
                   <Card className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
@@ -218,7 +235,7 @@ export default function ZibagarEarningsPage() {
                     </div>
                     <div className="text-left" dir="ltr">
                       <p className="font-semibold text-coral">{formatPrice(net)}</p>
-                      <p className="text-xs text-gray">ناخالص {formatPrice(p.amount)}</p>
+                      <p className="text-xs text-gray">درآمد</p>
                     </div>
                   </Card>
                 </li>
