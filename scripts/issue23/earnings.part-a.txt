@@ -1,0 +1,135 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
+import { apiClient } from '@/lib/api';
+import { friendlyApiError } from '@/lib/api-errors';
+import { formatPrice, formatDate } from '@/lib/utils';
+
+/** API may still return gross/commission fields — we never show them (issue #23). */
+type EarningsSummary = {
+  professionalNet?: number;
+  paidCount?: number;
+  totalEarned?: number;
+  totalPaidOut?: number;
+  totalPendingPayout?: number;
+  available?: number;
+  settledCount?: number;
+  pendingCount?: number;
+};
+
+type PeriodBlock = { earned: number; count: number };
+
+type PaymentRow = {
+  id: string;
+  amount: number;
+  professionalNetAmount?: number | null;
+  status: string;
+  createdAt: string;
+  paidAt?: string | null;
+  booking?: {
+    id?: string;
+    startAt?: string;
+    customer?: { phone?: string | null; profile?: { displayName?: string | null } | null } | null;
+  } | null;
+};
+
+type PeriodKey = 'today' | 'week' | 'month' | 'allTime';
+
+const PERIOD_LABELS: Record<PeriodKey, string> = {
+  today: 'امروز',
+  week: 'این هفته',
+  month: 'این ماه',
+  allTime: 'کل دوره',
+};
+
+export default function ZibagarEarningsPage() {
+  const [summary, setSummary] = useState<EarningsSummary | null>(null);
+  const [periods, setPeriods] = useState<Partial<Record<PeriodKey, PeriodBlock>> | null>(null);
+  const [items, setItems] = useState<PaymentRow[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [activePeriod, setActivePeriod] = useState<PeriodKey>('month');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiClient.get<{
+        summary: EarningsSummary;
+        periods?: Partial<Record<PeriodKey, PeriodBlock & { gross?: number }>>;
+        items: PaymentRow[];
+        notice?: string;
+      }>('/professionals/me/earnings?page=1&limit=30');
+      setSummary(res.summary);
+      if (res.periods) {
+        const cleaned: Partial<Record<PeriodKey, PeriodBlock>> = {};
+        (Object.keys(PERIOD_LABELS) as PeriodKey[]).forEach((k) => {
+          const block = res.periods?.[k];
+          if (block) cleaned[k] = { earned: block.earned ?? 0, count: block.count ?? 0 };
+        });
+        setPeriods(cleaned);
+      } else {
+        setPeriods(null);
+      }
+      setItems(res.items || []);
+      setNotice(res.notice || null);
+    } catch (e) {
+      setSummary(null);
+      setItems([]);
+      setError(friendlyApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function submitPayout() {
+    const n = Math.floor(Number(amount));
+    if (!Number.isFinite(n) || n < 10000) {
+      setMsg('حداقل مبلغ ۱۰٬۰۰۰ ریال است.');
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await apiClient.post<{ message?: string }>('/professionals/me/payout-request', {
+        amount: n,
+        note: note.trim() || undefined,
+      });
+      setMsg(res.message || 'درخواست ثبت شد.');
+      setAmount('');
+      setNote('');
+      await load();
+    } catch (e) {
+      setMsg(friendlyApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const chartData = useMemo(() => {
+    if (!periods) return [];
+    return (Object.keys(PERIOD_LABELS) as PeriodKey[]).map((key) => ({
+      key,
+      label: PERIOD_LABELS[key],
+      earned: periods[key]?.earned ?? 0,
+      count: periods[key]?.count ?? 0,
+    }));
+  }, [periods]);
+
+  const maxEarned = useMemo(
+    () => Math.max(1, ...chartData.map((d) => d.earned)),
+    [chartData],
+  );
