@@ -25,6 +25,8 @@ import {
   UpdateProfileDto,
   ChangePasswordDto,
   DeleteAccountDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './dto/auth.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -142,6 +144,24 @@ export class AuthController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.auth.updateProfile(userId, dto);
+  }
+
+  /** Request OTP for password reset. Same response whether or not the phone exists (anti-enumeration). */
+  @Public()
+  @Post('password/forgot')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.auth.forgotPassword(dto);
+  }
+
+  /** Verify OTP and set a new password. Revokes all refresh sessions. */
+  @Public()
+  @Post('password/reset')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto);
   }
 
   @ApiBearerAuth()
