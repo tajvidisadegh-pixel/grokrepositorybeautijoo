@@ -1,0 +1,58 @@
+name: Fix hours import (#29)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-issue29-hours-import.yml'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix hours imports
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path("frontend/src/app/zibagar/hours/page.tsx")
+          t = p.read_text()
+          bad = """import {
+import { JalaliDateInput } from '@/components/ui/jalali-date-input';
+  addJalaliMonths, buildJalaliMonthGrid, dayOfWeekFromIso, isoToJalaliLabel,
+  jalaliMonthName, pad2, PERSIAN_WEEKDAYS, toJalali, todayIsoTehran, type DayOfWeekValue,
+} from '@/lib/jalali';"""
+          good = """import { JalaliDateInput } from '@/components/ui/jalali-date-input';
+import {
+  addJalaliMonths, buildJalaliMonthGrid, dayOfWeekFromIso, isoToJalaliLabel,
+  jalaliMonthName, pad2, PERSIAN_WEEKDAYS, toJalali, todayIsoTehran, type DayOfWeekValue,
+} from '@/lib/jalali';"""
+          if bad in t:
+              t = t.replace(bad, good, 1)
+              print("fixed nested import")
+          elif "JalaliDateInput" not in t:
+              t = t.replace(
+                  "from '@/lib/api-errors';",
+                  "from '@/lib/api-errors';\nimport { JalaliDateInput } from '@/components/ui/jalali-date-input';",
+                  1,
+              )
+              print("added import")
+          else:
+              print("ok or other form")
+              print(repr(t.splitlines()[10:18]))
+          p.write_text(t)
+          # sanity: no broken import {
+          lines = p.read_text().splitlines()
+          for i,l in enumerate(lines[:30],1):
+              if l.strip() == "import {" and i < len(lines) and lines[i].startswith("import "):
+                  raise SystemExit(f"still broken at {i}")
+          print("sanity ok")
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/hours/page.tsx
+          if git diff --staged --quiet; then echo nochange; else git commit -m "fix(#29): restore hours page jalali import" && git push; fi
