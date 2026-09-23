@@ -1,0 +1,21 @@
+name: Fix auth context value issue22
+on:
+  push:
+    paths:
+      - 'scripts/fix-auth-context-value-22.py'
+      - '.github/workflows/fix-auth-context-value-22.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix-auth-context-value-22.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/contexts/auth-context.tsx
+          if git diff --staged --quiet; then echo No change; else git commit -m "fix(frontend): expose impersonation on AuthContext value (issue #22)" && git push; fi
