@@ -16,6 +16,14 @@ import {
   getAccessToken,
   setTokens,
 } from '@/lib/auth-storage';
+import {
+  saveAdminAccessBackup,
+  takeAdminAccessBackup,
+  setImpersonationMeta,
+  clearImpersonationMeta,
+  getImpersonationMeta,
+} from '@/lib/impersonation-storage';
+import { impersonateCustomer, endImpersonationAudit } from '@/lib/panel-api';
 import type { AccountType, AuthMeResponse } from '@/types/auth';
 
 type AuthContextValue = {
@@ -47,6 +55,9 @@ type AuthContextValue = {
   ) => Promise<void>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
+  startImpersonation: (customerId: string) => Promise<void>;
+  stopImpersonation: () => Promise<void>;
+  isImpersonating: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -156,12 +167,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    try {
-      await authApi.logout();
-    } catch {
-      /* ignore network errors on logout */
+    if (getImpersonationMeta()) {
+      try { await endImpersonationAudit().catch(() => undefined); } catch { /* ignore */ }
+      const adminToken = takeAdminAccessBackup();
+      clearImpersonationMeta();
+      if (adminToken) {
+        setTokens(adminToken);
+        try { const me = await authApi.me(adminToken); setUser(me); return; } catch { /* fall through */ }
+      }
     }
+    try { await authApi.logout(); } catch { /* ignore network errors on logout */ }
     clearTokens();
+    clearImpersonationMeta();
     setUser(null);
   }, []);
 
@@ -181,6 +198,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [user],
   );
+
+
+  const startImpersonation = useCallback(async (customerId: string) => {
+    const current = getAccessToken();
+    if (!current) throw new Error('نشست مدیر یافت نشد');
+    const res = await impersonateCustomer(customerId);
+    saveAdminAccessBackup(current);
+    setImpersonationMeta({
+      customerId: res.customer.id,
+      customerName: res.customer.displayName,
+      customerPhone: res.customer.phone,
+      startedAt: new Date().toISOString(),
+    });
+    setTokens(res.accessToken);
+    const me = await authApi.me(res.accessToken);
+    setUser(me);
+  }, []);
+
+  const stopImpersonation = useCallback(async () => {
+    try { await endImpersonationAudit().catch(() => undefined); } catch { /* ignore */ }
+    const adminToken = takeAdminAccessBackup();
+    clearImpersonationMeta();
+    if (adminToken) {
+      setTokens(adminToken);
+      try { const me = await authApi.me(adminToken); setUser(me); return; } catch { /* fall through */ }
+    }
+    clearTokens();
+    await reload();
+  }, [reload]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
