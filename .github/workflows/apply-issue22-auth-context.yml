@@ -1,0 +1,21 @@
+name: Apply issue 22 auth context
+on:
+  push:
+    paths:
+      - 'scripts/patch-issue22-auth-context.py'
+      - '.github/workflows/apply-issue22-auth-context.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-issue22-auth-context.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/contexts/auth-context.tsx
+          if git diff --staged --quiet; then echo No change; else git commit -m "feat(frontend): auth context impersonation methods (issue #22)" && git push; fi
