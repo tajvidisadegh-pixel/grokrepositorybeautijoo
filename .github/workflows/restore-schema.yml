@@ -1,10 +1,9 @@
 name: Restore schema.prisma
 on:
+  workflow_dispatch:
   push:
     paths:
-      - 'backend/prisma/.schema-b64/**'
       - '.github/workflows/restore-schema.yml'
-  workflow_dispatch:
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -12,18 +11,38 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Assemble schema from b64 parts
+        with:
+          fetch-depth: 0
+      - name: Restore schema from d68552e and patch location precision
         run: |
           set -euo pipefail
-          cat backend/prisma/.schema-b64/p*.b64 | tr -d '\n' | base64 -d > backend/prisma/schema.prisma
-          head -5 backend/prisma/schema.prisma
-          MODELS=$(grep -c '^model ' backend/prisma/schema.prisma || true)
+          git show d68552e278093fdb7be61dc602411428e36e4f0e:backend/prisma/schema.prisma > backend/prisma/schema.prisma
+          # Add precision column if missing
+          if ! grep -q 'precision' backend/prisma/schema.prisma; then
+            python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/prisma/schema.prisma')
+          t = p.read_text()
+          old = '''  latitude   Decimal? @map("lat") @db.Decimal(10, 7)\n  longitude  Decimal? @map("lng") @db.Decimal(10, 7)\n  createdAt'''
+          new = '''  latitude   Decimal? @map("lat") @db.Decimal(10, 7)\n  longitude  Decimal? @map("lng") @db.Decimal(10, 7)\n  /// exact = public pin; approximate = city/area only\n  precision  String   @default("approximate") @db.VarChar(20)\n  createdAt'''
+          if old not in t:
+              raise SystemExit('Location coords block not found')
+          t = t.replace(old, new, 1)
+          old2 = '  professionalId String  @map("professional_id") @db.Uuid\n  locationId     String  @map("location_id") @db.Uuid\n  isPrimary      Boolean @default(false) @map("is_primary")'
+          new2 = '  professionalId String  @unique @map("professional_id") @db.Uuid\n  locationId     String  @map("location_id") @db.Uuid\n  isPrimary      Boolean @default(true) @map("is_primary")'
+          t = t.replace(old2, new2, 1)
+          p.write_text(t)
+          print('patched')
+          PY
+          fi
+          MODELS=$(grep -c '^model ' backend/prisma/schema.prisma)
           echo "models=$MODELS"
           test "$MODELS" -ge 30
           grep -q precision backend/prisma/schema.prisma
-      - name: Commit restored schema
+          head -5 backend/prisma/schema.prisma
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/prisma/schema.prisma
-          if git diff --staged --quiet; then echo "No change"; else git commit -m "fix(schema): assemble full Prisma schema (issue #21)" && git push; fi
+          if git diff --staged --quiet; then echo No change; else git commit -m "fix(schema): restore full schema + location precision (issue #21)" && git push; fi
