@@ -3,10 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'scripts/auth_b64_part0.txt'
-      - 'scripts/auth_b64_part1.txt'
-      - 'scripts/auth_b64_part2.txt'
-      - 'scripts/auth_b64_part3.txt'
+      - 'scripts/auth_p*.txt'
       - '.github/workflows/restore-auth-service-full.yml'
 jobs:
   restore:
@@ -22,12 +19,13 @@ jobs:
           python3 << 'PY'
           import base64
           from pathlib import Path
-          parts = [Path(f'scripts/auth_b64_part{i}.txt').read_text().strip() for i in range(4)]
+          parts = [Path(f'scripts/auth_p{i:02d}.txt').read_text().strip() for i in range(20)]
           data = base64.b64decode(''.join(parts))
           Path('backend/src/auth/auth.service.ts').write_bytes(data)
           print('wrote', len(data), 'bytes')
           assert b'async register' in data
           assert b'async forgotPassword' in data
+          print('methods ok')
           PY
       - name: Commit and push
         run: |
