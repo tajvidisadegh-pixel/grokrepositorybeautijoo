@@ -1,0 +1,21 @@
+name: Fix site-builder use client
+on:
+  push:
+    paths: ['scripts/fix-site-builder-use-client.py']
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix-site-builder-use-client.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/site-builder/page.tsx
+          if git diff --staged --quiet; then echo No change; else
+            git commit -m "fix(admin): use client first in site-builder (#29)"
+            git push
+          fi
