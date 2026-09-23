@@ -1,0 +1,21 @@
+name: Apply issue 24 Near Me
+on:
+  push:
+    paths:
+      - 'scripts/patch-issue24-near-me.py'
+      - '.github/workflows/apply-issue24.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-issue24-near-me.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/professionals/professionals.service.ts frontend/src
+          if git diff --staged --quiet; then echo No change; else git commit -m "feat(near-me): distance ranking, privacy, card labels (issue #24)" && git push; fi
