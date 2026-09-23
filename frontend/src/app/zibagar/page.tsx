@@ -169,7 +169,7 @@ export default function ZibagarDashboard() {
                   : '① تخصص‌ها انتخاب شده‌اند'}
               </span>
               <Link href="/zibagar/services">
-                <Button size="sm" variant={needsSpecialty ? 'default' : 'secondary'}>
+                <Button size="sm" variant={needsSpecialty ? 'primary' : 'secondary'}>
                   {needsSpecialty ? 'افزودن تخصص' : 'مدیریت تخصص‌ها'}
                 </Button>
               </Link>
@@ -183,7 +183,7 @@ export default function ZibagarDashboard() {
                     : '② منو قیمت تکمیل شده'}
               </span>
               <Link href="/zibagar/services">
-                <Button size="sm" variant={needsPrice || needsSpecialty ? 'default' : 'secondary'}>
+                <Button size="sm" variant={needsPrice || needsSpecialty ? 'primary' : 'secondary'}>
                   منو قیمت
                 </Button>
               </Link>
@@ -195,7 +195,7 @@ export default function ZibagarDashboard() {
                   : `③ ${portfolioCount} نمونه‌کار ثبت شده`}
               </span>
               <Link href="/zibagar/portfolio">
-                <Button size="sm" variant={needsPortfolio ? 'default' : 'secondary'}>
+                <Button size="sm" variant={needsPortfolio ? 'primary' : 'secondary'}>
                   {needsPortfolio ? 'افزودن نمونه‌کار' : 'پورتفولیو'}
                 </Button>
               </Link>
