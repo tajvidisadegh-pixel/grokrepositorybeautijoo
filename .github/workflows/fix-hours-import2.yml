@@ -1,0 +1,27 @@
+name: Fix hours import 2
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/fix-hours-import2.yml']
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 -c "
+          from pathlib import Path
+          p = Path('frontend/src/app/zibagar/hours/page.tsx')
+          t = p.read_text()
+          t = t.replace('''import {\nimport { JalaliDateInput } from '\''@/components/ui/jalali-date-input'\'';\n  addJalaliMonths''', '''import { JalaliDateInput } from '\''@/components/ui/jalali-date-input'\'';\nimport {\n  addJalaliMonths''')
+          p.write_text(t)
+          assert 'import {\nimport' not in t
+          print('ok')
+          "
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/hours/page.tsx
+          git diff --staged --quiet || (git commit -m "fix(#29): hours page import syntax" && git push)
