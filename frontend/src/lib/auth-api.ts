@@ -58,4 +58,28 @@ export const authApi = {
   updateProfile(payload: UpdateProfilePayload) {
     return apiClient.patch<AuthMeResponse>('/auth/me', payload);
   },
+
+  forgotPassword(payload: {
+    phone: string;
+    accountType?: 'customer' | 'professional';
+  }) {
+    return apiClient.post<{ message: string; expiresIn: number }>(
+      '/auth/password/forgot',
+      payload,
+      { skipRefresh: true },
+    );
+  },
+
+  resetPassword(payload: {
+    phone: string;
+    code: string;
+    newPassword: string;
+    accountType?: 'customer' | 'professional';
+  }) {
+    return apiClient.post<{ message: string }>(
+      '/auth/password/reset',
+      payload,
+      { skipRefresh: true },
+    );
+  },
 };
