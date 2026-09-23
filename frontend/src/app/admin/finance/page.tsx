@@ -22,7 +22,7 @@ import {
 } from '@/lib/admin-finance-api';
 import { persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, formatTime24 } from '@/lib/utils';
 
 export default function AdminFinancePage() {
   const [period, setPeriod] = useState<AdminFinancialPeriod>('all_time');
@@ -258,7 +258,7 @@ export default function AdminFinancePage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400 text-[11px]" dir="ltr">
-                      {item.failedAt ? new Date(item.failedAt).toLocaleTimeString('fa-IR') : '—'}
+                      {item.failedAt ? formatTime24(item.failedAt) : '—'}
                     </span>
                     <Button
                       size="sm"

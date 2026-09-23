@@ -10,6 +10,7 @@ import {
 } from '@/lib/schedule-api';
 import { friendlyApiError } from '@/lib/api-errors';
 import {
+import { JalaliDateInput } from '@/components/ui/jalali-date-input';
   addJalaliMonths, buildJalaliMonthGrid, dayOfWeekFromIso, isoToJalaliLabel,
   jalaliMonthName, pad2, PERSIAN_WEEKDAYS, toJalali, todayIsoTehran, type DayOfWeekValue,
 } from '@/lib/jalali';
@@ -578,8 +579,7 @@ export default function ZibagarHoursPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
           <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-4 shadow-xl">
             <h3 className="text-base font-semibold">مسدود کردن بازه</h3>
-            <Input type="date" dir="ltr" value={blockDate} onChange={(e) => setBlockDate(e.target.value)} />
-            <p className="text-xs text-gray">شمسی: {isoToJalaliLabel(blockDate)}</p>
+            <JalaliDateInput value={blockDate} onChange={setBlockDate} />
             <div className="grid grid-cols-2 gap-2">
               <Input type="time" dir="ltr" value={blockFrom} onChange={(e) => setBlockFrom(e.target.value)} />
               <Input type="time" dir="ltr" value={blockTo} onChange={(e) => setBlockTo(e.target.value)} />

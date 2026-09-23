@@ -19,6 +19,7 @@ import {
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice } from '@/lib/utils';
 import { tehranTodayIso, isoToJalaliLabel } from '@/lib/jalali';
+import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { AvailabilitySlot, BookingRecord } from '@/types/booking';

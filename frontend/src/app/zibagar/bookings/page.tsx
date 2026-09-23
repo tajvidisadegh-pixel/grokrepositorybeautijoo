@@ -15,6 +15,7 @@ import { persianBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate, formatTime24 } from '@/lib/utils';
 import { tehranDateStr } from '@/lib/jalali';
+import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'همه وضعیت‌ها' },
@@ -260,11 +261,11 @@ export default function ZibagarBookingsPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray">از تاریخ</label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} dir="ltr" />
+            <JalaliDateInput value={from} onChange={setFrom} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray">تا تاریخ</label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} dir="ltr" />
+            <JalaliDateInput value={to} onChange={setTo} />
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

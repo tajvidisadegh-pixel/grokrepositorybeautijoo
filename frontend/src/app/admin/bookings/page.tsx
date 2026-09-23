@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { persianBookingStatus } from '@/lib/persian-status';
 import { formatDate, formatPrice } from '@/lib/utils';
+import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 
 type BookingRow = {
   id: string;
@@ -226,8 +227,8 @@ export default function AdminBookingsPage() {
           <select className="rounded-xl border px-3 py-2 text-sm" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
             {PAY_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <input type="date" className="rounded-xl border px-3 py-2 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <input type="date" className="rounded-xl border px-3 py-2 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <JalaliDateInput value={startDate} onChange={setStartDate} className="min-w-[10rem]" />
+          <JalaliDateInput value={endDate} onChange={setEndDate} className="min-w-[10rem]" />
         </div>
         <button type="button" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white" onClick={() => { setPage(1); load(); }}>اعمال فیلتر</button>
       </Card>

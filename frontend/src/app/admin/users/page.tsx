@@ -19,6 +19,7 @@ import {
 import { apiClient } from '@/lib/api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatDate } from '@/lib/utils';
+import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 
 type StatusFilter = '' | 'active' | 'suspended' | 'inactive';
 
@@ -339,8 +340,8 @@ export default function AdminUsersPage() {
             <option value="cancelled">لغو</option>
             <option value="pending">در انتظار</option>
           </select>
-          <input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredFrom} onChange={(e) => setRegisteredFrom(e.target.value)} title="عضویت از" />
-          <input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredTo} onChange={(e) => setRegisteredTo(e.target.value)} title="عضویت تا" />
+          <JalaliDateInput value={registeredFrom} onChange={setRegisteredFrom} className="min-w-[10rem]" />
+          <JalaliDateInput value={registeredTo} onChange={setRegisteredTo} className="min-w-[10rem]" />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={neverNotified} onChange={(e) => setNeverNotified(e.target.checked)} />هرگز اعلان نگرفته</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={hasPaid} onChange={(e) => setHasPaid(e.target.checked)} />پرداخت داشته</label>
         </div>

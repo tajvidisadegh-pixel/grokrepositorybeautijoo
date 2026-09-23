@@ -16,6 +16,7 @@ import { friendlyApiError } from '@/lib/api-errors';
 import { adminNotifyUsers } from '@/lib/panel-api';
 import { apiClient } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
+import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 
 const STATUSES = [
   { value: '', label: 'همه وضعیت‌ها' },
@@ -174,8 +175,8 @@ export default function AdminProfessionalsPage() {
           <input className="rounded-xl border px-3 py-2 text-sm" placeholder="شهر" value={city} onChange={(e) => setCity(e.target.value)} />
           <input className="rounded-xl border px-3 py-2 text-sm" placeholder="تخصص" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
           <input className="rounded-xl border px-3 py-2 text-sm" type="number" step="0.1" placeholder="حداقل امتیاز" value={minRating} onChange={(e) => setMinRating(e.target.value)} />
-          <input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredFrom} onChange={(e) => setRegisteredFrom(e.target.value)} />
-          <input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredTo} onChange={(e) => setRegisteredTo(e.target.value)} />
+          <JalaliDateInput value={registeredFrom} onChange={setRegisteredFrom} className="min-w-[10rem]" />
+          <JalaliDateInput value={registeredTo} onChange={setRegisteredTo} className="min-w-[10rem]" />
           <Button onClick={() => { setPage(1); load(); }}>اعمال فیلتر</Button>
         </div>
       </Card>
