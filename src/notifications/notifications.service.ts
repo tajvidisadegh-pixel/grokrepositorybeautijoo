@@ -22,14 +22,24 @@ export class NotificationsService {
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
   ) {}
 
-  list(userId: string, page = 1, limit = 30) {
-    const skip = (page - 1) * limit;
-    return this.prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    });
+  async list(userId: string, page = 1, limit = 30) {
+    const safePage = Math.max(1, page || 1);
+    const safeLimit = Math.min(Math.max(limit || 30, 1), 50);
+    const skip = (safePage - 1) * safeLimit;
+    const where = { userId };
+    const [items, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: safeLimit,
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page: safePage, limit: safeLimit, total },
+    };
   }
 
   async markRead(userId: string, id: string) {
@@ -38,6 +48,15 @@ export class NotificationsService {
       data: { readAt: new Date() },
     });
     return { message: 'ok' };
+  }
+
+  /** Mark every unread notification for this user as read. */
+  async markAllRead(userId: string) {
+    const result = await this.prisma.notification.updateMany({
+      where: { userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return { message: 'ok', updated: result.count };
   }
 
   unreadCount(userId: string) {
