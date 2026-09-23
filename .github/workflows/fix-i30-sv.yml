@@ -1,0 +1,50 @@
+name: Fix i30 SpecialtyView free-text remnant
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-i30-sv.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove free-text add feature/final
+        run: |
+          set -e
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path('frontend/src/app/zibagar/services/SpecialtyView.tsx')
+          t = p.read_text()
+          t = t.replace(
+              '''      )}
+        </div>
+      )}
+
+      {rootDirectChildren.length > 0 && (''',
+              '''      )}
+
+      {rootDirectChildren.length > 0 && (''',
+          )
+          pat = r'          <div className="flex flex-wrap gap-2 pt-1">[\s\S]*?          </div>\n        </div>\n      \)\}\n'
+          repl = '''          {verticalItems.length === 0 && currentLeafServices.length === 0 && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              زیرمجموعه‌ای در این سطح از کاتالوگ نیست. از پنل سوپرادمین خدمات یا زیردسته اضافه کنید.
+            </p>
+          )}
+        </div>
+      )}
+'''
+          t2, n = re.subn(pat, repl, t, count=1)
+          print('removed free-text block', n)
+          p.write_text(t2 if n else t)
+          print('left', 'افزودن ویژگی' in p.read_text())
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/app/zibagar/services/SpecialtyView.tsx
+          git commit -m 'fix(#30): remove free-text feature/final create from SpecialtyView' || echo no-change
+          git push
