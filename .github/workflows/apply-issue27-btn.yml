@@ -1,0 +1,18 @@
+name: Fix issue27 button variant
+on:
+  push:
+    paths: ['scripts/patch-issue27-button.py']
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-issue27-button.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/page.tsx
+          if git diff --staged --quiet; then echo No change; else git commit -m "fix(zibagar): primary button variant (#27)" && git push; fi
