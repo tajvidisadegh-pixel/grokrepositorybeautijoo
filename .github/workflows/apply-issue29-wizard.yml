@@ -1,0 +1,75 @@
+name: Fix booking wizard date (#29)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-issue29-wizard.yml'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace type=date in booking-wizard
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path("frontend/src/components/booking/booking-wizard.tsx")
+          t = p.read_text()
+          if "JalaliDateInput" not in t:
+              t = t.replace(
+                  "import { tehranTodayIso, isoToJalaliLabel } from '@/lib/jalali';",
+                  "import { tehranTodayIso, isoToJalaliLabel } from '@/lib/jalali';\nimport { JalaliDateInput } from '@/components/ui/jalali-date-input';",
+                  1,
+              )
+          pat = re.compile(
+              r'<input\s+type="date"\s+value=\{date\}\s+min=\{todayISO\(\)\}\s+onChange=\{\(e\) => \{\s+setDate\(e\.target\.value\);\s+setSlotStart\(\'\'\);\s+\}\}\s+className="[^"]*"\s+dir="ltr"\s+/>',
+              re.S,
+          )
+          new = '''<JalaliDateInput
+              value={date}
+              min={todayISO()}
+              onChange={(iso) => {
+                setDate(iso);
+                setSlotStart('');
+              }}
+            />'''
+          t2, n = pat.subn(new, t, count=1)
+          print("regex", n)
+          if n == 0 and 'type="date"' in t:
+              lines = t.splitlines()
+              out = []
+              i = 0
+              while i < len(lines):
+                  if 'type="date"' in lines[i]:
+                      while i < len(lines) and '/>' not in lines[i]:
+                          i += 1
+                      i += 1
+                      out.extend([
+                          '            <JalaliDateInput',
+                          '              value={date}',
+                          '              min={todayISO()}',
+                          '              onChange={(iso) => {',
+                          '                setDate(iso);',
+                          "                setSlotStart('');",
+                          '              }}',
+                          '            />',
+                      ])
+                      continue
+                  out.append(lines[i])
+                  i += 1
+              t2 = '\n'.join(out) + '\n'
+              print("line-based")
+          p.write_text(t2)
+          print("type=date left", 'type="date"' in p.read_text())
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/booking/booking-wizard.tsx
+          if git diff --staged --quiet; then echo nochange; else git commit -m "fix(#29): booking wizard uses JalaliDateInput" && git push; fi
