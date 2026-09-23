@@ -1,0 +1,21 @@
+name: Apply issue 25 UX
+on:
+  push:
+    paths:
+      - 'scripts/patch-issue25-ux.py'
+      - '.github/workflows/apply-issue25.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-issue25-ux.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src
+          if git diff --staged --quiet; then echo No change; else git commit -m "feat(ux): booking honesty, verified badge, next booking, near-me strip (#25)" && git push; fi
