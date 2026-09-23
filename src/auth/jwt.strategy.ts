@@ -8,6 +8,9 @@ import { userAuthCache, type CachedAuthUser } from './user-auth-cache';
 export interface JwtPayload {
   sub: string;
   phone?: string;
+  /** Super Admin who started impersonation (issue #22). */
+  imp?: string;
+  impMode?: boolean;
 }
 
 @Injectable()
@@ -37,9 +40,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException();
     }
 
-    const cached = userAuthCache.get(payload.sub);
-    if (cached) {
-      return cached;
+    const isImpersonating = !!(payload.impMode && payload.imp);
+    // Never serve cached user for impersonation (must carry imp metadata)
+    if (!isImpersonating) {
+      const cached = userAuthCache.get(payload.sub);
+      if (cached) {
+        return cached;
+      }
     }
 
     const user = await this.prisma.user.findUnique({
@@ -86,9 +93,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       profile: user.profile,
       professionalId: user.professional?.id ?? null,
       professionalStatus: user.professional?.status ?? null,
+      isImpersonating: isImpersonating || undefined,
+      impersonatorId: isImpersonating ? payload.imp : undefined,
     };
 
-    userAuthCache.set(user.id, authUser);
+    if (!isImpersonating) {
+      userAuthCache.set(user.id, authUser);
+    }
     return authUser;
   }
 }
