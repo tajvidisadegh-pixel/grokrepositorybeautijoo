@@ -204,7 +204,18 @@ export class AdminController {
     return this.service.getUserDetail(id);
   }
 
-  @Patch('users/:id/status')
+  
+  @Post('users/:id/impersonate')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Impersonate customer (SUPER_ADMIN only)' })
+  impersonateCustomer(
+    @CurrentUser('id') adminId: string,
+    @Param('id') customerId: string,
+  ) {
+    return this.service.impersonateCustomer(adminId, customerId);
+  }
+
+@Patch('users/:id/status')
   setUserStatus(@Param('id') id: string, @Body() dto: UserStatusDto, @CurrentUser('id') actorId?: string) {
     return this.service.setUserStatus(id, dto.status, actorId, dto.reason);
   }

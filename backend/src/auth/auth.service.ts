@@ -351,7 +351,49 @@ export class AuthService {
     return { message: 'خروج موفق' };
   }
 
-  async me(userId: string) {
+
+  async recordImpersonationEnd(adminId: string, customerId: string) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: adminId,
+          action: 'IMPERSONATION_ENDED',
+          entityType: 'user',
+          entityId: customerId,
+          after: { customerUserId: customerId },
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
+    return { ok: true };
+  }
+
+  async issueImpersonationAccessToken(
+    customerId: string,
+    customerPhone: string | null,
+    adminId: string,
+  ): Promise<{ accessToken: string; expiresIn: string }> {
+    const accessTtl = this.config.get<string>('jwt.accessTtl') || '30m';
+    const accessToken = await this.jwt.signAsync(
+      {
+        sub: customerId,
+        phone: customerPhone ?? undefined,
+        imp: adminId,
+        impMode: true,
+      },
+      {
+        secret: this.config.get('jwt.accessSecret'),
+        expiresIn: accessTtl as any,
+      },
+    );
+    return { accessToken, expiresIn: accessTtl };
+  }
+
+  async me(
+    userId: string,
+    opts?: { isImpersonating?: boolean; impersonatorId?: string | null },
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -373,6 +415,8 @@ export class AuthService {
       avatarUrl: user.profile?.avatarUrl,
       roles: user.userRoles.map((ur) => ur.role.name),
       professional: user.professional,
+      isImpersonating: opts?.isImpersonating || false,
+      impersonatorId: opts?.impersonatorId || null,
     };
   }
 

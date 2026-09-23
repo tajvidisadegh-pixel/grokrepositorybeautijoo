@@ -43,6 +43,8 @@ export type AuthMeResponse = {
     status: string;
     title?: string | null;
   } | null;
+  isImpersonating?: boolean;
+  impersonatorId?: string | null;
 };
 
 export type OtpRequestResponse = {

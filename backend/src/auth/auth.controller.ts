@@ -131,9 +131,28 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @Post('impersonate/end')
+  @HttpCode(200)
+  async endImpersonation(
+    @CurrentUser() user: {
+      id: string;
+      isImpersonating?: boolean;
+      impersonatorId?: string | null;
+    },
+  ) {
+    if (!user?.isImpersonating || !user.impersonatorId) {
+      return { ok: true, message: 'not impersonating' };
+    }
+    return this.auth.recordImpersonationEnd(user.impersonatorId, user.id);
+  }
+
+  @ApiBearerAuth()
   @Get('me')
-  me(@CurrentUser('id') userId: string) {
-    return this.auth.me(userId);
+  me(@CurrentUser() user: { id: string; isImpersonating?: boolean; impersonatorId?: string | null }) {
+    return this.auth.me(user.id, {
+      isImpersonating: user?.isImpersonating,
+      impersonatorId: user?.impersonatorId,
+    });
   }
 
   @ApiBearerAuth()
