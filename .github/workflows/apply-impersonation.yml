@@ -1,0 +1,31 @@
+name: Apply impersonation pack
+on:
+  push:
+    paths:
+      - 'backend/tmp/imp22/**'
+      - '.github/workflows/apply-impersonation.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and extract
+        run: |
+          set -euo pipefail
+          if [ ! -f backend/tmp/imp22/00.b64 ]; then echo missing pack; exit 1; fi
+          cat backend/tmp/imp22/*.b64 | tr -d '\n' | base64 -d > /tmp/imp22.tar.gz
+          tar tzf /tmp/imp22.tar.gz | head
+          tar xzf /tmp/imp22.tar.gz -C .
+          test -f backend/src/auth/jwt.strategy.ts
+          grep -q impMode backend/src/auth/jwt.strategy.ts
+          grep -q impersonateCustomer backend/src/admin/admin.service.ts
+          grep -q ImpersonationBanner frontend/src/app/layout.tsx
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src frontend/src
+          if git diff --staged --quiet; then echo No change; else git commit -m "feat(auth): SUPER_ADMIN customer impersonation (issue #22)" && git push; fi
