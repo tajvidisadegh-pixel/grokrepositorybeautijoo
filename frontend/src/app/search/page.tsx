@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/professionals/empty-state';
 import { ApiErrorState } from '@/components/professionals/api-error';
 import { siteName } from '@/lib/seo';
 import { NearMeFields } from '@/components/search/near-me-fields';
+import { FormJalaliDate } from '@/components/ui/jalali-date-input';
 
 export const metadata: Metadata = {
   title: 'جستجو',
@@ -137,7 +138,7 @@ export default async function SearchPage({ searchParams }: Props) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray">تاریخ در دسترس بودن</label>
-            <input name="availableDate" type="date" defaultValue={availableDate || ''} dir="ltr" className={inputCls} />
+            <FormJalaliDate name="availableDate" defaultValue={availableDate || ''} className={inputCls} />
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
             <NearMeFields defaultLat={lat} defaultLng={lng} defaultRadiusKm={radiusKm || '15'} />
