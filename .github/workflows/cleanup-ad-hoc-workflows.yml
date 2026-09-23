@@ -10,24 +10,42 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: cleanup-ad-hoc-workflows
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Remove temporary workflows
         run: python3 scripts/cleanup_ad_hoc_workflows.py
 
-      - name: Commit
+      - name: Commit and push
         run: |
+          set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A .github/workflows .github/ci-trigger-*.txt 2>/dev/null || true
-          git add scripts/cleanup_ad_hoc_workflows.py
+          git add -A .github/workflows || true
+          git add .github/ci-trigger-*.txt 2>/dev/null || true
           if git diff --cached --quiet; then
             echo 'no change'
-          else
-            git commit -m 'chore(18.15): remove temporary apply/fix/restore workflows'
-            git push
+            exit 0
           fi
+          git commit -m 'chore(18.15): remove temporary apply/fix/restore workflows'
+          # race-safe push
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || git pull --rebase --autostash origin main || true
+            if git push origin HEAD:main; then
+              echo pushed
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'push failed after retries' >&2
+          exit 1
