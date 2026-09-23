@@ -60,10 +60,17 @@ export class LocationsService {
       province: string | null;
       latitude: unknown;
       longitude: unknown;
+      precision?: string | null;
     };
   }) {
     const lat = row.location.latitude != null ? Number(row.location.latitude) : null;
     const lng = row.location.longitude != null ? Number(row.location.longitude) : null;
+    const precision =
+      row.location.precision === 'exact' || row.location.precision === 'approximate'
+        ? row.location.precision
+        : lat != null && lng != null
+          ? 'exact'
+          : 'approximate';
     return {
       id: row.location.id,
       name: row.location.name || row.location.city,
@@ -72,6 +79,7 @@ export class LocationsService {
       province: row.location.province,
       latitude: Number.isFinite(lat as number) ? lat : null,
       longitude: Number.isFinite(lng as number) ? lng : null,
+      precision,
       isPrimary: row.isPrimary,
     };
   }
@@ -86,44 +94,9 @@ export class LocationsService {
     return rows.map((r) => this.toClientRow(r));
   }
 
+  /** Issue #21: create always upserts the single location for this professional. */
   async createLocation(userId: string, data: LocationInput) {
-    if (!data.city?.trim()) throw new BadRequestException('شهر الزامی است');
-    const pro = await this.professionals.requireOwnProfessional(userId);
-    const { precision, latitude, longitude } = this.normalizeCoords(data);
-    const name = data.name?.trim() || data.city.trim();
-    const address = this.buildAddress(data, precision);
-
-    const existingCount = await this.prisma.professionalLocation.count({
-      where: { professionalId: pro.id },
-    });
-    const makePrimary = data.isPrimary === true || existingCount === 0;
-
-    if (makePrimary) {
-      await this.prisma.professionalLocation.updateMany({
-        where: { professionalId: pro.id },
-        data: { isPrimary: false },
-      });
-    }
-
-    const location = await this.prisma.location.create({
-      data: {
-        name,
-        address,
-        city: data.city.trim(),
-        province: data.province?.trim() || null,
-        latitude,
-        longitude,
-      },
-    });
-    const row = await this.prisma.professionalLocation.create({
-      data: {
-        professionalId: pro.id,
-        locationId: location.id,
-        isPrimary: makePrimary,
-      },
-      include: { location: true },
-    });
-    return this.toClientRow(row);
+    return this.addOrUpdatePrimary(userId, { ...data, isPrimary: true });
   }
 
   async addOrUpdatePrimary(userId: string, data: LocationInput) {
@@ -134,8 +107,9 @@ export class LocationsService {
     const address = this.buildAddress(data, precision);
 
     const primary = await this.prisma.professionalLocation.findFirst({
-      where: { professionalId: pro.id, isPrimary: true },
+      where: { professionalId: pro.id },
       include: { location: true },
+      orderBy: [{ isPrimary: 'desc' }, { location: { createdAt: 'asc' } }],
     });
 
     if (primary) {
@@ -148,7 +122,17 @@ export class LocationsService {
           province: data.province || null,
           latitude,
           longitude,
+          precision,
         },
+      });
+      await this.prisma.professionalLocation.update({
+        where: {
+          professionalId_locationId: {
+            professionalId: pro.id,
+            locationId: primary.locationId,
+          },
+        },
+        data: { isPrimary: true },
       });
       const row = await this.prisma.professionalLocation.findUnique({
         where: {
@@ -162,7 +146,26 @@ export class LocationsService {
       return row ? this.toClientRow(row) : null;
     }
 
-    return this.createLocation(userId, { ...data, isPrimary: true });
+    const location = await this.prisma.location.create({
+      data: {
+        name,
+        address,
+        city: data.city.trim(),
+        province: data.province?.trim() || null,
+        latitude,
+        longitude,
+        precision,
+      },
+    });
+    const row = await this.prisma.professionalLocation.create({
+      data: {
+        professionalId: pro.id,
+        locationId: location.id,
+        isPrimary: true,
+      },
+      include: { location: true },
+    });
+    return this.toClientRow(row);
   }
 
   async updateLocation(userId: string, locationId: string, data: LocationInput) {
@@ -184,23 +187,9 @@ export class LocationsService {
         province: data.province !== undefined ? data.province || null : row.location.province,
         latitude,
         longitude,
+        precision,
       },
     });
-    if (data.isPrimary) {
-      await this.prisma.professionalLocation.updateMany({
-        where: { professionalId: pro.id },
-        data: { isPrimary: false },
-      });
-      await this.prisma.professionalLocation.update({
-        where: {
-          professionalId_locationId: {
-            professionalId: pro.id,
-            locationId: row.locationId,
-          },
-        },
-        data: { isPrimary: true },
-      });
-    }
     const updated = await this.prisma.professionalLocation.findUnique({
       where: {
         professionalId_locationId: {
@@ -219,47 +208,17 @@ export class LocationsService {
       where: { locationId, professionalId: pro.id },
     });
     if (!row) throw new NotFoundException('مکان یافت نشد');
-
-    const bookingCount = await this.prisma.booking.count({
-      where: { locationId },
+    const bookingCount = await this.prisma.booking.count({ where: { locationId } });
+    await this.prisma.professionalLocation.delete({
+      where: {
+        professionalId_locationId: {
+          professionalId: pro.id,
+          locationId,
+        },
+      },
     });
-    if (bookingCount > 0) {
-      await this.prisma.professionalLocation.delete({
-        where: {
-          professionalId_locationId: {
-            professionalId: pro.id,
-            locationId,
-          },
-        },
-      });
-    } else {
-      await this.prisma.professionalLocation.delete({
-        where: {
-          professionalId_locationId: {
-            professionalId: pro.id,
-            locationId,
-          },
-        },
-      });
+    if (bookingCount === 0) {
       await this.prisma.location.delete({ where: { id: locationId } }).catch(() => undefined);
-    }
-
-    if (row.isPrimary) {
-      const next = await this.prisma.professionalLocation.findFirst({
-        where: { professionalId: pro.id },
-        orderBy: { location: { createdAt: 'asc' } },
-      });
-      if (next) {
-        await this.prisma.professionalLocation.update({
-          where: {
-            professionalId_locationId: {
-              professionalId: pro.id,
-              locationId: next.locationId,
-            },
-          },
-          data: { isPrimary: true },
-        });
-      }
     }
     return { ok: true };
   }
