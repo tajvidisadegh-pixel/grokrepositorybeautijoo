@@ -482,17 +482,14 @@ export function BookingWizard({
           </p>
           <div>
             <label className="mb-1 block text-sm font-medium">تاریخ</label>
-            <input
-              type="date"
-              value={date}
-              min={todayISO()}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setSlotStart('');
-              }}
-              className="h-11 w-full rounded-2xl border border-border px-3 text-sm outline-none focus:border-coral"
-              dir="ltr"
-            />
+            <JalaliDateInput
+    value={date}
+    min={todayISO()}
+    onChange={(iso) => {
+      setDate(iso);
+      setSlotStart('');
+    }}
+  />
           </div>
           {locations.length > 0 && (
             <div>
