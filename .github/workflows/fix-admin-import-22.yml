@@ -1,0 +1,21 @@
+name: Fix admin import issue22
+on:
+  push:
+    paths:
+      - 'scripts/fix-admin-import-issue22.py'
+      - '.github/workflows/fix-admin-import-22.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix-admin-import-issue22.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts
+          if git diff --staged --quiet; then echo No change; else git commit -m "fix(admin): dedupe Nest imports after impersonation (issue #22)" && git push; fi
