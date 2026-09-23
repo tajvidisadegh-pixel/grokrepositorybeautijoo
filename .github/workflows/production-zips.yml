@@ -7,8 +7,8 @@ name: Build & Package Production Artifacts (No Deploy)
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
@@ -18,13 +18,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Build Backend
         working-directory: backend
@@ -35,6 +35,10 @@ jobs:
 
       - name: Build Frontend
         working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://api.beautijoo.ir/api/v1
+          NEXT_PUBLIC_APP_URL: https://beautijoo.ir
+          NEXT_PUBLIC_APP_NAME: Beautijoo
         run: |
           npm install
           npm run typecheck
