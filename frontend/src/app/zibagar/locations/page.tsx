@@ -31,7 +31,7 @@ type FormState = {
   province: string;
   latitude: number | null;
   longitude: number | null;
-  isPrimary: boolean;
+  precision: 'exact' | 'approximate';
 };
 
 const emptyForm = (): FormState => ({
@@ -41,42 +41,61 @@ const emptyForm = (): FormState => ({
   province: '',
   latitude: null,
   longitude: null,
-  isPrimary: false,
+  precision: 'approximate',
 });
 
 export default function ZibagarLocationsPage() {
-  const [items, setItems] = useState<LocationItem[]>([]);
+  const [item, setItem] = useState<LocationItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const list = await fetchMyLocations();
-      setItems(
-        list.map((loc) => {
-          const anyLoc = loc as LocationItem & { location?: LocationItem };
-          if (anyLoc.location) {
-            return {
-              id: anyLoc.location.id,
-              name: anyLoc.location.name,
-              address: anyLoc.location.address,
-              city: anyLoc.location.city,
-              province: anyLoc.location.province,
-              latitude: anyLoc.location.latitude,
-              longitude: anyLoc.location.longitude,
-              isPrimary: anyLoc.isPrimary,
-            };
-          }
-          return loc;
-        }),
-      );
+      const normalized = list.map((loc) => {
+        const anyLoc = loc as LocationItem & { location?: LocationItem };
+        if (anyLoc.location) {
+          return {
+            id: anyLoc.location.id,
+            name: anyLoc.location.name,
+            address: anyLoc.location.address,
+            city: anyLoc.location.city,
+            province: anyLoc.location.province,
+            latitude: anyLoc.location.latitude,
+            longitude: anyLoc.location.longitude,
+            precision: (anyLoc.location as LocationItem).precision,
+            isPrimary: anyLoc.isPrimary,
+          } as LocationItem;
+        }
+        return loc;
+      });
+      const first = normalized[0] || null;
+      setItem(first);
+      if (first) {
+        const prec =
+          first.precision === 'exact' || first.precision === 'approximate'
+            ? first.precision
+            : first.latitude != null && first.longitude != null
+              ? 'exact'
+              : 'approximate';
+        setForm({
+          name: first.name || '',
+          address: first.address || '',
+          city: first.city || '',
+          province: first.province || '',
+          latitude: first.latitude != null ? Number(first.latitude) : null,
+          longitude: first.longitude != null ? Number(first.longitude) : null,
+          precision: prec,
+        });
+      } else {
+        setForm(emptyForm());
+      }
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -92,33 +111,17 @@ export default function ZibagarLocationsPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function startEdit(loc: LocationItem) {
-    setEditingId(loc.id);
-    setForm({
-      name: loc.name || '',
-      address: loc.address || '',
-      city: loc.city || '',
-      province: loc.province || '',
-      latitude: loc.latitude != null ? Number(loc.latitude) : null,
-      longitude: loc.longitude != null ? Number(loc.longitude) : null,
-      isPrimary: !!loc.isPrimary,
-    });
-    setMsg(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setForm(emptyForm());
-  }
-
   async function onSubmit() {
     if (!form.city.trim() || form.city.trim().length < 2) {
       setMsg('شهر حداقل ۲ کاراکتر باشد.');
       return;
     }
-    if (!form.address.trim()) {
-      setMsg('آدرس را وارد کنید یا روی نقشه نقطه بگذارید.');
+    if (form.precision === 'exact' && !form.address.trim()) {
+      setMsg('برای آدرس دقیق، متن آدرس یا نقطه روی نقشه لازم است.');
+      return;
+    }
+    if (form.precision === 'exact' && (form.latitude == null || form.longitude == null)) {
+      setMsg('برای نمایش دقیق، نقطه را روی نقشه مشخص کنید.');
       return;
     }
     setSubmitting(true);
@@ -126,27 +129,25 @@ export default function ZibagarLocationsPage() {
     setMsg(null);
     const payload = {
       name: form.name.trim() || undefined,
-      address: form.address.trim(),
+      address:
+        form.precision === 'approximate'
+          ? form.address.trim() || undefined
+          : form.address.trim(),
       city: form.city.trim(),
       province: form.province.trim() || undefined,
       latitude: form.latitude ?? undefined,
       longitude: form.longitude ?? undefined,
-      isPrimary: form.isPrimary,
-      precision:
-        form.latitude != null && form.longitude != null
-          ? ('exact' as const)
-          : ('approximate' as const),
+      isPrimary: true,
+      precision: form.precision,
     };
     try {
-      if (editingId) {
-        await apiClient.patch(`/professionals/me/locations/${editingId}`, payload);
-        setMsg('مکان به‌روز شد.');
+      if (item?.id) {
+        await apiClient.patch(`/professionals/me/locations/${item.id}`, payload);
+        setMsg('مکان کار به‌روز شد.');
       } else {
         await addMyLocation(payload);
-        setMsg('مکان افزوده شد.');
+        setMsg('مکان کار ثبت شد.');
       }
-      setEditingId(null);
-      setForm(emptyForm());
       await load();
     } catch (e) {
       setError(friendlyApiError(e));
@@ -155,196 +156,157 @@ export default function ZibagarLocationsPage() {
     }
   }
 
-  async function onDelete(id: string) {
-    if (!confirm('این مکان حذف شود؟')) return;
-    setBusyId(id);
+  async function onDelete() {
+    if (!item?.id) return;
+    if (!confirm('مکان کار حذف شود؟ رزروهای قبلی حفظ می‌مانند.')) return;
+    setDeleting(true);
     setError(null);
     try {
-      await removeMyLocation(id);
-      setMsg('حذف شد.');
-      if (editingId === id) cancelEdit();
+      await removeMyLocation(item.id);
+      setMsg('مکان حذف شد.');
+      setItem(null);
+      setForm(emptyForm());
       await load();
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
-      setBusyId(null);
+      setDeleting(false);
     }
   }
 
-  async function setPrimary(id: string) {
-    const loc = items.find((x) => x.id === id);
-    if (!loc) return;
-    setBusyId(id);
-    setError(null);
-    try {
-      await apiClient.patch(`/professionals/me/locations/${id}`, {
-        name: loc.name,
-        address: loc.address,
-        city: loc.city,
-        province: loc.province || undefined,
-        latitude: loc.latitude ?? undefined,
-        longitude: loc.longitude ?? undefined,
-        isPrimary: true,
-      });
-      setMsg('مکان اصلی تنظیم شد.');
-      await load();
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  if (loading && items.length === 0) return <PanelLoading />;
-  if (error && items.length === 0) return <PanelError message={error} onRetry={load} />;
+  if (loading) return <PanelLoading />;
+  if (error && !item && !form.city) return <PanelError message={error} onRetry={load} />;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 p-4 pb-16">
       <div>
-        <h1 className="text-2xl font-bold">مکان‌ها</h1>
+        <h1 className="text-2xl font-bold">مکان کار</h1>
         <p className="mt-1 text-sm text-gray">
-          آدرس و موقعیت روی نقشه — برای رزرو و نمایش در پروفایل
+          هر زیباگر فقط یک مکان پایه دارد. می‌توانید آدرس دقیق را نشان دهید یا فقط محدودهٔ تقریبی
+          (مثلاً محله) را برای حفظ حریم خصوصی.
         </p>
       </div>
 
-      {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {msg && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</p>}
+      {msg && (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {msg}
+        </p>
+      )}
+      {error && (
+        <p className="rounded-xl border border-coral/30 bg-coral/5 px-3 py-2 text-sm text-coral">
+          {error}
+        </p>
+      )}
 
-      <Card className="space-y-3">
-        <h2 className="font-semibold">{editingId ? 'ویرایش مکان' : 'افزودن مکان'}</h2>
-        <Input
-          placeholder="نام (مثلاً شعبه اصلی)"
-          value={form.name}
-          onChange={(e) => setField('name', e.target.value)}
-        />
-        <Input
-          placeholder="آدرس کامل"
-          value={form.address}
-          onChange={(e) => setField('address', e.target.value)}
-        />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            placeholder="شهر *"
-            value={form.city}
-            onChange={(e) => setField('city', e.target.value)}
-          />
-          <Input
-            placeholder="استان (اختیاری)"
-            value={form.province}
-            onChange={(e) => setField('province', e.target.value)}
-          />
-        </div>
-
-        <div>
-          <p className="mb-2 text-xs font-medium text-gray">
-            موقعیت روی نقشه — روی نقشه کلیک کنید تا سنجاق جابه‌جا شود
-          </p>
-          <MapPicker
-            latitude={form.latitude}
-            longitude={form.longitude}
-            onPick={(lat, lng) => {
-              setField('latitude', lat);
-              setField('longitude', lng);
-            }}
-          />
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray" dir="ltr">
-            {form.latitude != null && form.longitude != null ? (
-              <>
-                <span>
-                  {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setField('latitude', null);
-                    setField('longitude', null);
-                  }}
-                >
-                  پاک کردن مختصات
-                </Button>
-              </>
-            ) : (
-              <span>هنوز نقطه‌ای انتخاب نشده (اختیاری)</span>
-            )}
+      <Card className="space-y-4 p-4">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">نوع نمایش مکان</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={`rounded-full px-4 py-2 text-sm ${
+                form.precision === 'approximate'
+                  ? 'bg-coral text-white'
+                  : 'border border-border bg-white text-foreground'
+              }`}
+              onClick={() => setField('precision', 'approximate')}
+            >
+              محدوده تقریبی
+            </button>
+            <button
+              type="button"
+              className={`rounded-full px-4 py-2 text-sm ${
+                form.precision === 'exact'
+                  ? 'bg-coral text-white'
+                  : 'border border-border bg-white text-foreground'
+              }`}
+              onClick={() => setField('precision', 'exact')}
+            >
+              آدرس دقیق
+            </button>
           </div>
+          <p className="text-xs text-gray">
+            {form.precision === 'approximate'
+              ? 'فقط شهر/محله به مشتری نشان داده می‌شود؛ پین نقشه عمومی نمی‌شود.'
+              : 'آدرس و پین روی نقشه برای مشتری قابل مشاهده است.'}
+          </p>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-gray">
-          <input
-            type="checkbox"
-            checked={form.isPrimary}
-            onChange={(e) => setField('isPrimary', e.target.checked)}
+        <label className="block space-y-1 text-sm">
+          نام مکان (اختیاری)
+          <Input
+            value={form.name}
+            onChange={(e) => setField('name', e.target.value)}
+            placeholder="مثلاً سالن زیبایی…"
           />
-          مکان اصلی
         </label>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block space-y-1 text-sm">
+            شهر *
+            <Input
+              value={form.city}
+              onChange={(e) => setField('city', e.target.value)}
+              placeholder="تهران"
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            استان
+            <Input
+              value={form.province}
+              onChange={(e) => setField('province', e.target.value)}
+              placeholder="تهران"
+            />
+          </label>
+        </div>
+
+        <label className="block space-y-1 text-sm">
+          {form.precision === 'approximate' ? 'توضیح محدوده (اختیاری)' : 'آدرس دقیق *'}
+          <Input
+            value={form.address}
+            onChange={(e) => setField('address', e.target.value)}
+            placeholder={
+              form.precision === 'approximate' ? 'مثلاً سعادت‌آباد' : 'خیابان، پلاک…'
+            }
+          />
+        </label>
+
+        {form.precision === 'exact' && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">نقطه روی نقشه</p>
+            <MapPicker
+              latitude={form.latitude}
+              longitude={form.longitude}
+              onPick={(lat, lng) => {
+                setField('latitude', lat);
+                setField('longitude', lng);
+              }}
+            />
+            {form.latitude != null && form.longitude != null && (
+              <p className="text-xs text-gray" dir="ltr">
+                {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-2">
           <Button loading={submitting} onClick={onSubmit}>
-            {editingId ? 'ذخیره تغییرات' : 'افزودن'}
+            {item ? 'ذخیره تغییرات' : 'ثبت مکان کار'}
           </Button>
-          {editingId && (
-            <Button size="sm" variant="outline" onClick={cancelEdit}>
-              انصراف
+          {item && (
+            <Button variant="outline" loading={deleting} onClick={onDelete}>
+              حذف مکان
             </Button>
           )}
         </div>
       </Card>
 
-      {items.length === 0 ? (
-        <PanelEmpty title="مکانی ثبت نشده" description="حداقل یک آدرس برای رزرو لازم است." />
-      ) : (
-        <ul className="space-y-3">
-          {items.map((loc) => (
-            <li key={loc.id}>
-              <Card className="space-y-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">
-                      {loc.name}
-                      {loc.isPrimary ? (
-                        <span className="mr-2 text-xs font-medium text-coral"> (اصلی)</span>
-                      ) : null}
-                    </p>
-                    <p className="mt-1 text-sm text-gray">
-                      {loc.city}
-                      {loc.province ? ` · ${loc.province}` : ''}
-                    </p>
-                    <p className="text-sm text-gray">{loc.address}</p>
-                    {loc.latitude != null && loc.longitude != null && (
-                      <p className="mt-1 text-xs text-gray" dir="ltr">
-                        📍 {Number(loc.latitude).toFixed(5)}, {Number(loc.longitude).toFixed(5)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => startEdit(loc)}>
-                    ویرایش
-                  </Button>
-                  {!loc.isPrimary && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      loading={busyId === loc.id}
-                      onClick={() => setPrimary(loc.id)}
-                    >
-                      اصلی کردن
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    loading={busyId === loc.id}
-                    onClick={() => onDelete(loc.id)}
-                  >
-                    حذف
-                  </Button>
-                </div>
-              </Card>
-            </li>
-          ))}
-        </ul>
+      {!item && (
+        <PanelEmpty
+          title="هنوز مکانی ثبت نشده"
+          description="حداقل یک مکان پایه برای انتشار پروفایل و رزرو لازم است."
+        />
       )}
     </div>
   );
