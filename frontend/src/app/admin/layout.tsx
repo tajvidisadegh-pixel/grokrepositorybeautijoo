@@ -1,4 +1,5 @@
 'use client';
+
 import type { ReactNode } from 'react';
 import { PanelShell } from '@/components/panel/panel-shell';
 
@@ -13,14 +14,14 @@ const ITEMS = [
   { href: '/admin/reviews', label: 'نظرات و امتیازها' },
   { href: '/admin/media', label: 'رسانه‌ها' },
   { href: '/admin/site-builder', label: 'طراحی سایت' },
+  { href: '/admin/support', label: 'پشتیبانی' },
   { href: '/admin/settings', label: 'تنظیمات', disabled: true },
   { href: '/admin/audit', label: 'لاگ فعالیت‌ها' },
 ];
 
-/** SUPER_ADMIN and legacy admin — matches backend RolesGuard full-access roles. */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <PanelShell title="پنل سوپر ادمین" items={ITEMS} roles={['SUPER_ADMIN', 'admin']}>
+    <PanelShell title="پنل ادمین" items={ITEMS} roles={['admin', 'SUPER_ADMIN']}>
       {children}
     </PanelShell>
   );

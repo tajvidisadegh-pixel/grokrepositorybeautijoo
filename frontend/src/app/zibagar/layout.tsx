@@ -15,6 +15,7 @@ const ITEMS = [
   { href: '/zibagar/hours', label: 'ساعات کاری' },
   { href: '/zibagar/locations', label: 'مکان کار' },
   { href: '/zibagar/notifications', label: 'اعلان‌ها' },
+  { href: '/zibagar/support', label: 'پشتیبانی' },
   { href: '/zibagar/settings', label: 'تنظیمات' },
 ];
 
