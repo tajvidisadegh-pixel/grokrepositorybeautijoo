@@ -240,6 +240,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyOtp,
       logout,
       reload,
+      startImpersonation,
+      stopImpersonation,
+      isImpersonating: !!user?.isImpersonating || !!getImpersonationMeta(),
     }),
     [
       user,
@@ -251,6 +254,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyOtp,
       logout,
       reload,
+      startImpersonation,
+      stopImpersonation,
     ],
   );
 
