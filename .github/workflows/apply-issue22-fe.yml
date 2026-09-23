@@ -1,0 +1,22 @@
+name: Apply issue 22 frontend patches
+on:
+  push:
+    paths:
+      - 'scripts/patch-issue22-frontend.py'
+      - '.github/workflows/apply-issue22-fe.yml'
+      - 'frontend/src/contexts/auth-context.tsx'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-issue22-frontend.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src
+          if git diff --staged --quiet; then echo No change; else git commit -m "feat(frontend): impersonation UI wire-up (issue #22)" && git push; fi
