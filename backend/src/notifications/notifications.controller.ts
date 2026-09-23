@@ -22,6 +22,12 @@ export class NotificationsController {
     return this.service.unreadCount(userId).then((count) => ({ count }));
   }
 
+  /** Mark all unread notifications as read (must be registered before :id routes). */
+  @Patch('read-all')
+  readAll(@CurrentUser('id') userId: string) {
+    return this.service.markAllRead(userId);
+  }
+
   @Patch(':id/read')
   read(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.service.markRead(userId, id);
