@@ -237,16 +237,21 @@ export class ProfessionalsService {
       },
     };
 
-    const [items, total] = await Promise.all([
+    // When near-me (geo): over-fetch within bbox, rank by Haversine, then paginate (issue #24)
+    const geoFetch = !!geo;
+    const fetchTake = geoFetch ? Math.min(200, Math.max(limit * 8, 80)) : limit;
+    const fetchSkip = geoFetch ? 0 : skip;
+    const [items, totalRaw] = await Promise.all([
       this.prisma.professional.findMany({
         where,
-        skip,
-        take: limit,
+        skip: fetchSkip,
+        take: fetchTake,
         orderBy,
         include,
       }),
       this.prisma.professional.count({ where }),
     ]);
+    let total = totalRaw;
 
     let sorted = items;
     if (sort === 'price_asc' || sort === 'price_desc') {
@@ -266,19 +271,29 @@ export class ProfessionalsService {
           const plat = loc?.latitude != null ? Number(loc.latitude) : NaN;
           const plng = loc?.longitude != null ? Number(loc.longitude) : NaN;
           if (!Number.isFinite(plat) || !Number.isFinite(plng)) {
-            return { ...item, distanceKm: null as number | null };
+            return { ...item, distanceKm: null as number | null, distanceApproximate: false };
           }
-          const distanceKm = Math.round(haversineKm(geo.lat, geo.lng, plat, plng) * 10) / 10;
-          return { ...item, distanceKm };
+          let distanceKm = haversineKm(geo.lat, geo.lng, plat, plng);
+          const precision = String(loc?.precision || 'approximate');
+          const approximate = precision !== 'exact';
+          // Approximate locations: coarser distance (issue #24 privacy)
+          if (approximate) {
+            if (distanceKm < 1) distanceKm = Math.round(distanceKm * 10) / 10; // ~100m steps
+            else distanceKm = Math.round(distanceKm * 2) / 2; // 0.5 km steps
+          } else {
+            distanceKm = Math.round(distanceKm * 10) / 10;
+          }
+          return { ...item, distanceKm, distanceApproximate: approximate };
         })
-        .filter((item) => item.distanceKm == null || item.distanceKm <= geo.radiusKm);
-      if (params.sort === 'distance' || !params.sort || params.sort === 'featured') {
-        withDistance = [...withDistance].sort((a, b) => {
-          const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
-          const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
-          return da - db;
-        });
-      }
+        // Professionals without coordinates are excluded from near-me results
+        .filter((item) => item.distanceKm != null && item.distanceKm <= geo.radiusKm);
+      withDistance = [...withDistance].sort((a, b) => {
+        const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+        const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+        return da - db;
+      });
+      total = withDistance.length;
+      withDistance = withDistance.slice(skip, skip + limit);
     }
 
     const sanitizedItems = withDistance.map((item) => this.sanitizePublicLocations(item));
@@ -294,8 +309,7 @@ export class ProfessionalsService {
           minPrice: params.minPrice ?? null,
           maxPrice: params.maxPrice ?? null,
           availableDate: params.availableDate ?? null,
-          lat: geo?.lat ?? null,
-          lng: geo?.lng ?? null,
+          nearMe: !!geo,
           radiusKm: geo?.radiusKm ?? null,
         },
       },

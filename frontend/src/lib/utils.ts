@@ -33,6 +33,24 @@ export function formatPriceDigits(amount: number): string {
   return new Intl.NumberFormat('fa-IR').format(n);
 }
 
+/** Distance label for near-me (issue #24). km from Haversine; approximate = coarser wording. */
+export function formatDistanceFromYou(
+  km: number | null | undefined,
+  approximate?: boolean,
+): string | null {
+  if (km == null || !Number.isFinite(km) || km < 0) return null;
+  if (km < 1) {
+    const meters = Math.max(50, Math.round(km * 1000));
+    const mFa = new Intl.NumberFormat('fa-IR').format(meters);
+    return approximate ? `حدود ${mFa} متر از شما` : `${mFa} متر از شما`;
+  }
+  const rounded = approximate ? Math.round(km * 2) / 2 : Math.round(km * 10) / 10;
+  const kmFa = new Intl.NumberFormat('fa-IR', {
+    maximumFractionDigits: approximate ? 1 : 1,
+  }).format(rounded);
+  return approximate ? `حدود ${kmFa} کیلومتر از شما` : `${kmFa} کیلومتر از شما`;
+}
+
 const ONES = ['', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه'];
 const TEENS = ['ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 'شانزده', 'هفده', 'هجده', 'نوزده'];
 const TENS = ['', '', 'بیست', 'سی', 'چهل', 'پنجاه', 'شصت', 'هفتاد', 'هشتاد', 'نود'];

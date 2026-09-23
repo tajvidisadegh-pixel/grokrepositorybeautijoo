@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ProfessionalListItem } from '@/types/public';
-import { cn } from '@/lib/utils';
+import { cn, formatDistanceFromYou } from '@/lib/utils';
 
 type Props = {
   pro: ProfessionalListItem;
@@ -60,6 +60,14 @@ export function ProfessionalCard({ pro, className }: Props) {
               </span>
             )}
             {city && <span>{city}</span>}
+            {pro.distanceKm != null && Number.isFinite(pro.distanceKm) && (
+              <span className="text-coral">
+                {formatDistanceFromYou(
+                  pro.distanceKm,
+                  (pro as { distanceApproximate?: boolean }).distanceApproximate,
+                )}
+              </span>
+            )}
           </div>
           {services.length > 0 && (
             <p className="mt-1.5 line-clamp-1 text-xs text-gray-muted sm:mt-2">

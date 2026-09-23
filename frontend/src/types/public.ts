@@ -87,6 +87,8 @@ export type ProfessionalListItem = {
   ratingCount?: number | null;
   /** Present when search used lat/lng/radiusKm */
   distanceKm?: number | null;
+  /** True when professional location is approximate (issue #24). */
+  distanceApproximate?: boolean;
   user?: { profile?: ProfileSnippet | null } | null;
   locations?: { location: LocationSnippet; isPrimary?: boolean }[];
   /** List may return a subset; detail uses ProfessionalServiceItem[] */

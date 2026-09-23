@@ -156,7 +156,12 @@ export default async function SearchPage({ searchParams }: Props) {
 
       <div className="mt-8">
         {errorMsg && <ApiErrorState message={errorMsg} />}
-        {!errorMsg && result && result.items.length === 0 && <EmptyState title="نتیجه‌ای یافت نشد" />}
+        {!errorMsg && result && result.items.length === 0 && (
+          <EmptyState
+            title={lat && lng ? 'زیباگری در محدوده انتخاب‌شده پیدا نشد' : 'نتیجه‌ای یافت نشد'}
+            description={lat && lng ? 'شعاع را بزرگ‌تر کنید یا فیلترها را کم کنید.' : undefined}
+          />
+        )}
         {!errorMsg && result && result.items.length > 0 && (
           <>
             <p className="mb-4 text-sm text-gray">{result.meta.total.toLocaleString('fa-IR')} زیباگر</p>

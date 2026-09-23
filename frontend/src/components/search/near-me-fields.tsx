@@ -28,16 +28,16 @@ export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props)
       return;
     }
     setBusy(true);
-    setStatus('در حال دریافت موقعیت…');
+    setStatus('برای پیدا کردن زیباگرهای نزدیک شما، اجازه دسترسی به موقعیت مکانی را بدهید…');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(String(pos.coords.latitude.toFixed(6)));
         setLng(String(pos.coords.longitude.toFixed(6)));
-        setStatus('موقعیت شما اعمال شد — فیلتر را اعمال کنید');
+        setStatus('موقعیت دریافت شد — روی «اعمال فیلتر» بزنید یا مرتب‌سازی «نزدیک‌ترین» را انتخاب کنید');
         setBusy(false);
       },
       () => {
-        setStatus('دسترسی به موقعیت رد شد یا در دسترس نیست');
+        setStatus('برای استفاده از «نزدیک من»، دسترسی موقعیت مکانی را در مرورگر فعال کنید.');
         setBusy(false);
       },
       { enableHighAccuracy: false, timeout: 12000, maximumAge: 60_000 },
@@ -74,9 +74,13 @@ export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props)
             type="button"
             onClick={requestNearMe}
             disabled={busy}
-            className="h-11 flex-1 rounded-2xl border border-coral/40 bg-coral-soft/50 px-3 text-sm font-medium text-coral transition-colors hover:bg-coral-soft disabled:opacity-60"
+            className={`h-11 flex-1 rounded-2xl border px-3 text-sm font-medium transition-colors disabled:opacity-60 ${
+              lat && lng
+                ? 'border-coral bg-coral text-white'
+                : 'border-coral/40 bg-coral-soft/50 text-coral hover:bg-coral-soft'
+            }`}
           >
-            {busy ? '…' : 'نزدیک من'}
+            {busy ? 'در حال پیدا کردن…' : lat && lng ? '📍 نزدیک من (فعال)' : '📍 نزدیک من'}
           </button>
           {(lat || lng) && (
             <button
@@ -91,9 +95,7 @@ export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props)
       </div>
       {status && <p className="text-xs text-gray">{status}</p>}
       {lat && lng && (
-        <p className="text-xs text-gray-muted" dir="ltr">
-          {lat}, {lng}
-        </p>
+        <p className="text-xs text-emerald-700">موقعیت شما برای جستجوی نزدیک فعال است</p>
       )}
     </div>
   );
