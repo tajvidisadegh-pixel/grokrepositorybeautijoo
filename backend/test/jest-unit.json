@@ -19,13 +19,13 @@
     "global": {
       "statements": 0
     },
-    "./src/payments/financial.util.ts": {
+    "src/payments/financial.util.ts": {
       "statements": 90,
       "branches": 80,
       "functions": 90,
       "lines": 90
     },
-    "./src/availability/slot-math.ts": {
+    "src/availability/slot-math.ts": {
       "statements": 85,
       "branches": 75,
       "functions": 85,
