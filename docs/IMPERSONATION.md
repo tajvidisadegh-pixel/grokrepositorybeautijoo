@@ -10,6 +10,7 @@ Only role `SUPER_ADMIN` may call `POST /admin/users/:id/impersonate`.
 - Does **not** rotate the `bj_refresh` cookie (admin session preserved).
 - Effective roles come from the customer user in DB; RolesGuard denies admin bypass while `isImpersonating`.
 - Frontend stores admin access token in `sessionStorage` and restores on «بازگشت به حساب مدیر».
+- `AuthContext` exposes `startImpersonation` / `stopImpersonation` / `isImpersonating`.
 - Audit: `IMPERSONATION_STARTED` / `IMPERSONATION_ENDED` via existing `audit_logs`.
 
 ## Never
