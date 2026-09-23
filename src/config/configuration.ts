@@ -146,6 +146,14 @@ export default () => {
     },
     corsOrigins,
     smsProvider: process.env.SMS_PROVIDER || 'mock',
+    /** When true, allow MockSmsProvider even in production (diagnostics only). */
+    allowMockSms: (process.env.ALLOW_MOCK_SMS || '').toLowerCase() === 'true',
+    // SMS.ir — never put real keys in source; set on Liara / host env only
+    smsIrApiKey: process.env.SMSIR_API_KEY || '',
+    smsIrOtpTemplateId: process.env.SMSIR_OTP_TEMPLATE_ID || '',
+    smsIrOtpParamName: process.env.SMSIR_OTP_PARAM_NAME || 'CODE',
+    smsIrLineNumber: process.env.SMSIR_LINE_NUMBER || '',
+    smsIrBaseUrl: process.env.SMSIR_BASE_URL || 'https://api.sms.ir',
     /**
      * Payment gateway key (provider-agnostic).
      * - mock: development/test only (blocked in production)
