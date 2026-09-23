@@ -413,6 +413,26 @@ export async function fetchAdminUsers(q: AdminUsersQuery | number = 1, limitArg 
   const meta = (res as { meta?: { page: number; limit: number; total: number; totalPages: number } }).meta || { page: 1, limit: 20, total: items.length, totalPages: 1 };
   return { items, meta, raw: res };
 }
+
+export async function impersonateCustomer(customerId: string): Promise<{
+  accessToken: string;
+  expiresIn: string;
+  customer: {
+    id: string;
+    phone: string | null;
+    displayName: string | null;
+    accountType?: string;
+    roles: string[];
+  };
+}> {
+  return apiClient.post(`/admin/users/${customerId}/impersonate`, {});
+}
+
+export async function endImpersonationAudit(): Promise<{ ok: boolean }> {
+  return apiClient.post('/auth/impersonate/end', {});
+}
+
+
 export async function fetchAdminUserDetail(id: string) {
   return apiClient.get<AdminUserDetail>(`/admin/users/${id}`);
 }

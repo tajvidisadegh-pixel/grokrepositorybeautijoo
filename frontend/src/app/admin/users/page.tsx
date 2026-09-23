@@ -1,5 +1,7 @@
 'use client';
 
+import { useAuth } from '@/contexts/auth-context';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
@@ -48,6 +50,8 @@ async function fetchStats() {
 }
 
 export default function AdminUsersPage() {
+  const { startImpersonation, hasRole } = useAuth();
+
   const [items, setItems] = useState<AdminUser[]>([]);
   const [meta, setMeta] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [stats, setStats] = useState<CustomersStats | null>(null);
@@ -444,6 +448,19 @@ export default function AdminUsersPage() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white" disabled={busy} onClick={saveProfile}>ذخیره</button>
                     <button type="button" className="rounded-lg border border-red-500 px-3 py-1.5 text-xs text-red-700" disabled={busy} onClick={() => removeOne(detail.id)}>حذف کامل</button>
+                    {hasRole('SUPER_ADMIN') && (
+                      <button type="button" className="rounded-lg border border-coral px-3 py-1.5 text-xs text-coral" disabled={busy}
+                        onClick={async () => {
+                          if (!confirm('آیا می‌خواهید به عنوان این مشتری وارد شوید؟')) return;
+                          setBusy(true);
+                          try {
+                            await startImpersonation(detail.id);
+                            window.location.href = '/panel';
+                          } catch (e: unknown) {
+                            setActionMsg(e instanceof Error ? e.message : 'خطا در ورود به حساب مشتری');
+                          } finally { setBusy(false); }
+                        }}>ورود به حساب مشتری</button>
+                    )}
                   </div>
                 </Card>
               </div>

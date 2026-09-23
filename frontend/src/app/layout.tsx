@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/contexts/auth-context';
+import { ImpersonationBanner } from '@/components/auth/impersonation-banner';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import './globals.css';
@@ -73,6 +74,7 @@ export default function RootLayout({
           پرش به محتوای اصلی
         </a>
         <AuthProvider>
+          <ImpersonationBanner />
           <Header />
           <main id="main-content" className="flex-1" tabIndex={-1}>
             {children}
