@@ -163,20 +163,12 @@ export default function AdminAuditPage() {
           <div>
             <label className="mb-1 block text-xs text-gray">از تاریخ</label>
             <input
-              type="date"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+            <JalaliDateInput value={startDate} onChange={setStartDate} />
           </div>
           <div>
             <label className="mb-1 block text-xs text-gray">تا تاریخ</label>
             <input
-              type="date"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
+            <JalaliDateInput value={endDate} onChange={setEndDate} />
           </div>
           <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
             <Button type="submit">اعمال فیلتر</Button>
