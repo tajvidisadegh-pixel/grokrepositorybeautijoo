@@ -9,6 +9,11 @@ import { PanelLoading, PanelError } from '@/components/panel/state-blocks';
 import { CompletionBar } from '@/components/profile/completion-bar';
 import { ProfileStepper, type WizardStep } from '@/components/profile/stepper';
 import {
+  OnboardingTip,
+  STEP_TIPS,
+  FirstBookingGuide,
+} from '@/components/profile/onboarding-tip';
+import {
   fetchMyProfessional, updateMyProfessional, addMyLocation, setMyWorkingHours,
   publishMyProfessional,
   uploadMyMedia, fetchCategories, resolveMediaUrl,
@@ -18,7 +23,7 @@ import {
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { IRAN_PROVINCES, citiesOf, type IranCity } from '@/lib/geo/iran-provinces';
-import LocationMapPicker, { type MapPosition } from '@/components/location/location-map-picker';
+import LocationMapPicker, type { MapPosition } from '@/components/location/location-map-picker';
 
 const STEPS: WizardStep[] = [
   { id: 'basic', label: 'اطلاعات پایه' },
@@ -145,6 +150,10 @@ export default function ProfileCompletePage() {
   async function saveBasic() {
     setSaving(true); setError(null); setMsg(null);
     try {
+      if (!title.trim()) {
+        setError('عنوان حرفه‌ای الزامی است');
+        return false;
+      }
       const data = await updateMyProfessional({
         title: title.trim(),
         firstName: firstName.trim(),
@@ -301,7 +310,11 @@ export default function ProfileCompletePage() {
         <h1 className="text-2xl font-bold text-coral">تکمیل پروفایل</h1>
         <p className="mt-1 text-sm text-gray">اطلاعات هر مرحله بلافاصله در سرور ذخیره می‌شود</p>
       </div>
-      <CompletionBar percent={percent} />
+      <CompletionBar
+        percent={percent}
+        fields={completion?.fields}
+        showFields
+      />
       <ProfileStepper steps={STEPS} current={step} />
       {msg && <p className="rounded-xl bg-blue/10 px-3 py-2 text-sm text-blue">{msg}</p>}
       {error && <p className="rounded-xl bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p>}
@@ -309,17 +322,25 @@ export default function ProfileCompletePage() {
       {step === 0 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">اطلاعات پایه</h2>
-          <label className="block space-y-1 text-sm">عنوان حرفه‌ای
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً میکاپ آرتیست" /></label>
+          <OnboardingTip>{STEP_TIPS.basic}</OnboardingTip>
+          <label className="block space-y-1 text-sm">عنوان حرفه‌ای *
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً میکاپ آرتیست" />
+            {!title.trim() && (
+              <span className="text-xs text-coral">عنوان حرفه‌ای برای نمایش در کارت الزامی است</span>
+            )}
+          </label>
           <label className="block space-y-1 text-sm">نام
-            <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} /></label>
+            <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+          </label>
           <label className="block space-y-1 text-sm">نام خانوادگی
-            <Input value={lastName} onChange={(e) => setLastName(e.target.value)} /></label>
+            <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+          </label>
         </Card>
       )}
       {step === 1 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">تصاویر پروفایل</h2>
+          <OnboardingTip>{STEP_TIPS.media}</OnboardingTip>
           <div className="grid gap-4 sm:grid-cols-2">
             {([
               { kind: 'avatar' as const, label: 'پروفایل', url: avatarUrl },
@@ -371,6 +392,7 @@ export default function ProfileCompletePage() {
       {step === 2 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">موقعیت محل فعالیت</h2>
+          <OnboardingTip>{STEP_TIPS.location}</OnboardingTip>
           <p className="text-xs text-gray">استان و شهر الزامی است.</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block space-y-1 text-sm">استان *
@@ -418,6 +440,7 @@ export default function ProfileCompletePage() {
       {step === 3 && (
         <Card className="space-y-4">
           <h2 className="font-semibold text-[#0B2C4A]">تخصص خودت را انتخاب کن</h2>
+          <OnboardingTip>{STEP_TIPS.services}</OnboardingTip>
           {!rootCategories.length ? (
             <p className="text-sm text-gray">هنوز تخصصی از پنل ادمین ثبت نشده است. از سوپرادمین دسته‌بندی/تخصص اضافه کنید.</p>
           ) : (
@@ -450,6 +473,7 @@ export default function ProfileCompletePage() {
       {step === 4 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">ساعات کاری</h2>
+          <OnboardingTip>{STEP_TIPS.hours}</OnboardingTip>
           <div className="flex flex-wrap gap-2">
             {WEEK_DAYS.map((d) => (
               <button key={d.value} type="button" onClick={() => toggleHourDay(d.value)}
@@ -469,9 +493,13 @@ export default function ProfileCompletePage() {
       {step === 5 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">بررسی نهایی</h2>
+          <OnboardingTip>{STEP_TIPS.review}</OnboardingTip>
           <p className="text-sm text-gray">پیشرفت: {percent}٪ {isPublished ? '· منتشر شده' : ''}</p>
           {!completion?.complete && <p className="text-sm text-coral">برخی موارد هنوز کامل نیست؛ می‌توانید بعداً تکمیل کنید.</p>}
-          <Button onClick={() => setConfirmPublish(true)} disabled={publishing}>انتشار پروفایل</Button>
+          <Button onClick={() => setConfirmPublish(true)} disabled={publishing || isPublished}>
+            {isPublished ? 'قبلاً منتشر شده' : 'انتشار پروفایل'}
+          </Button>
+          {(isPublished || completion?.complete) && <FirstBookingGuide />}
         </Card>
       )}
 
