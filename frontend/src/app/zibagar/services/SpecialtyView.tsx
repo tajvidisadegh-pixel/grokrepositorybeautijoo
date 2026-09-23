@@ -128,23 +128,31 @@ export function SpecialtyView(props: SpecialtyViewProps) {
         ))}
       </div>
 
-      {path.length === 0 && (
+      {path.length === 0 && rootDirectChildren.length === 0 && (findCategory(tree, activeRootId)?.services || []).length === 0 && (
         <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center">
           <p className={`mb-1 text-base font-semibold ${navy.title}`}>{activeRoot?.name}</p>
-          <p className="mb-4 text-sm text-gray-500">ویژگی‌ها را مرحله‌به‌مرحله بسازید.</p>
-          {!showAddFeature ? (
-            <button type="button" onClick={() => setShowAddFeature(true)} className={`rounded-xl px-5 py-2.5 text-sm font-medium ${navy.btn}`}>
-              + افزودن ویژگی
-            </button>
-          ) : (
-            <div className="mx-auto max-w-sm space-y-2">
-              <Input autoFocus placeholder="نام ویژگی" value={newFeatureName} onChange={(e) => setNewFeatureName(e.target.value)} className="text-right" />
-              <div className="flex justify-center gap-2">
-                <button type="button" disabled={busy || !newFeatureName.trim()} onClick={async () => { await createFeature(newFeatureName.trim()); setNewFeatureName(''); setShowAddFeature(false); }} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}>تأیید</button>
-                <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setShowAddFeature(false); setNewFeatureName(''); }}>انصراف</button>
-              </div>
-            </div>
-          )}
+          <p className="text-sm text-gray-500">
+            هنوز زیرمجموعه‌ای در کاتالوگ ادمین برای این تخصص تعریف نشده.
+            از پنل سوپرادمین دسته‌بندی و خدمات را اضافه کنید.
+          </p>
+        </div>
+      )}
+      {path.length === 0 && (findCategory(tree, activeRootId)?.services || []).length > 0 && (
+        <ul className="space-y-2">
+          {(findCategory(tree, activeRootId)?.services || []).map((s) => {
+            const offered = mine.find((m) => m.serviceId === s.id);
+            const st = statusOf(offered);
+            return (
+              <li key={s.id}>
+                <button type="button" onClick={() => void ensureAndEditService(s.id, s.name)} className={`flex w-full items-center justify-between rounded-2xl border ${navy.border} bg-white px-4 py-3 text-right text-sm`}>
+                  <span className="font-medium">{s.name}</span>
+                  <span className="text-xs text-gray-500">{offered ? (st === 'ready' ? `${formatPrice(offered.price)} · 🟢` : '🟡 تکمیل') : 'تنظیم قیمت'}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
         </div>
       )}
 

@@ -499,36 +499,37 @@ export default function ZibagarServicesPage() {
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm text-gray-500">تخصص‌ها را مدیریت کنید؛ زیرمجموعه‌ها زیر هر تخصص دیده می‌شوند.</p>
-            <button type="button" onClick={() => setShowCreateSpecialty((v) => !v)} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-medium ${navy.btn}`}>+ افزودن تخصص</button>
+            
           </div>
 
-          {showCreateSpecialty && (
-            <div className={`space-y-3 rounded-2xl border ${navy.border} bg-white p-4`}>
-              <p className={`text-sm font-semibold ${navy.title}`}>تخصص جدید</p>
-              <Input autoFocus placeholder="نام تخصص" value={newSpecName} onChange={(e) => setNewSpecName(e.target.value)} className="text-right" />
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-0.5 block text-[11px] text-gray-500">قیمت (تومان)</label>
-                  <Input inputMode="numeric" placeholder="۰" value={newSpecPrice ? formatPriceDigits(newSpecPrice) : ''} onChange={(e) => setNewSpecPrice(parsePriceInput(e.target.value))} className="text-right" />
-                </div>
-                <div>
-                  <label className="mb-0.5 block text-[11px] text-gray-500">مدت (دقیقه)</label>
-                  <Input type="number" min={5} placeholder="۶۰" value={newSpecDuration || ''} onChange={(e) => setNewSpecDuration(Number(e.target.value) || 60)} className="text-right" />
-                </div>
-              </div>
-              <Input placeholder="توضیحات (اختیاری)" value={newSpecDesc} onChange={(e) => setNewSpecDesc(e.target.value)} className="text-right" />
-              <div className="flex gap-2">
-                <button type="button" disabled={busy || !newSpecName.trim()} onClick={() => void createSpecialtyDirect()} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}>ذخیره تخصص</button>
-                <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setShowCreateSpecialty(false); setNewSpecName(''); setNewSpecPrice(0); setNewSpecDuration(60); setNewSpecDesc(''); }}>انصراف</button>
-              </div>
-            </div>
-          )}
+          {/* Catalog root picker — selection only (#30); backend create APIs retained */}
+          <div className={`space-y-3 rounded-2xl border ${navy.border} bg-white p-4`}>
+            <p className={`text-sm font-semibold ${navy.title}`}>افزودن تخصص از کاتالوگ</p>
+            {roots.filter((r) => !selectedRootIds.includes(r.id)).length === 0 ? (
+              <p className="text-xs text-gray-500">
+                {roots.length === 0
+                  ? 'کاتالوگ خالی است — سوپرادمین باید دسته‌بندی‌ها را در پنل ادمین تعریف کند.'
+                  : 'همه تخصص‌های کاتالوگ به لیست شما اضافه شده‌اند.'}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {roots.filter((r) => !selectedRootIds.includes(r.id)).map((r) => (
+                  <li key={r.id}>
+                    <button type="button" disabled={busy} onClick={() => void addRootSpecialty(r.id)}
+                      className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-[#F9FAFB] px-3 py-2.5 text-right text-sm hover:border-[#0B2C4A]/30 disabled:opacity-50">
+                      <span className="font-medium text-[#0B2C4A]">{r.name}</span>
+                      <span className="text-xs text-[#2D6CDF]">+ انتخاب</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-          {mine.length === 0 && !showCreateSpecialty ? (
+          {mine.length === 0 && myRoots.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
-              <p className={`text-sm font-medium ${navy.title}`}>هنوز تخصصی اضافه نکرده‌اید</p>
-              <p className="mt-1 text-xs text-gray-500">اولین تخصص خود را با قیمت و مدت ثبت کنید.</p>
-              <button type="button" onClick={() => setShowCreateSpecialty(true)} className={`mt-4 rounded-xl px-5 py-2.5 text-sm font-medium ${navy.btn}`}>+ افزودن تخصص</button>
+              <p className={`text-sm font-medium ${navy.title}`}>هنوز تخصصی انتخاب نکرده‌اید</p>
+              <p className="mt-1 text-xs text-gray-500">از لیست بالا یک تخصص کاتالوگ را انتخاب کنید.</p>
             </div>
           ) : mine.length > 0 ? (
             <div className={`overflow-hidden rounded-2xl border ${navy.border} bg-white`}>
