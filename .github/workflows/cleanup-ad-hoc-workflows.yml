@@ -1,0 +1,33 @@
+name: Cleanup ad-hoc workflows (18.15)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/cleanup_ad_hoc_workflows.py'
+      - '.github/workflows/cleanup-ad-hoc-workflows.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove temporary workflows
+        run: python3 scripts/cleanup_ad_hoc_workflows.py
+
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A .github/workflows .github/ci-trigger-*.txt 2>/dev/null || true
+          git add scripts/cleanup_ad_hoc_workflows.py
+          if git diff --cached --quiet; then
+            echo 'no change'
+          else
+            git commit -m 'chore(18.15): remove temporary apply/fix/restore workflows'
+            git push
+          fi
