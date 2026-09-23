@@ -1,8 +1,0 @@
-name: Admin list table + delete APIs (disabled — one-shot already applied)
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Already applied; use workflow_dispatch only if re-run needed."
