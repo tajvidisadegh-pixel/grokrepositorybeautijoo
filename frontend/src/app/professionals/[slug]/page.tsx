@@ -8,7 +8,7 @@ import {
 import { absoluteUrl, professionalJsonLd, siteName } from '@/lib/seo';
 import { ServiceOfferCard } from '@/components/professionals/service-offer-card';
 import { ServicePortfolioGallery } from '@/components/professionals/service-portfolio-gallery';
-import type { ProfessionalServiceItem } from '@/types/public';
+import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
 import LocationMapView from '@/components/location/location-map-view';
 
 type Props = {
@@ -51,6 +51,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
+/** Iranian week order: شنبه → جمعه */
+const DAY_ORDER = [
+  'saturday',
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+] as const;
+
 const DAY_FA: Record<string, string> = {
   sunday: 'یکشنبه',
   monday: 'دوشنبه',
@@ -68,6 +79,79 @@ const DAY_FA: Record<string, string> = {
   SATURDAY: 'شنبه',
 };
 
+function dayKey(d: string): string {
+  return String(d || '').toLowerCase();
+}
+
+function dayLabel(d: string): string {
+  return DAY_FA[d] || DAY_FA[dayKey(d)] || d;
+}
+
+/** Strip seconds if present: "08:00:00" → "8:00" */
+function fmtTime(t: string): string {
+  const parts = String(t || '').split(':');
+  if (parts.length < 2) return t;
+  const h = String(Number(parts[0]));
+  const m = parts[1].padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+/**
+ * Compact one-line summary, e.g.
+ * «از شنبه تا پنجشنبه از ساعت 8:00 تا 20:00»
+ * Issue #28 — no card / grid of days.
+ */
+function summarizeWorkingHours(hours: WorkingHour[]): string | null {
+  const active = (hours || []).filter((h) => h.isActive !== false);
+  if (!active.length) return null;
+
+  const byDay = new Map<string, { start: string; end: string }>();
+  for (const h of active) {
+    const k = dayKey(h.dayOfWeek);
+    const prev = byDay.get(k);
+    // Prefer earliest start / latest end if multiple slots same day
+    if (!prev) {
+      byDay.set(k, { start: h.startTime, end: h.endTime });
+    } else {
+      byDay.set(k, {
+        start: h.startTime < prev.start ? h.startTime : prev.start,
+        end: h.endTime > prev.end ? h.endTime : prev.end,
+      });
+    }
+  }
+
+  const ordered = DAY_ORDER.filter((d) => byDay.has(d));
+  if (!ordered.length) return null;
+
+  type Range = { from: string; to: string; start: string; end: string };
+  const ranges: Range[] = [];
+  for (const d of ordered) {
+    const slot = byDay.get(d)!;
+    const last = ranges[ranges.length - 1];
+    if (
+      last &&
+      last.start === slot.start &&
+      last.end === slot.end &&
+      DAY_ORDER.indexOf(d as (typeof DAY_ORDER)[number]) ===
+        DAY_ORDER.indexOf(last.to as (typeof DAY_ORDER)[number]) + 1
+    ) {
+      last.to = d;
+    } else {
+      ranges.push({ from: d, to: d, start: slot.start, end: slot.end });
+    }
+  }
+
+  return ranges
+    .map((r) => {
+      const dayPart =
+        r.from === r.to
+          ? dayLabel(r.from)
+          : `از ${dayLabel(r.from)} تا ${dayLabel(r.to)}`;
+      return `${dayPart} از ساعت ${fmtTime(r.start)} تا ${fmtTime(r.end)}`;
+    })
+    .join(' · ');
+}
+
 export default async function ProfessionalProfilePage({ params }: Props) {
   const { slug } = await params;
   let pro;
@@ -83,6 +167,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
   const rating =
     pro.ratingAvg != null ? Number(pro.ratingAvg).toFixed(1) : null;
   const jsonLd = professionalJsonLd(pro);
+  const hoursLine = summarizeWorkingHours(pro.workingHours || []);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -245,23 +330,11 @@ export default async function ProfessionalProfilePage({ params }: Props) {
         </aside>
       </div>
 
-      {pro.workingHours && pro.workingHours.length > 0 && (
-        <section className="mt-8 rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-foreground">ساعات کاری هفتگی</h2>
-          <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {pro.workingHours.map((wh) => (
-              <li
-                key={wh.id}
-                className="flex justify-between gap-2 rounded-2xl bg-gray-light/60 px-4 py-3 text-sm text-gray"
-              >
-                <span>{DAY_FA[wh.dayOfWeek] || wh.dayOfWeek}</span>
-                <span dir="ltr">
-                  {wh.startTime} – {wh.endTime}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/* Issue #28: one short line at bottom — no card/grid */}
+      {hoursLine && (
+        <p className="mt-8 border-t border-border/60 pt-4 text-center text-sm text-gray">
+          ساعات کاری: {hoursLine}
+        </p>
       )}
     </div>
   );
