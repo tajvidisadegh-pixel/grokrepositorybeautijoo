@@ -8,8 +8,8 @@ const ITEMS = [
   { href: '/zibagar', label: 'داشبورد' },
   { href: '/zibagar/bookings', label: 'رزروها' },
   { href: '/zibagar/reviews', label: 'نظرات' },
-  { href: '/zibagar/services', label: 'تخصص‌ها' },
-  { href: '/zibagar/portfolio', label: 'پورتفولیو' },
+  { href: '/zibagar/services', label: 'تخصص‌ها و منو قیمت' },
+  { href: '/zibagar/portfolio', label: 'نمونه‌کار' },
   { href: '/zibagar/earnings', label: 'درآمد و تسویه' },
   { href: '/zibagar/profile', label: 'پروفایل' },
   { href: '/zibagar/hours', label: 'ساعات کاری' },
@@ -29,7 +29,9 @@ export default function ZibagarLayout({ children }: { children: ReactNode }) {
           <header className="border-b border-border bg-white">
             <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
               <span className="text-sm font-bold text-coral">تکمیل پروفایل زیباگر</span>
-              <a href="/zibagar" className="text-sm text-blue hover:underline">ذخیره و خروج به پنل</a>
+              <a href="/zibagar" className="text-sm text-blue hover:underline">
+                ذخیره و خروج به پنل
+              </a>
             </div>
           </header>
           <div className="mx-auto max-w-3xl px-4 py-6">{children}</div>
