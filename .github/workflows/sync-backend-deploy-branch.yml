@@ -1,16 +1,12 @@
-# Keeps Liara deploy branch in sync with backend code.
-# - Automatic: push to main when backend/** changes
+# Controlled backend deploy branch (gap 18.15 / DEPLOYMENT Option B).
 # - Automatic: Git tags matching v*
 # - Manual: workflow_dispatch with explicit ref
+# - NOT on every push to main (prevents accidental production drift)
 # - Force-push ONLY to beautijoo-backend-export (never main)
 name: Sync backend deployment branch
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -41,8 +37,8 @@ jobs:
           elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_type }}" = "tag" ]; then
             echo "ref=${{ github.ref }}" >> "$GITHUB_OUTPUT"
           else
-            # push to main (backend/**)
-            echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "::error::unsupported event"
+            exit 1
           fi
 
       - name: Checkout the exact target ref
