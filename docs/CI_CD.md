@@ -11,8 +11,9 @@
 | `production-zips.yml` | ZIP artifacts on **tag** or **manual** (not every push to main) |
 | `post-deploy-smoke.yml` | Operator smoke: health + public list + frontend HTTP 200 |
 | `emergency-restore-schema.yml` | Emergency schema recovery (manual) |
+| `cleanup-ad-hoc-workflows.yml` | One-shot purge of temporary apply/fix/restore workflows (safe to re-run) |
 
-Temporary `apply-*` / `fix-*` / `restore-*` / `patch-*` workflows used during gap implementation are **removed** by `scripts/cleanup_ad_hoc_workflows.py`.
+Temporary `apply-*` / `fix-*` / `restore-*` / `patch-*` workflows used during gap implementation were **removed** by `scripts/cleanup_ad_hoc_workflows.py` (~70 files).
 
 ## Release flow (Option B)
 
