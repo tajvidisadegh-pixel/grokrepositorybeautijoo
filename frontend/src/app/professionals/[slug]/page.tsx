@@ -113,6 +113,9 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="text-xl font-bold text-blue sm:text-2xl">{name}</h1>
+                {(pro.status === 'approved' || pro.verifiedAt) && (
+                  <p className="mt-1 text-xs font-medium text-emerald-700">✓ زیباگر تأییدشده بیوتی‌جو</p>
+                )}
                 {pro.title && pro.title !== name && (
                   <p className="mt-1 text-sm text-gray">{pro.title}</p>
                 )}

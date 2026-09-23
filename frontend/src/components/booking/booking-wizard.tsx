@@ -281,11 +281,11 @@ export function BookingWizard({
         const pay = await initiatePayment(created.id, callbackUrl);
         setPaymentInfo(
           pay.redirectUrl
-            ? 'درخواست پرداخت ثبت شد. درگاه واقعی پس از اتصال فعال می‌شود.'
-            : 'رزرو ذخیره شد. وضعیت پرداخت پس از پیکربندی درگاه از سرور به‌روز می‌شود.',
+            ? 'درخواست پرداخت ثبت شد. در صورت فعال بودن درگاه به صفحه پرداخت هدایت می‌شوید.'
+            : 'رزرو ذخیره شد اما هنوز نهایی نیست — پرداخت از سرور تأیید نشده است.',
         );
       } catch {
-        setPaymentInfo('رزرو ذخیره شد. شروع پرداخت در دسترس نیست یا نیاز به پیکربندی درگاه دارد.');
+        setPaymentInfo('رزرو ذخیره شد اما نهایی نیست. پرداخت آنلاین فعلاً در دسترس نیست یا نیاز به پیکربندی درگاه دارد.');
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
@@ -617,30 +617,30 @@ export function BookingWizard({
             <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</p>
           )}
           <Button className="w-full" loading={submitting || authLoading} onClick={() => void submitBooking()}>
-            {isAuthenticated ? 'ثبت رزرو' : 'ورود و ثبت رزرو'}
+            {isAuthenticated ? 'ادامه به پرداخت' : 'ورود و ادامه'}
           </Button>
         </Card>
       )}
 
       {step === 'done' && booking && (
         <Card className="mt-6 space-y-4 text-center">
-          <h2 className="text-xl font-bold text-coral">رزرو ثبت شد</h2>
+          <h2 className="text-xl font-bold text-coral">رزرو ذخیره شد — هنوز نهایی نیست</h2>
           <p className="text-sm text-gray">
-            وضعیت سرور: <strong>{persianBookingStatus(booking.status)}</strong>
+            وضعیت رزرو: <strong>{persianBookingStatus(booking.status)}</strong>
           </p>
           <p className="text-sm font-bold text-coral">{formatPrice(booking.totalPrice)}</p>
           {paymentInfo && (
-            <p className="rounded-xl bg-gray-light px-3 py-3 text-sm text-gray">{paymentInfo}</p>
+            <p className="rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-900">{paymentInfo}</p>
           )}
           <p className="text-xs text-gray">
-            موفقیت پرداخت فقط پس از تأیید سرور/درگاه — هرگز توسط کلاینت ادعا نمی‌شود.
+            رزرو فقط پس از تأیید پرداخت از سرور قطعی می‌شود. موفقیت را از روی ظاهر مرورگر فرض نکنید.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Link
               href={`/booking/confirmation/${booking.id}`}
               className="inline-flex h-11 items-center justify-center rounded-2xl bg-coral px-6 text-sm font-medium text-white"
             >
-              جزئیات رزرو
+              بررسی وضعیت رزرو
             </Link>
             <Link
               href={`/professionals/${professional.slug}`}

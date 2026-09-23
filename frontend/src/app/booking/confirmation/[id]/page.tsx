@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { getBooking, persianBookingStatus } from '@/lib/booking-api';
+import { persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
@@ -63,12 +64,38 @@ function ConfirmationBody() {
     booking.professional?.title ||
     'زیباگر';
 
+  const payStatus = booking.payment?.status || '';
+  const isPaid = payStatus === 'paid';
+  const payFailed = payStatus === 'failed' || payStatus === 'cancelled';
+  const awaitingPay = !isPaid && !payFailed;
+
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
-      <h1 className="text-2xl font-bold">جزئیات رزرو</h1>
+      <h1 className="text-2xl font-bold">
+        {isPaid
+          ? 'رزرو شما با موفقیت ثبت شد'
+          : payFailed
+            ? 'پرداخت انجام نشد'
+            : 'بررسی و وضعیت رزرو'}
+      </h1>
+      {isPaid && (
+        <p className="mt-2 text-sm text-emerald-700">
+          پرداخت از سرور تأیید شده و رزرو شما نهایی است.
+        </p>
+      )}
+      {payFailed && (
+        <p className="mt-2 text-sm text-red-700">
+          پرداخت انجام نشد و رزرو شما نهایی نشده است. در صورت نیاز دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.
+        </p>
+      )}
+      {awaitingPay && (
+        <p className="mt-2 text-sm text-amber-800">
+          رزرو هنوز در انتظار پرداخت یا تأیید است. موفقیت فقط پس از تأیید سرور اعلام می‌شود.
+        </p>
+      )}
       <Card className="mt-6 space-y-3 text-sm">
         <div className="flex justify-between gap-2">
-          <span className="text-gray">وضعیت</span>
+          <span className="text-gray">وضعیت رزرو</span>
           <span className="font-bold">
             {persianBookingStatus(booking.status)}
           </span>
@@ -99,25 +126,25 @@ function ConfirmationBody() {
             </ul>
           </div>
         )}
-        {booking.payment && (
-          <div className="flex justify-between gap-2 border-t border-border pt-3">
-            <span className="text-gray">وضعیت پرداخت</span>
-            <span>{booking.payment.status}</span>
-          </div>
-        )}
-        {!booking.payment && (
-          <p className="border-t border-border pt-3 text-xs text-gray">
-            هنوز رکورد پرداخت تأییدشده‌ای از سرور گزارش نشده است.
-          </p>
-        )}
-        <p className="text-xs text-gray" dir="ltr">
-          ID: {booking.id}
-        </p>
+        <div className="flex justify-between gap-2 border-t border-border pt-3">
+          <span className="text-gray">وضعیت پرداخت</span>
+          <span className="font-medium">
+            {booking.payment
+              ? persianPaymentStatus(booking.payment.status)
+              : 'هنوز پرداختی از سرور تأیید نشده'}
+          </span>
+        </div>
       </Card>
       <div className="mt-6 flex flex-wrap gap-3">
         <Link
-          href="/"
+          href="/panel/bookings"
           className="inline-flex h-11 items-center rounded-2xl bg-coral px-5 text-sm font-medium text-white"
+        >
+          رزروهای من
+        </Link>
+        <Link
+          href="/"
+          className="inline-flex h-11 items-center rounded-2xl border border-border px-5 text-sm"
         >
           صفحه اصلی
         </Link>

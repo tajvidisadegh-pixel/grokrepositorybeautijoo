@@ -33,6 +33,7 @@ export type ProfessionalServiceMedia = {
   publicUrl: string;
   mimeType: string;
   status?: string;
+  verifiedAt?: string | null;
   sortOrder?: number;
   title?: string | null;
 };

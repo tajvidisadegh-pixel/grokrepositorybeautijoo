@@ -317,6 +317,24 @@ export default async function HomePage() {
           </section>
         );
       }
+            case 'near-me-strip':
+        return (
+          <section key="near-me-strip" className="mx-auto max-w-6xl px-4 pb-2 pt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-coral/30 bg-coral-soft/40 px-4 py-3 sm:px-5">
+              <p className="text-sm text-foreground">
+                <span className="font-medium">📍 نزدیک من</span>
+                <span className="text-gray"> — زیباگرهای اطراف موقعیت شما</span>
+              </p>
+              <Link
+                href="/search?sort=distance"
+                className="inline-flex h-10 items-center rounded-2xl bg-coral px-4 text-sm font-medium text-white hover:bg-coral-dark"
+              >
+                جستجوی نزدیک
+              </Link>
+            </div>
+          </section>
+        );
+
       case 'categories':
         if (features.showCategories === false || !sectionEnabled('categories')) return null;
         if (categories.length === 0) return null;
@@ -405,6 +423,6 @@ export default async function HomePage() {
     }
   }
 
-  const ids = ordered.length > 0 ? ordered : (['hero', 'categories', 'featured', 'cta'] as const);
+  const ids = ordered.length > 0 ? ordered : (['hero', 'near-me-strip', 'categories', 'featured', 'cta'] as const);
   return <div>{ids.map((id) => renderSection(id))}</div>;
 }

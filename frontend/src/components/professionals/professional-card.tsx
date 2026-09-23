@@ -43,11 +43,18 @@ export function ProfessionalCard({ pro, className }: Props) {
             <h3 className="truncate text-sm font-bold text-foreground transition-colors group-hover:text-blue sm:text-base">
               {name}
             </h3>
-            {pro.isFeatured && (
-              <span className="shrink-0 rounded-full bg-coral-soft px-2 py-0.5 text-[11px] font-medium text-coral sm:text-xs">
-                ویژه
-              </span>
-            )}
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              {pro.isFeatured && (
+                <span className="rounded-full bg-coral-soft px-2 py-0.5 text-[11px] font-medium text-coral sm:text-xs">
+                  ویژه
+                </span>
+              )}
+              {(pro.status === 'approved' || !pro.status) && (
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:text-xs">
+                  ✓ تأییدشده
+                </span>
+              )}
+            </div>
           </div>
           {pro.title && pro.title !== name && (
             <p className="mt-0.5 truncate text-xs text-gray sm:text-sm">{pro.title}</p>
@@ -78,7 +85,7 @@ export function ProfessionalCard({ pro, className }: Props) {
       </div>
       <div className="mt-auto border-t border-border/80 bg-coral-soft/40 px-4 py-2.5 sm:px-5 sm:py-3">
         <span className="text-sm font-medium text-coral transition-colors group-hover:text-coral-dark">
-          مشاهده پروفایل و رزرو
+          مشاهده پروفایل
         </span>
       </div>
     </Link>
