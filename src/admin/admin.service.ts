@@ -1,11 +1,12 @@
 import {
   Injectable,
   Inject,
-  NotFoundException,
+  NotFoundException, ForbiddenException, BadRequestException,
   Logger,
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import {
   ProfessionalStatus,
   BookingStatus,
@@ -30,6 +31,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly cache: AppCacheService,
+    private readonly authService: AuthService,
   ) {}
 
   private async audit(
@@ -828,6 +830,66 @@ export class AdminService {
       this.prisma.notification.count(),
     ]);
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
+  }
+
+
+  async impersonateCustomer(adminId: string, customerId: string) {
+    const admin = await this.prisma.user.findUnique({
+      where: { id: adminId },
+      include: { userRoles: { include: { role: true } } },
+    });
+    if (!admin) throw new NotFoundException('admin not found');
+    const adminRoles = admin.userRoles.map((ur) => ur.role.name);
+    if (!adminRoles.includes('SUPER_ADMIN')) {
+      throw new ForbiddenException('SUPER_ADMIN only');
+    }
+    const customer = await this.prisma.user.findUnique({
+      where: { id: customerId },
+      include: {
+        profile: true,
+        userRoles: { include: { role: true } },
+        professional: { select: { id: true } },
+      },
+    });
+    if (!customer) throw new NotFoundException('customer not found');
+    if (customer.status !== 'active') {
+      throw new BadRequestException('customer not active');
+    }
+    const customerRoles = customer.userRoles.map((ur) => ur.role.name);
+    if (customerRoles.some((r) => r === 'SUPER_ADMIN' || r === 'admin')) {
+      throw new ForbiddenException('cannot impersonate admin');
+    }
+    if (customer.accountType === 'professional' && !customerRoles.includes('customer')) {
+      throw new BadRequestException('not a customer account');
+    }
+    const tokens = await this.authService.issueImpersonationAccessToken(
+      customer.id,
+      customer.phone,
+      adminId,
+    );
+    await this.audit(
+      adminId,
+      'IMPERSONATION_STARTED',
+      'user',
+      customer.id,
+      null,
+      {
+        customerUserId: customer.id,
+        customerPhone: customer.phone,
+        customerName: customer.profile?.displayName || null,
+      },
+    );
+    return {
+      accessToken: tokens.accessToken,
+      expiresIn: tokens.expiresIn,
+      customer: {
+        id: customer.id,
+        phone: customer.phone,
+        displayName: customer.profile?.displayName || null,
+        accountType: customer.accountType,
+        roles: customerRoles,
+      },
+    };
   }
 
   async listAuditLogs(q?: any) {
