@@ -1,0 +1,22 @@
+name: Apply issue 22 backend patches
+on:
+  push:
+    paths:
+      - 'scripts/patch-issue22-backend.py'
+      - '.github/workflows/apply-issue22.yml'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run patcher
+        run: python3 scripts/patch-issue22-backend.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src frontend/src/types/auth.ts
+          if git diff --staged --quiet; then echo No change; else git commit -m "feat(auth): SUPER_ADMIN customer impersonation backend (issue #22)" && git push; fi
