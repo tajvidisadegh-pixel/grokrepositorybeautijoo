@@ -507,6 +507,9 @@ export class AuthService {
       throw new BadRequestException('کاربر یافت نشد');
     }
     if (user.passwordHash) {
+      if (!dto.password) {
+        throw new BadRequestException('رمز عبور برای تأیید حذف الزامی است');
+      }
       const ok = await argon2.verify(user.passwordHash, dto.password);
       if (!ok) {
         throw new UnauthorizedException('رمز عبور نادرست است');
