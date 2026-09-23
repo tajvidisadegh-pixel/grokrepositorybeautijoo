@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/brand/logo';
+import { NotificationBell } from '@/components/layout/notification-bell';
 
 export function Header() {
   const { user, loading, logout, isAuthenticated, hasRole } = useAuth();
@@ -77,6 +78,8 @@ export function Header() {
           >
             <Search className="size-5" aria-hidden />
           </Link>
+
+          <NotificationBell />
 
           {!loading && isAuthenticated ? (
             <div className="hidden items-center gap-2 sm:flex">

@@ -2,7 +2,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
-import { fetchNotifications, markNotificationRead, type NotificationItem } from '@/lib/panel-api';
+import {
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  type NotificationItem,
+} from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { cn, formatDateTime } from '@/lib/utils';
 
@@ -18,6 +23,8 @@ export default function PanelNotificationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
+  const unreadCount = items.filter((n) => !n.readAt).length;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,6 +60,25 @@ export default function PanelNotificationsPage() {
     }
   }
 
+  async function handleMarkAll() {
+    if (markingAll || unreadCount === 0) return;
+    setMarkingAll(true);
+    setError(null);
+    try {
+      await markAllNotificationsRead();
+      setItems((prev) =>
+        prev.map((row) =>
+          row.readAt ? row : { ...row, readAt: new Date().toISOString() },
+        ),
+      );
+      emitUnreadChanged();
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
   function handleOpen(n: NotificationItem) {
     const nextOpen = openId === n.id ? null : n.id;
     setOpenId(nextOpen);
@@ -66,11 +92,23 @@ export default function PanelNotificationsPage() {
 
   return (
     <div className="space-y-6" dir="rtl">
-      <div>
-        <h1 className="text-2xl font-bold">اعلان‌ها</h1>
-        <p className="mt-1 text-sm text-gray">
-          روی هر پیام بزنید تا باز شود و به‌عنوان خوانده‌شده ثبت شود
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">اعلان‌ها</h1>
+          <p className="mt-1 text-sm text-gray">
+            روی هر پیام بزنید تا باز شود و به‌عنوان خوانده‌شده ثبت شود
+          </p>
+        </div>
+        {unreadCount > 0 && (
+          <button
+            type="button"
+            onClick={() => void handleMarkAll()}
+            disabled={markingAll}
+            className="h-10 shrink-0 rounded-2xl border border-coral/40 bg-coral-soft/40 px-4 text-sm font-medium text-coral transition hover:bg-coral-soft disabled:opacity-60"
+          >
+            {markingAll ? "در حال ثبت…" : `خواندن همه (${unreadCount.toLocaleString("fa-IR")})`}
+          </button>
+        )}
       </div>
       {items.length === 0 ? (
         <PanelEmpty title="اعلانی نیست" />

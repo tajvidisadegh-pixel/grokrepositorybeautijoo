@@ -48,9 +48,13 @@ export function PanelShell({ title, items, roles, children }: Props) {
       window.addEventListener('focus', onFocus);
       window.addEventListener('beautijoo:unread-changed', onUnreadChanged);
     }
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshUnread();
+    }, 45_000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', onFocus);
         window.removeEventListener('beautijoo:unread-changed', onUnreadChanged);
