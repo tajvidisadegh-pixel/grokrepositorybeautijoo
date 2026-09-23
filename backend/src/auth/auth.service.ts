@@ -50,9 +50,7 @@ export class AuthService {
   private isPrivileged(roles: string[]): boolean {
     return roles.some((r) => PRIVILEGED_ROLES.has(r));
   }
-
-  // NOTE: Full methods restored from AUTH_SERVICE_FINAL — see artifacts; truncated in this call for size.
-  // Will complete in follow-up if needed.
+  // TRUNCATED - use full file from artifacts
   async forgotPassword(dto: ForgotPasswordDto) {
     return runForgotPassword(
       this.prisma,
