@@ -589,7 +589,7 @@ export function BookingWizard({
             )}
             <div className="flex justify-between gap-2">
               <dt className="text-gray">تاریخ</dt>
-              <dd>{isoToJalaliLabel(date)} <span className="text-xs text-gray" dir="ltr">({date})</span></dd>
+              <dd>{isoToJalaliLabel(date)}</dd>
             </div>
             <div className="flex justify-between gap-2">
               <dt className="text-gray">ساعت</dt>

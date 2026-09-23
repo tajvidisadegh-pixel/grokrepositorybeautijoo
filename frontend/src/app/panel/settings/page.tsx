@@ -13,6 +13,7 @@ import {
   deleteAccount,
   type SessionItem,
 } from '@/lib/panel-api';
+import { formatDateTime } from '@/lib/utils';
 
 const NOTIF_KEY = 'bj_notif_prefs';
 
@@ -180,14 +181,6 @@ export default function PanelSettingsPage() {
     }
   }
 
-  function formatDate(iso: string) {
-    try {
-      return new Date(iso).toLocaleString('fa-IR');
-    } catch {
-      return iso;
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -280,8 +273,8 @@ export default function PanelSettingsPage() {
                   <div dir="ltr" className="font-mono text-xs text-gray">
                     {s.id.slice(0, 8)}…
                   </div>
-                  <div className="text-xs text-gray">ایجاد: {formatDate(s.createdAt)}</div>
-                  <div className="text-xs text-gray">انقضا: {formatDate(s.expiresAt)}</div>
+                  <div className="text-xs text-gray">ایجاد: {formatDateTime(s.createdAt)}</div>
+                  <div className="text-xs text-gray">انقضا: {formatDateTime(s.expiresAt)}</div>
                 </div>
                 <Button variant="secondary" size="sm" onClick={() => onRevoke(s.id)}>
                   لغو

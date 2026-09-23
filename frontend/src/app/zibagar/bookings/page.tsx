@@ -30,7 +30,7 @@ const TEHRAN_TZ = 'Asia/Tehran';
 
 function dateKeyFa(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('fa-IR', {
+    return new Date(iso).toLocaleDateString('fa-IR-u-ca-persian', {
       timeZone: TEHRAN_TZ,
       weekday: 'long',
       year: 'numeric',
@@ -171,7 +171,7 @@ export default function ZibagarBookingsPage() {
       d.setUTCDate(weekStart.getUTCDate() + i);
       days.push({
         key: dayKey(d),
-        label: d.toLocaleDateString('fa-IR', {
+        label: d.toLocaleDateString('fa-IR-u-ca-persian', {
           timeZone: TEHRAN_TZ,
           weekday: 'short',
           day: 'numeric',

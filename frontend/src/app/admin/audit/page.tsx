@@ -1,5 +1,7 @@
 'use client';
 
+import { formatDateTime } from '@/lib/utils';
+
 import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -207,7 +209,7 @@ export default function AdminAuditPage() {
                         {(log.entity || log.entityType) ? ` · ${log.entity || log.entityType}` : ''}
                       </span>
                       <span className="text-xs text-gray" dir="ltr">
-                        {new Date(log.createdAt).toLocaleString('fa-IR')}
+                        {formatDateTime(log.createdAt)}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray">

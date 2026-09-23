@@ -55,7 +55,7 @@ export function Footer() {
         </div>
       </div>
       <div className="border-t border-white/10 bg-blue-dark/40 py-4 text-center text-xs text-white/60">
-        © {new Date().getFullYear()} Beautijoo — بیوتی‌جو · همه حقوق محفوظ است
+        © {new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date())} Beautijoo — بیوتی‌جو · همه حقوق محفوظ است
       </div>
     </footer>
   );

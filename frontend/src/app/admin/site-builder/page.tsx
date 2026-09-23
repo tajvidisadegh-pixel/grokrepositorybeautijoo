@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/utils';
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -385,7 +386,7 @@ export default function AdminSiteBuilderPage() {
             <div className="mt-4 border-t border-[#dcdcde] px-3 py-3 text-[11px] text-[#646970]">
               آخرین انتشار:
               <br />
-              <span className="text-[#1d2327]">{new Date(publishedAt).toLocaleString('fa-IR')}</span>
+              <span className="text-[#1d2327]">{formatDateTime(publishedAt)}</span>
             </div>
           )}
         </aside>
