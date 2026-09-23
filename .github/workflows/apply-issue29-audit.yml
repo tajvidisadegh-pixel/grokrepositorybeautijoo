@@ -1,0 +1,58 @@
+name: Fix audit date filters (#29)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-issue29-audit.yml'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch audit page
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path("frontend/src/app/admin/audit/page.tsx")
+          t = p.read_text()
+          if "JalaliDateInput" not in t:
+              lines = t.splitlines()
+              last = max(i for i,l in enumerate(lines) if l.startswith("import "))
+              lines.insert(last+1, "import { JalaliDateInput } from '@/components/ui/jalali-date-input';")
+              t = "\n".join(lines)
+          lines = t.splitlines()
+          out = []
+          i = 0
+          while i < len(lines):
+              if 'type="date"' in lines[i]:
+                  # determine which field by scanning forward for value=
+                  block = []
+                  while i < len(lines):
+                      block.append(lines[i])
+                      if '/>' in lines[i] or lines[i].strip() == '/>':
+                          i += 1
+                          break
+                      i += 1
+                  blob = "\n".join(block)
+                  if "startDate" in blob:
+                      out.append("            <JalaliDateInput value={startDate} onChange={setStartDate} />")
+                  elif "endDate" in blob:
+                      out.append("            <JalaliDateInput value={endDate} onChange={setEndDate} />")
+                  else:
+                      out.extend(block)
+                  continue
+              out.append(lines[i])
+              i += 1
+          p.write_text("\n".join(out) + "\n")
+          print("left", [l for l in p.read_text().splitlines() if 'type="date"' in l])
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/audit/page.tsx
+          if git diff --staged --quiet; then echo nochange; else git commit -m "fix(#29): admin audit uses JalaliDateInput" && git push; fi
