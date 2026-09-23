@@ -1,0 +1,35 @@
+name: Restore auth.service full
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-auth-service-full.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write full auth.service.ts
+        run: |
+          python3 << 'PY'
+          import base64
+          from pathlib import Path
+          parts = [
+            "PLACEHOLDER_CHUNKS",
+          ]
+          data = base64.b64decode("".join(parts))
+          Path("backend/src/auth/auth.service.ts").write_bytes(data)
+          print("wrote", len(data), "bytes")
+          PY
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          git diff --staged --quiet && echo "no change" && exit 0
+          git commit -m "fix(auth): restore full AuthService with forgot/reset password"
+          git push
