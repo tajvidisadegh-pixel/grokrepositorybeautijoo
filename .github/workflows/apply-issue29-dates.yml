@@ -1,0 +1,208 @@
+name: Apply issue29 Shamsi date inputs
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-issue29-dates.yml'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch date inputs to JalaliDateInput
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          def ensure_import(t: str) -> str:
+              if "JalaliDateInput" in t or "FormJalaliDate" in t:
+                  return t
+              lines = t.splitlines()
+              last = max(i for i, l in enumerate(lines) if l.startswith("import "))
+              lines.insert(last + 1, "import { JalaliDateInput } from '@/components/ui/jalali-date-input';")
+              return "\n".join(lines)
+
+          # booking-wizard
+          p = Path("frontend/src/components/booking/booking-wizard.tsx")
+          t = p.read_text()
+          if "JalaliDateInput" not in t:
+              t = t.replace(
+                  "import { tehranTodayIso, isoToJalaliLabel } from '@/lib/jalali';",
+                  "import { tehranTodayIso, isoToJalaliLabel } from '@/lib/jalali';\nimport { JalaliDateInput } from '@/components/ui/jalali-date-input';",
+                  1,
+              )
+          old = '''          <div>
+            <label className="mb-1 block text-sm font-medium">تاریخ</label>
+            <input
+              type="date"
+              value={date}
+              min={todayISO()}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setSlotStart('');
+              }}
+              className="h-11 w-full rounded-2xl border border-border px-3 text-sm outline-none focus:border-coral"
+              dir="ltr"
+            />
+          </div>'''
+          new = '''          <div>
+            <label className="mb-1 block text-sm font-medium">تاریخ</label>
+            <JalaliDateInput
+              value={date}
+              min={todayISO()}
+              onChange={(iso) => {
+                setDate(iso);
+                setSlotStart('');
+              }}
+            />
+          </div>'''
+          if old in t:
+              t = t.replace(old, new, 1)
+              print("booking-wizard patched")
+          elif "JalaliDateInput" in t and 'type="date"' not in t:
+              print("booking-wizard already")
+          else:
+              print("booking-wizard WARN")
+          p.write_text(t)
+
+          # zibagar bookings
+          p = Path("frontend/src/app/zibagar/bookings/page.tsx")
+          t = ensure_import(p.read_text())
+          t = t.replace(
+              '<Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} dir="ltr" />',
+              '<JalaliDateInput value={from} onChange={setFrom} />',
+          )
+          t = t.replace(
+              '<Input type="date" value={to} onChange={(e) => setTo(e.target.value)} dir="ltr" />',
+              '<JalaliDateInput value={to} onChange={setTo} />',
+          )
+          p.write_text(t)
+          print("zibagar bookings")
+
+          # hours
+          p = Path("frontend/src/app/zibagar/hours/page.tsx")
+          t = ensure_import(p.read_text())
+          import re
+          t2, n = re.subn(
+              r'<Input type="date"[^>]*value=\{blockDate\}[^/]*/>\s*<p className="text-xs text-gray">شمسی: \{isoToJalaliLabel\(blockDate\)\}</p>',
+              '<JalaliDateInput value={blockDate} onChange={setBlockDate} />',
+              t,
+              count=1,
+          )
+          if n:
+              t = t2
+              print("hours patched", n)
+          else:
+              t = t.replace(
+                  '<Input type="date" dir="ltr" value={blockDate} onChange={(e) => setBlockDate(e.target.value)} />',
+                  '<JalaliDateInput value={blockDate} onChange={setBlockDate} />',
+              )
+              t = t.replace('<p className="text-xs text-gray">شمسی: {isoToJalaliLabel(blockDate)}</p>', '')
+              print("hours fallback")
+          p.write_text(t)
+
+          # admin bookings
+          p = Path("frontend/src/app/admin/bookings/page.tsx")
+          t = ensure_import(p.read_text())
+          t = t.replace(
+              '<input type="date" className="rounded-xl border px-3 py-2 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />',
+              '<JalaliDateInput value={startDate} onChange={setStartDate} className="min-w-[10rem]" />',
+          )
+          t = t.replace(
+              '<input type="date" className="rounded-xl border px-3 py-2 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />',
+              '<JalaliDateInput value={endDate} onChange={setEndDate} className="min-w-[10rem]" />',
+          )
+          p.write_text(t)
+          print("admin bookings")
+
+          # admin professionals
+          p = Path("frontend/src/app/admin/professionals/page.tsx")
+          t = ensure_import(p.read_text())
+          t = t.replace(
+              '<input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredFrom} onChange={(e) => setRegisteredFrom(e.target.value)} />',
+              '<JalaliDateInput value={registeredFrom} onChange={setRegisteredFrom} className="min-w-[10rem]" />',
+          )
+          t = t.replace(
+              '<input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredTo} onChange={(e) => setRegisteredTo(e.target.value)} />',
+              '<JalaliDateInput value={registeredTo} onChange={setRegisteredTo} className="min-w-[10rem]" />',
+          )
+          p.write_text(t)
+          print("admin professionals")
+
+          # admin users
+          p = Path("frontend/src/app/admin/users/page.tsx")
+          t = ensure_import(p.read_text())
+          t = t.replace(
+              '<input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredFrom} onChange={(e) => setRegisteredFrom(e.target.value)} title="عضویت از" />',
+              '<JalaliDateInput value={registeredFrom} onChange={setRegisteredFrom} className="min-w-[10rem]" />',
+          )
+          t = t.replace(
+              '<input className="rounded-xl border px-3 py-2 text-sm" type="date" value={registeredTo} onChange={(e) => setRegisteredTo(e.target.value)} title="عضویت تا" />',
+              '<JalaliDateInput value={registeredTo} onChange={setRegisteredTo} className="min-w-[10rem]" />',
+          )
+          p.write_text(t)
+          print("admin users")
+
+          # admin audit
+          p = Path("frontend/src/app/admin/audit/page.tsx")
+          t = ensure_import(p.read_text())
+          t = t.replace(
+              '''            <input
+              type="date"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />''',
+              '            <JalaliDateInput value={startDate} onChange={setStartDate} />',
+          )
+          t = t.replace(
+              '''            <input
+              type="date"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />''',
+              '            <JalaliDateInput value={endDate} onChange={setEndDate} />',
+          )
+          p.write_text(t)
+          print("admin audit")
+
+          # finance time
+          p = Path("frontend/src/app/admin/finance/page.tsx")
+          t = p.read_text()
+          if "formatTime24" not in t:
+              t = t.replace(
+                  "import { formatPrice } from '@/lib/utils';",
+                  "import { formatPrice, formatTime24 } from '@/lib/utils';",
+                  1,
+              )
+          t = t.replace(
+              "{item.failedAt ? new Date(item.failedAt).toLocaleTimeString('fa-IR') : '—'}",
+              "{item.failedAt ? formatTime24(item.failedAt) : '—'}",
+          )
+          p.write_text(t)
+          print("finance")
+
+          left = list(Path("frontend").rglob("*.tsx"))
+          still = []
+          for f in left:
+              txt = f.read_text()
+              if 'type="date"' in txt:
+                  still.append(str(f))
+          print("remaining type=date:", still)
+          PY
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "feat(#29): replace native date inputs with JalaliDateInput site-wide"
+            git push
+          fi
