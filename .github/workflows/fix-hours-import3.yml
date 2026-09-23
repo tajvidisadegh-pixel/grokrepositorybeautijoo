@@ -1,0 +1,47 @@
+name: Fix hours import 3
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/fix-hours-import3.yml']
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: sed fix
+        run: |
+          FILE=frontend/src/app/zibagar/hours/page.tsx
+          # Remove the broken nested import line, ensure proper import exists
+          sed -i '/^import {$/{ N; s/^import {\nimport { JalaliDateInput } from '\''@\/components\/ui\/jalali-date-input'\'';/import { JalaliDateInput } from '\''@\/components\/ui\/jalali-date-input'\'';\nimport {/; }' "$FILE" || true
+          # Fallback: delete any line that is ONLY "import {" followed by another import
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/zibagar/hours/page.tsx')
+          lines = p.read_text().splitlines()
+          out = []
+          i = 0
+          while i < len(lines):
+              if lines[i].strip() == 'import {' and i+1 < len(lines) and lines[i+1].startswith('import '):
+                  # skip the bare import { and keep the next import, then continue collecting until from
+                  out.append(lines[i+1])
+                  i += 2
+                  # if next is not "  addJalali" start of multi-line, add "import {"
+                  if i < len(lines) and lines[i].lstrip().startswith('addJalali'):
+                      out.append('import {')
+                  continue
+              out.append(lines[i])
+              i += 1
+          p.write_text('\n'.join(out) + '\n')
+          text = p.read_text()
+          assert 'import {\nimport' not in text
+          assert "JalaliDateInput" in text
+          print('OK')
+          print('\n'.join(text.splitlines()[10:18]))
+          PY
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/hours/page.tsx
+          git diff --staged --quiet || (git commit -m "fix(#29): hours page import syntax" && git push)
