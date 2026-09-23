@@ -281,8 +281,9 @@ export class ProfessionalsService {
       }
     }
 
+    const sanitizedItems = withDistance.map((item) => this.sanitizePublicLocations(item));
     const result = {
-      items: withDistance,
+      items: sanitizedItems,
       meta: {
         page,
         limit,
@@ -315,8 +316,9 @@ export class ProfessionalsService {
     if (!pro || pro.status !== ProfessionalStatus.approved || !pro.publishedAt) {
       throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
     }
-    this.cache.set(cacheKey, pro, 120_000);
-    return pro;
+    const safe = this.sanitizePublicLocations(pro);
+    this.cache.set(cacheKey, safe, 120_000);
+    return safe;
   }
 
   async getOwn(userId: string) {
@@ -494,6 +496,39 @@ export class ProfessionalsService {
     const doneCount = required.filter((f) => f.done).length;
     const percent = Math.round((doneCount / required.length) * 100);
     return { percent, complete: percent === 100, fields };
+  }
+
+
+  /** Public view: hide exact pin when precision=approximate (issue #21). */
+  private sanitizePublicLocations<T extends { locations?: Array<{ location?: any; isPrimary?: boolean }> | null }>(
+    pro: T,
+  ): T {
+    if (!pro?.locations?.length) return pro;
+    const locations = pro.locations.map((pl) => {
+      const loc = pl.location;
+      if (!loc) return pl;
+      const precision = loc.precision === 'exact' ? 'exact' : 'approximate';
+      if (precision === 'exact') {
+        return { ...pl, location: { ...loc, precision } };
+      }
+      const city = loc.city || '';
+      const province = loc.province || null;
+      const publicAddress =
+        typeof loc.address === 'string' && loc.address.includes('محدوده')
+          ? loc.address
+          : `محدوده ${city}${province ? `، ${province}` : ''}`;
+      return {
+        ...pl,
+        location: {
+          ...loc,
+          precision: 'approximate',
+          address: publicAddress,
+          latitude: null,
+          longitude: null,
+        },
+      };
+    });
+    return { ...pro, locations };
   }
 
   private publicInclude() {
