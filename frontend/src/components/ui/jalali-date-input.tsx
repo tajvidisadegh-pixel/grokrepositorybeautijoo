@@ -20,7 +20,6 @@ type Props = {
   disabled?: boolean;
   className?: string;
   id?: string;
-  /** Optional name for forms */
   name?: string;
 };
 
@@ -205,5 +204,32 @@ export function JalaliDateInput({
         </div>
       )}
     </div>
+  );
+}
+
+/** Uncontrolled-friendly field for server-rendered forms (GET search, etc.) */
+export function FormJalaliDate({
+  name,
+  defaultValue = '',
+  min,
+  max,
+  className,
+}: {
+  name: string;
+  defaultValue?: string;
+  min?: string;
+  max?: string;
+  className?: string;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  return (
+    <JalaliDateInput
+      name={name}
+      value={value}
+      onChange={setValue}
+      min={min}
+      max={max}
+      className={className}
+    />
   );
 }
