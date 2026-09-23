@@ -16,7 +16,8 @@ const FULL_ACCESS_ROLES = new Set(['SUPER_ADMIN', 'admin']);
  * Roles and permissions come only from JWT → DB (JwtStrategy),
  * never from request body/query/headers controlled by the client.
  *
- * - SUPER_ADMIN and admin always have full access to all protected resources.
+ * - SUPER_ADMIN and admin always have full access to all protected resources,
+ *   except while in an impersonation session (issue #22).
  * - If @Roles specified: user must have one of the roles (or full-access role).
  * - If @RequirePermissions specified: user must have the permissions (or full-access role).
  */
@@ -46,8 +47,11 @@ export class RolesGuard implements CanActivate {
     const roles: string[] = Array.isArray(user?.roles) ? user.roles : [];
     const permissions: string[] = Array.isArray(user?.permissions) ? user.permissions : [];
 
-    // SUPER_ADMIN and legacy `admin` role have full access
-    if (roles.some((r) => FULL_ACCESS_ROLES.has(r))) {
+    // Impersonation sessions must never inherit Super Admin privileges (issue #22)
+    const isImpersonating = !!user?.isImpersonating;
+
+    // SUPER_ADMIN and legacy `admin` role have full access — but not while impersonating
+    if (!isImpersonating && roles.some((r) => FULL_ACCESS_ROLES.has(r))) {
       return true;
     }
 
