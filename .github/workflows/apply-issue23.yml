@@ -2,6 +2,7 @@ name: Apply issue 23 earnings UI
 on:
   push:
     paths:
+      - 'scripts/issue23/**'
       - 'scripts/apply-issue23-earnings.sh'
       - '.github/workflows/apply-issue23.yml'
   workflow_dispatch:
@@ -12,7 +13,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Write earnings page
+      - name: Assemble earnings page
         run: bash scripts/apply-issue23-earnings.sh
       - name: Commit
         run: |
