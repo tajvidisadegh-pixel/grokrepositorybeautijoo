@@ -10,7 +10,8 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Min, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PrismaService } from '../prisma/prisma.service';
 import { Roles } from '../common/decorators/roles.decorator';
 
@@ -37,6 +38,8 @@ class UpdateCategoryDto {
   @IsOptional() @IsUUID() parentId?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsString() description?: string;
+  /** Accepted so frontend sortOrder patch is not rejected by forbidNonWhitelisted (#26). */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
 }
 
 class CreateCatalogServiceDto {
@@ -61,6 +64,7 @@ export class AdminCatalogController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get('service-categories')
+  @ApiOperation({ summary: 'List all service categories (including inactive)' })
   listCategories() {
     return this.prisma.serviceCategory.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -113,6 +117,7 @@ export class AdminCatalogController {
         ...(dto.parentId !== undefined ? { parentId: dto.parentId } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.description !== undefined ? { description: dto.description.trim() || null } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
       },
       include: {
         parent: { select: { id: true, name: true } },
@@ -121,21 +126,21 @@ export class AdminCatalogController {
     });
   }
 
+  /** Soft-delete: deactivate category (and optionally leave children/services). Matches UI «غیرفعال». Issue #26. */
   @Delete('service-categories/:id')
+  @ApiOperation({ summary: 'Soft-delete category (isActive=false) — seed will not reactivate' })
   async deleteCategory(@Param('id') id: string) {
     const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('category not found');
-    await this.prisma.$transaction(async (tx) => {
-      const services = await tx.service.findMany({ where: { categoryId: id }, select: { id: true } });
-      const serviceIds = services.map((s) => s.id);
-      if (serviceIds.length) {
-        await tx.professionalService.deleteMany({ where: { serviceId: { in: serviceIds } } });
-        await tx.service.deleteMany({ where: { id: { in: serviceIds } } });
-      }
-      await tx.serviceCategory.updateMany({ where: { parentId: id }, data: { parentId: null } });
-      await tx.serviceCategory.delete({ where: { id } });
+    const updated = await this.prisma.serviceCategory.update({
+      where: { id },
+      data: { isActive: false },
+      include: {
+        parent: { select: { id: true, name: true } },
+        _count: { select: { services: true, children: true } },
+      },
     });
-    return { id, deleted: true, hard: true };
+    return { id, deleted: true, hard: false, isActive: updated.isActive };
   }
 
   @Get('catalog-services')
@@ -187,14 +192,17 @@ export class AdminCatalogController {
     });
   }
 
+  /** Soft-delete specialty — do not wipe professionalService rows (#26). */
   @Delete('catalog-services/:id')
+  @ApiOperation({ summary: 'Soft-delete catalog service (isActive=false)' })
   async deleteCatalogService(@Param('id') id: string) {
     const row = await this.prisma.service.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('service not found');
-    await this.prisma.$transaction(async (tx) => {
-      await tx.professionalService.deleteMany({ where: { serviceId: id } });
-      await tx.service.delete({ where: { id } });
+    const updated = await this.prisma.service.update({
+      where: { id },
+      data: { isActive: false },
+      include: { category: { select: { id: true, name: true, slug: true } } },
     });
-    return { id, deleted: true, hard: true };
+    return { id, deleted: true, hard: false, isActive: updated.isActive };
   }
 }
