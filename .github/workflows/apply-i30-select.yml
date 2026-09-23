@@ -1,0 +1,91 @@
+name: Apply issue30 specialty select-only
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-i30-select.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch SpecialtyView + services page (selection only)
+        run: |
+          set -e
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('frontend/src/app/zibagar/services/SpecialtyView.tsx')
+          t = p.read_text()
+          changed = False
+
+          t2, n = re.subn(
+              r'\n\s*<div className="flex flex-wrap gap-2 pt-1">[\s\S]*?setShowAddFinal\(false\); setNewFinalName\(\'\'\); setNewFinalPrice\(0\); setNewFinalDuration\(60\); \}\}>انصراف</button>\s*</div>\s*</div>\s*</div>\s*</div>',
+              '''\n          {verticalItems.length === 0 && currentLeafServices.length === 0 && (\n            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">\n              زیرمجموعه‌ای در این سطح از کاتالوگ نیست. از پنل سوپرادمین خدمات یا زیردسته اضافه کنید.\n            </p>\n          )}\n        </div>\n      )}''',
+              t,
+              count=1,
+          )
+          if n:
+              t = t2
+              changed = True
+              print('SpecialtyView: removed free-text add block', n)
+
+          t2, n = re.subn(
+              r'\{path\.length === 0 && \([\s\S]*?ویژگی‌ها را مرحله‌به‌مرحله بسازید\.[\s\S]*?</div>\s*\)\}',
+              '''{path.length === 0 && rootDirectChildren.length === 0 && (findCategory(tree, activeRootId)?.services || []).length === 0 && (\n        <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center">\n          <p className={`mb-1 text-base font-semibold ${navy.title}`}>{activeRoot?.name}</p>\n          <p className="text-sm text-gray-500">\n            هنوز زیرمجموعه‌ای در کاتالوگ ادمین برای این تخصص تعریف نشده.\n            از پنل سوپرادمین دسته‌بندی و خدمات را اضافه کنید.\n          </p>\n        </div>\n      )}\n      {path.length === 0 && (findCategory(tree, activeRootId)?.services || []).length > 0 && (\n        <ul className="space-y-2">\n          {(findCategory(tree, activeRootId)?.services || []).map((s) => {\n            const offered = mine.find((m) => m.serviceId === s.id);\n            const st = statusOf(offered);\n            return (\n              <li key={s.id}>\n                <button type="button" onClick={() => void ensureAndEditService(s.id, s.name)} className={`flex w-full items-center justify-between rounded-2xl border ${navy.border} bg-white px-4 py-3 text-right text-sm`}>\n                  <span className="font-medium">{s.name}</span>\n                  <span className="text-xs text-gray-500">{offered ? (st === 'ready' ? `${formatPrice(offered.price)} · 🟢` : '🟡 تکمیل') : 'تنظیم قیمت'}</span>\n                </button>\n              </li>\n            );\n          })}\n        </ul>\n      )}''',
+              t,
+              count=1,
+          )
+          if n:
+              t = t2
+              changed = True
+              print('SpecialtyView: root empty replaced', n)
+
+          if changed:
+              p.write_text(t)
+          else:
+              print('SpecialtyView: no regex match')
+
+          p2 = Path('frontend/src/app/zibagar/services/page.tsx')
+          t = p2.read_text()
+          t2, n = re.subn(
+              r'<button type="button" onClick=\{\(\) => setShowCreateSpecialty\(\(v\) => !v\)\} className=\{`shrink-0 rounded-xl px-4 py-2 text-sm font-medium \$\{navy\.btn\}`\}>\+ افزودن تخصص</button>',
+              '',
+              t,
+              count=1,
+          )
+          if n:
+              t = t2
+              print('page: removed +افزودن تخصص button', n)
+
+          t2, n = re.subn(
+              r'\{showCreateSpecialty && \([\s\S]*?setNewSpecDesc\(\'\'\); \}\}>انصراف</button>\s*</div>\s*</div>\s*\)\}',
+              '''{/* Catalog root picker — selection only (#30); backend create APIs retained */}\n          <div className={`space-y-3 rounded-2xl border ${navy.border} bg-white p-4`}>\n            <p className={`text-sm font-semibold ${navy.title}`}>افزودن تخصص از کاتالوگ</p>\n            {roots.filter((r) => !selectedRootIds.includes(r.id)).length === 0 ? (\n              <p className="text-xs text-gray-500">\n                {roots.length === 0\n                  ? 'کاتالوگ خالی است — سوپرادمین باید دسته‌بندی‌ها را در پنل ادمین تعریف کند.'\n                  : 'همه تخصص‌های کاتالوگ به لیست شما اضافه شده‌اند.'}\n              </p>\n            ) : (\n              <ul className="space-y-2">\n                {roots.filter((r) => !selectedRootIds.includes(r.id)).map((r) => (\n                  <li key={r.id}>\n                    <button type="button" disabled={busy} onClick={() => void addRootSpecialty(r.id)}\n                      className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-[#F9FAFB] px-3 py-2.5 text-right text-sm hover:border-[#0B2C4A]/30 disabled:opacity-50">\n                      <span className="font-medium text-[#0B2C4A]">{r.name}</span>\n                      <span className="text-xs text-[#2D6CDF]">+ انتخاب</span>\n                    </button>\n                  </li>\n                ))}\n              </ul>\n            )}\n          </div>''',
+              t,
+              count=1,
+          )
+          if n:
+              t = t2
+              print('page: replaced create form with catalog picker', n)
+
+          t2, n = re.subn(
+              r'\{mine\.length === 0 && !showCreateSpecialty \? \([\s\S]*?\+ افزودن تخصص</button>\s*</div>\s*\)',
+              '''{mine.length === 0 && myRoots.length === 0 ? (\n            <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">\n              <p className={`text-sm font-medium ${navy.title}`}>هنوز تخصصی انتخاب نکرده‌اید</p>\n              <p className="mt-1 text-xs text-gray-500">از لیست بالا یک تخصص کاتالوگ را انتخاب کنید.</p>\n            </div>\n          )''',
+              t,
+              count=1,
+          )
+          if n:
+              t = t2
+              print('page: empty state', n)
+
+          p2.write_text(t)
+          print('done')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/app/zibagar/services
+          git commit -m 'feat(#30): zibagar specialties selection-only from admin catalog' || echo no-change
+          git push
