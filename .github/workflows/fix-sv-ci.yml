@@ -1,0 +1,116 @@
+name: Fix SpecialtyView CI #30
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-sv-ci.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Surgical fix SpecialtyView + drop broken workflows
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('frontend/src/app/zibagar/services/SpecialtyView.tsx')
+          t = p.read_text()
+          orig = t
+
+          t = t.replace(
+              """      )}
+        </div>
+      )}
+
+      {rootDirectChildren.length > 0 && (""",
+              """      )}
+
+      {rootDirectChildren.length > 0 && (""",
+          )
+
+          t2, n = re.subn(
+              r'          <div className="flex flex-wrap gap-2 pt-1">[\s\S]*?          </div>\n        </div>\n      \)\}\n',
+              """          {verticalItems.length === 0 && currentLeafServices.length === 0 && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              زیرمجموعه‌ای در این سطح از کاتالوگ نیست. از پنل سوپرادمین خدمات یا زیردسته اضافه کنید.
+            </p>
+          )}
+        </div>
+      )}
+""",
+              t,
+              count=1,
+          )
+          print('free-text block removed:', n)
+          t = t2
+
+          for line in [
+            "  const [showAddFeature, setShowAddFeature] = useState(false);\n",
+            "  const [newFeatureName, setNewFeatureName] = useState('');\n",
+            "  const [showAddFinal, setShowAddFinal] = useState(false);\n",
+            "  const [newFinalName, setNewFinalName] = useState('');\n",
+            "  const [newFinalPrice, setNewFinalPrice] = useState(0);\n",
+            "  const [newFinalDuration, setNewFinalDuration] = useState(60);\n",
+          ]:
+              t = t.replace(line, '')
+
+          t = t.replace('    createAndEditCustomService,\n    createFeature,\n', '')
+
+          body_tail = t.split("from '@/lib/utils';", 1)[-1] if "from '@/lib/utils';" in t else t
+          if 'formatPriceDigits' not in body_tail and 'parsePriceInput' not in body_tail:
+              t = t.replace(
+                  "import { formatPrice, formatPriceDigits, parsePriceInput } from '@/lib/utils';",
+                  "import { formatPrice } from '@/lib/utils';",
+              )
+
+          t = t.replace(
+              """  createAndEditCustomService: (
+    name: string,
+    initial?: { price?: number; durationMin?: number },
+  ) => void | Promise<void>;
+  createFeature: (name: string) => void | Promise<void>;
+};""",
+              """  createAndEditCustomService?: (
+    name: string,
+    initial?: { price?: number; durationMin?: number },
+  ) => void | Promise<void>;
+  createFeature?: (name: string) => void | Promise<void>;
+};""",
+          )
+
+          if t == orig:
+              print('WARNING: no changes applied')
+          else:
+              p.write_text(t)
+              print('wrote SpecialtyView', len(t.splitlines()), 'lines')
+
+          text = p.read_text()
+          assert '        </div>\n      )}\n\n      {rootDirectChildren' not in text, 'orphan closings remain'
+          assert 'افزودن ویژگی' not in text, 'free-text still present'
+          print('sanity ok')
+
+          for wf in [
+            '.github/workflows/fix-issue29-hours-import.yml',
+            '.github/workflows/fix-i30-sv.yml',
+            '.github/workflows/apply-issue30.yml',
+            '.github/workflows/apply-i30-select.yml',
+            'scripts/i30_sv_a.b64',
+            'scripts/i30_sv_b.b64',
+            'scripts/i30_p0.txt',
+          ]:
+              path = Path(wf)
+              if path.exists():
+                  path.unlink()
+                  print('removed', wf)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git status
+          git commit -m 'fix(#30): SpecialtyView valid JSX + selection-only; remove broken workflows' || echo no-change
+          git push
