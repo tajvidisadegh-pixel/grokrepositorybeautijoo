@@ -1,0 +1,24 @@
+name: Apply issue30 catalog addons
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/apply_i30_addons.py'
+      - '.github/workflows/apply-i30-addons.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run apply script
+        run: |
+          set -e
+          python3 scripts/apply_i30_addons.py
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "feat(#30): catalog add-ons admin CRUD + zibagar selection UI" || echo no-change
+          git push
