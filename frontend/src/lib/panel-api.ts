@@ -23,6 +23,16 @@ export type FavoriteItem = {
   professional?: { id: string; slug: string; title?: string | null; status?: string; user?: { profile?: { displayName?: string | null; avatarUrl?: string | null } | null } | null };
 };
 export type NotificationItem = { id: string; title?: string; body?: string; message?: string; readAt?: string | null; createdAt: string; type?: string };
+
+export type CatalogAddOnItem = {
+  id: string;
+  name: string;
+  description?: string | null;
+  defaultPrice: number;
+  defaultExtraDurationMin?: number;
+  sortOrder?: number;
+  isActive?: boolean;
+};
 export type ServiceAddOnItem = {
   id: string; name: string; description?: string | null; price: number;
   extraDurationMin?: number; sortOrder?: number; isActive?: boolean;
@@ -214,6 +224,15 @@ export async function createCategoryNode(payload: { name: string; parentId?: str
 }
 export async function createServiceNode(payload: { name: string; categoryId: string; slug?: string; description?: string }) {
   return apiClient.post<{ id: string; name: string; slug: string; categoryId: string }>('/services', payload ?? {});
+}
+
+export async function fetchCatalogAddOns() {
+  try {
+    const res = await apiClient.get<CatalogAddOnItem[] | Paginated<CatalogAddOnItem>>('/catalog-addons');
+    return unwrapList(res as Paginated<CatalogAddOnItem>);
+  } catch {
+    return [] as CatalogAddOnItem[];
+  }
 }
 export async function fetchMyAddOns(psId: string) {
   const res = await apiClient.get<ServiceAddOnItem[] | Paginated<ServiceAddOnItem>>(`/professionals/me/services/${psId}/add-ons`);

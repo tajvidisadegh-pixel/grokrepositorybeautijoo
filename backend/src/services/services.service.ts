@@ -572,4 +572,20 @@ export class ServicesService {
       data: { isActive: false },
     });
   }
+  /** Active catalog add-on templates for professionals to pick (#30). */
+  async listCatalogAddOns() {
+    return this.prisma.catalogAddOn.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        defaultPrice: true,
+        defaultExtraDurationMin: true,
+        sortOrder: true,
+      },
+    });
+  }
+
 }

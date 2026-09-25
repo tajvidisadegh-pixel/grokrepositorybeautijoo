@@ -19,6 +19,14 @@ class AttachMediaDto { @IsUUID() mediaId!: string; }
 @Controller()
 export class ServicesController {
   constructor(private readonly service: ServicesService) {}
+
+  @Get('catalog-addons')
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @ApiBearerAuth()
+  listCatalogAddOns() {
+    return this.service.listCatalogAddOns();
+  }
+
   @Public() @Get('categories') categories() { return this.service.listCategories(); }
   @Public() @Get('services/hierarchy') hierarchy() { return this.service.listHierarchy(); }
   @Public() @Get('services') services(@Query('category') category?: string) { return this.service.listServices(category); }

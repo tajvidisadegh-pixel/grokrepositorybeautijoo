@@ -16,6 +16,16 @@ type Category = {
   parent?: { id: string; name: string } | null;
 };
 
+
+type CatalogAddOn = {
+  id: string;
+  name: string;
+  description?: string | null;
+  defaultPrice: number;
+  defaultExtraDurationMin?: number;
+  sortOrder?: number;
+  isActive?: boolean;
+};
 type Service = {
   id: string;
   name: string;
@@ -38,17 +48,23 @@ export default function AdminServiceCategoriesPage() {
   const [error, setError] = useState<string | null>(null);
   const [editCat, setEditCat] = useState<Category | null>(null);
   const [editSvc, setEditSvc] = useState<Service | null>(null);
+  const [catalogAddOns, setCatalogAddOns] = useState<CatalogAddOn[]>([]);
+  const [addonName, setAddonName] = useState('');
+  const [addonPrice, setAddonPrice] = useState(0);
+  const [addonExtra, setAddonExtra] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
-    const [cats, svcs] = await Promise.all([
+    const [cats, svcs, addons] = await Promise.all([
       apiClient.get<Category[]>('/admin/service-categories'),
       apiClient.get<Service[]>('/admin/catalog-services').catch(() =>
         apiClient.get<Service[]>('/services').catch(() => []),
       ),
+      apiClient.get<CatalogAddOn[]>('/admin/catalog-addons').catch(() => []),
     ]);
     setCategories(Array.isArray(cats) ? cats : []);
     setServices(Array.isArray(svcs) ? svcs : []);
+    setCatalogAddOns(Array.isArray(addons) ? addons : []);
   }, []);
 
   useEffect(() => {
@@ -196,6 +212,43 @@ export default function AdminServiceCategoriesPage() {
     }
   }
 
+
+  async function createCatalogAddOn() {
+    if (!addonName.trim()) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await apiClient.post('/admin/catalog-addons', {
+        name: addonName.trim(),
+        defaultPrice: addonPrice || 0,
+        defaultExtraDurationMin: addonExtra || 0,
+      });
+      setAddonName('');
+      setAddonPrice(0);
+      setAddonExtra(0);
+      setMessage('ویژگی کاتالوگ ثبت شد');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطا در ایجاد ویژگی');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteCatalogAddOn(id: string) {
+    if (!confirm('این ویژگی غیرفعال شود؟')) return;
+    setBusy(true);
+    try {
+      await apiClient.delete(`/admin/catalog-addons/${id}`);
+      setMessage('ویژگی غیرفعال شد');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطا');
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6" dir="rtl">
       <div>
@@ -452,6 +505,47 @@ export default function AdminServiceCategoriesPage() {
                     </div>
                   </>
                 )}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#FFE6E2] bg-white p-4">
+        <h2 className="font-semibold text-[#0B2C4A]">ویژگی‌ها / اددآن‌های کاتالوگ</h2>
+        <p className="mt-1 text-xs text-gray-500">زیباگر فقط از این لیست می‌تواند ویژگی به خدمت اضافه کند (قیمت/زمان قابل تنظیم است).</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <Input value={addonName} onChange={(e) => setAddonName(e.target.value)} placeholder="نام ویژگی (مثلاً اکستنشن)" />
+          <Input inputMode="numeric" value={addonPrice || ''} onChange={(e) => setAddonPrice(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)} placeholder="قیمت پیش‌فرض" />
+          <Input type="number" min={0} value={addonExtra || ''} onChange={(e) => setAddonExtra(Number(e.target.value) || 0)} placeholder="زمان اضافه (دقیقه)" />
+        </div>
+        <button
+          disabled={busy || !addonName.trim()}
+          onClick={() => void createCatalogAddOn()}
+          className="mt-3 rounded-xl bg-[#FF6F61] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          ثبت ویژگی کاتالوگ
+        </button>
+        <div className="mt-4 divide-y">
+          {catalogAddOns.filter((a) => a.isActive !== false).length === 0 ? (
+            <p className="py-4 text-center text-sm text-gray-500">هنوز ویژگی‌ای تعریف نشده.</p>
+          ) : (
+            catalogAddOns.filter((a) => a.isActive !== false).map((a) => (
+              <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div>
+                  <p className="text-sm font-medium">{a.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {a.defaultPrice?.toLocaleString('fa-IR') || 0} تومان
+                    {a.defaultExtraDurationMin ? ` · +${a.defaultExtraDurationMin}د` : ''}
+                  </p>
+                </div>
+                <button
+                  disabled={busy}
+                  onClick={() => void deleteCatalogAddOn(a.id)}
+                  className="text-xs text-[#FF6F61]"
+                >
+                  حذف
+                </button>
               </div>
             ))
           )}
