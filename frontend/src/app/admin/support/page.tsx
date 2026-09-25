@@ -118,7 +118,7 @@ export default function AdminSupportPage() {
         <h1 className="text-xl font-bold">پشتیبانی</h1>
         <div className="flex gap-2">
           {['all', 'open', 'answered', 'closed'].map((s) => (
-            <Button key={s} size="sm" variant={statusFilter === s ? 'default' : 'outline'} onClick={() => setStatusFilter(s)}>
+            <Button key={s} size="sm" variant={statusFilter === s ? 'primary' : 'outline'} onClick={() => setStatusFilter(s)}>
               {s === 'all' ? 'همه' : STATUS_LABEL[s] || s}
             </Button>
           ))}
