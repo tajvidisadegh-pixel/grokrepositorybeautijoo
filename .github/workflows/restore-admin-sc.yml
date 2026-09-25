@@ -1,0 +1,35 @@
+name: Restore admin service-categories
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-admin-sc.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20
+      - name: Restore page from 18bcdfe and minor fix
+        run: |
+          set -e
+          git show 18bcdfe:frontend/src/app/admin/service-categories/page.tsx > frontend/src/app/admin/service-categories/page.tsx
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/admin/service-categories/page.tsx')
+          t = p.read_text()
+          t = t.replace(
+              "{a.defaultExtraDurationMin ? ` · +${a.defaultExtraDurationMin}د` : ''}",
+              "{a.defaultExtraDurationMin ? (' · +' + a.defaultExtraDurationMin + 'د') : ''}",
+          )
+          p.write_text(t)
+          print('restored', len(t))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/service-categories/page.tsx
+          git commit -m "fix(#30): restore admin service-categories catalog add-ons page" || echo no-change
+          git push
