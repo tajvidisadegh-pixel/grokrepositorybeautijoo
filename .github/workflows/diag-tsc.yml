@@ -1,0 +1,33 @@
+name: Diag frontend typecheck
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/diag-tsc.yml'
+permissions:
+  contents: read
+jobs:
+  tsc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Typecheck capture
+        run: |
+          set +e
+          npm run typecheck > /tmp/tsc.out 2>&1
+          code=$?
+          echo EXIT=$code
+          wc -l /tmp/tsc.out
+          head -100 /tmp/tsc.out
+          echo '---TAIL---'
+          tail -50 /tmp/tsc.out
+          # also try finding the bad file
+          grep -n "error TS" /tmp/tsc.out | head -30 || true
+          exit 0
