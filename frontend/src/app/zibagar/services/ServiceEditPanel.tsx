@@ -1,11 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   deactivateMyAddOn,
-  fetchCatalogAddOns,
-  type CatalogAddOnItem,
   deleteMyDurationRule,
   deleteMyPriceRule,
   fetchMyDurationRules,
@@ -66,23 +63,10 @@ export type ServiceEditPanelProps = {
 export function ServiceEditPanel(props: ServiceEditPanelProps) {
   const { selectedPs, busy, price, setPrice, durationMin, setDurationMin, activeRootId, showModels, setShowModels, priceRules, setPriceRules, durationRules, setDurationRules, ruleLabel, setRuleLabel, rulePrice, setRulePrice, ruleDuration, setRuleDuration, showAddOnForm, setShowAddOnForm, addOnName, setAddOnName, addOnPrice, setAddOnPrice, addOnExtra, setAddOnExtra, editingAddOnId, setEditingAddOnId, uploadState, uploadErr, onSavePs, applyFixedToAllUnderRoot, onAddModel, onAddOn, onToggleActive, onDeleteMedia, onUploadMedia, load } = props;
 
-  const [catalogAddOns, setCatalogAddOns] = useState<CatalogAddOnItem[]>([]);
-  useEffect(() => {
-    void fetchCatalogAddOns().then(setCatalogAddOns).catch(() => setCatalogAddOns([]));
-  }, []);
-
-  function pickCatalogAddOn(id: string) {
-    const item = catalogAddOns.find((c) => c.id === id);
-    if (!item) return;
-    setAddOnName(item.name);
-    setAddOnPrice(item.defaultPrice || 0);
-    setAddOnExtra(item.defaultExtraDurationMin || 0);
-  }
-
   return (
     <div className={`space-y-5 rounded-2xl border ${navy.border} bg-white p-4`}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-gray-500">{statusOf(selectedPs) === 'ready' ? 'آماده رزرو' : 'نیاز به تکمیل'}</p>
+        <p className="text-xs text-gray-500">{statusOf(selectedPs) === 'ready' ? '🟢 آماده رزرو' : '🟡 نیاز به تکمیل'}</p>
         <button type="button" disabled={busy} onClick={() => onToggleActive(selectedPs)} className="text-xs text-gray-500 underline">{selectedPs.isActive === false ? 'فعال کردن' : 'غیرفعال'}</button>
       </div>
 
@@ -122,91 +106,14 @@ export function ServiceEditPanel(props: ServiceEditPanelProps) {
       </div>
 
       <div className={`border-t ${navy.border} pt-4`}>
-        {(selectedPs.addOns || []).filter((a) => a.isActive !== false).length > 0 && (
-          <ul className="mb-3 space-y-2">
-            {(selectedPs.addOns || []).filter((a: ServiceAddOnItem) => a.isActive !== false).map((a) => (
-              <li key={a.id} className={`flex items-center justify-between rounded-xl border ${navy.border} px-3 py-2 text-sm`}>
-                <span>
-                  {a.name}
-                  <span className="mr-2 text-xs text-gray-500">
-                    {formatPrice(a.price)}
-                    {a.extraDurationMin ? ' · +' + a.extraDurationMin + 'د' : ''}
-                  </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <button type="button" className="text-xs text-blue-600" onClick={() => { setEditingAddOnId(a.id); setAddOnName(a.name); setAddOnPrice(a.price || 0); setAddOnExtra(a.extraDurationMin || 0); setShowAddOnForm(true); }}>ویرایش</button>
-                  <button type="button" className="text-xs text-gray-500" onClick={() => deactivateMyAddOn(a.id).then(load)}>حذف</button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {!showAddOnForm ? (
-          <button type="button" onClick={() => setShowAddOnForm(true)} className={`text-sm font-medium ${navy.title}`}>+ افزودن ویژگی از کاتالوگ</button>
-        ) : (
-          <div className="space-y-2">
-            {catalogAddOns.length > 0 && !editingAddOnId ? (
-              <select
-                className="h-10 w-full rounded-xl border px-3 text-sm"
-                defaultValue=""
-                onChange={(e) => { if (e.target.value) pickCatalogAddOn(e.target.value); }}
-              >
-                <option value="">انتخاب از کاتالوگ ادمین...</option>
-                {catalogAddOns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.defaultPrice ? (' · ' + c.defaultPrice.toLocaleString('fa-IR') + ' ت') : ''}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <div className="grid gap-2 sm:grid-cols-3">
-              <Input
-                placeholder="نام ویژگی"
-                value={addOnName}
-                onChange={(e) => setAddOnName(e.target.value)}
-                readOnly={catalogAddOns.length > 0 && !editingAddOnId}
-                className={catalogAddOns.length > 0 && !editingAddOnId ? 'bg-gray-50' : ''}
-              />
-              <Input inputMode="numeric" placeholder="قیمت" value={addOnPrice ? formatPriceDigits(addOnPrice) : ''} onChange={(e) => setAddOnPrice(parsePriceInput(e.target.value))} />
-              <Input type="number" min={0} placeholder="زمان اضافه" value={addOnExtra || ''} onChange={(e) => setAddOnExtra(Number(e.target.value) || 0)} />
-            </div>
-            {catalogAddOns.length === 0 && (
-              <p className="text-xs text-amber-600">کاتالوگ ویژگی خالی است — ادمین باید در «تخصص‌ها و دسته‌بندی‌ها» ویژگی تعریف کند. فعلاً می‌توانید نام را دستی وارد کنید.</p>
-            )}
-            <div className="flex gap-2">
-              <button type="button" disabled={busy || !addOnName.trim()} onClick={onAddOn} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}>
-                {editingAddOnId ? 'ذخیره تغییرات' : 'تأیید'}
-              </button>
-              {editingAddOnId && (
-                <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setEditingAddOnId(null); setAddOnName(''); setAddOnPrice(0); setAddOnExtra(0); setShowAddOnForm(false); }}>انصراف</button>
-              )}
-              {!editingAddOnId && (
-                <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setShowAddOnForm(false); setAddOnName(''); setAddOnPrice(0); setAddOnExtra(0); }}>انصراف</button>
-              )}
-            </div>
-          </div>
-        )}
+        {(selectedPs.addOns || []).filter((a) => a.isActive !== false).length > 0 && <ul className="mb-3 space-y-2">{(selectedPs.addOns || []).filter((a: ServiceAddOnItem) => a.isActive !== false).map((a) => <li key={a.id} className={`flex items-center justify-between rounded-xl border ${navy.border} px-3 py-2 text-sm`}><span>{a.name}<span className="mr-2 text-xs text-gray-500">{formatPrice(a.price)}{a.extraDurationMin ? ` · +${a.extraDurationMin}د` : ''}</span></span><span className="flex items-center gap-2"><button type="button" className="text-xs text-blue-600" onClick={() => { setEditingAddOnId(a.id); setAddOnName(a.name); setAddOnPrice(a.price || 0); setAddOnExtra(a.extraDurationMin || 0); setShowAddOnForm(true); }}>ویرایش</button><button type="button" className="text-xs text-gray-500" onClick={() => deactivateMyAddOn(a.id).then(load)}>حذف</button></span></li>)}</ul>}
+        {!showAddOnForm ? <button type="button" onClick={() => setShowAddOnForm(true)} className={`text-sm font-medium ${navy.title}`}>+ افزودن ویژگی</button> : <div className="space-y-2"><div className="grid gap-2 sm:grid-cols-3"><Input placeholder="نام ویژگی" value={addOnName} onChange={(e) => setAddOnName(e.target.value)} /><Input inputMode="numeric" placeholder="قیمت" value={addOnPrice ? formatPriceDigits(addOnPrice) : ''} onChange={(e) => setAddOnPrice(parsePriceInput(e.target.value))} /><Input type="number" min={0} placeholder="زمان اضافه" value={addOnExtra || ''} onChange={(e) => setAddOnExtra(Number(e.target.value) || 0)} /></div><div className="flex gap-2"><button type="button" disabled={busy || !addOnName.trim()} onClick={onAddOn} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}>{editingAddOnId ? 'ذخیره تغییرات' : 'تأیید'}</button>{editingAddOnId && <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setEditingAddOnId(null); setAddOnName(''); setAddOnPrice(0); setAddOnExtra(0); setShowAddOnForm(false); }}>انصراف</button>}</div></div>}
       </div>
 
       <div className={`border-t ${navy.border} pt-4`}>
         <p className={`mb-2 text-sm font-medium ${navy.title}`}>نمونه‌کار این خدمت</p>
-        <div className="mb-2 grid grid-cols-3 gap-2">
-          {(selectedPs.mediaAssets || []).map((m: MediaAssetItem) => (
-            <div key={m.id} className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">
-              {isVideoMime(m.mimeType) ? (
-                <video src={resolveMediaUrl(m.publicUrl)} className="h-full w-full object-cover" />
-              ) : (
-                <img src={resolveMediaUrl(m.publicUrl)} alt="" className="h-full w-full object-cover" />
-              )}
-              <button type="button" className="absolute left-1 top-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white" onClick={() => onDeleteMedia(m.id)}>حذف</button>
-            </div>
-          ))}
-        </div>
-        <label className="inline-block cursor-pointer text-sm text-blue-600">
-          + آپلود عکس/ویدیو
-          <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onUploadMedia(f, selectedPs.id); e.target.value = ''; }} />
-        </label>
+        <div className="mb-2 grid grid-cols-3 gap-2">{(selectedPs.mediaAssets || []).map((m: MediaAssetItem) => <div key={m.id} className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">{isVideoMime(m.mimeType) ? <video src={resolveMediaUrl(m.publicUrl)} className="h-full w-full object-cover" /> : <img src={resolveMediaUrl(m.publicUrl)} alt="" className="h-full w-full object-cover" />}<button type="button" className="absolute left-1 top-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white" onClick={() => onDeleteMedia(m.id)}>حذف</button></div>)}</div>
+        <label className="inline-block cursor-pointer text-sm text-blue-600">+ آپلود عکس/ویدیو<input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onUploadMedia(f, selectedPs.id); e.target.value = ''; }} /></label>
         {uploadState === 'err' && uploadErr && <p className="mt-1 text-xs text-red-600">{uploadErr}</p>}
       </div>
     </div>
