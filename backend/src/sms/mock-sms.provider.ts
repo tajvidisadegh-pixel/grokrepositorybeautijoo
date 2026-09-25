@@ -4,6 +4,7 @@ import { SmsProvider } from './sms.provider';
 /**
  * Development-only SMS sink. Logs delivery intent without calling a network.
  * OTP code is logged only outside production so local auth flows stay usable.
+ * lastCodeByPhone is exposed for e2e tests (never used in production paths).
  */
 @Injectable()
 export class MockSmsProvider implements SmsProvider {
@@ -11,7 +12,15 @@ export class MockSmsProvider implements SmsProvider {
   private readonly isProd =
     (process.env.NODE_ENV || 'development') === 'production';
 
+  /** Test/dev only: last OTP sent per phone (plain text). */
+  static lastCodeByPhone = new Map<string, string>();
+
+  static peekLastCode(phone: string): string | undefined {
+    return MockSmsProvider.lastCodeByPhone.get(phone);
+  }
+
   async sendOtp(phone: string, code: string): Promise<void> {
+    MockSmsProvider.lastCodeByPhone.set(phone, code);
     if (this.isProd) {
       this.logger.warn(
         `[MOCK SMS OTP] to=${mask(phone)} (code suppressed in production mock)`,

@@ -16,6 +16,11 @@ export class RegisterDto {
   @Matches(/^09\d{9}$/, { message: 'شماره موبایل معتبر نیست' })
   phone!: string;
 
+  @ApiProperty({ example: '123456', description: 'کد OTP ارسال‌شده به موبایل' })
+  @IsString()
+  @Length(4, 8)
+  code!: string;
+
   @ApiProperty({ example: 'SecurePass1' })
   @IsString()
   @MinLength(8)
