@@ -1,11 +1,14 @@
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
+import { MockSmsProvider } from '../../src/sms/mock-sms.provider';
 
 export type RegisterBody = {
   phone: string;
   password: string;
   displayName?: string;
   role?: string;
+  /** OTP code — if omitted, helper requests OTP and reads from MockSmsProvider */
+  code?: string;
 };
 
 let phoneSeq = 0;
@@ -48,8 +51,33 @@ export function cookieHeader(
   return `${name}=${encodeURIComponent(val)}`;
 }
 
+/**
+ * Register with OTP. When `code` is omitted, requests OTP (purpose=register)
+ * and reads the plain code from MockSmsProvider (e2e / mock only).
+ */
 export async function register(app: INestApplication, body: RegisterBody) {
-  return request(app.getHttpServer()).post('/api/v1/auth/register').send(body);
+  const accountType =
+    body.role === 'professional' ? 'professional' : 'customer';
+  let code = body.code;
+  if (!code) {
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/otp/request')
+      .send({ phone: body.phone, purpose: 'register', accountType })
+      .expect((res) => {
+        if (res.status !== 200 && res.status !== 201) {
+          throw new Error(
+            `OTP request failed: ${res.status} ${JSON.stringify(res.body)}`,
+          );
+        }
+      });
+    code = MockSmsProvider.peekLastCode(body.phone);
+    if (!code) {
+      throw new Error(`MockSmsProvider has no OTP for ${body.phone}`);
+    }
+  }
+  return request(app.getHttpServer())
+    .post('/api/v1/auth/register')
+    .send({ ...body, code });
 }
 
 export async function login(

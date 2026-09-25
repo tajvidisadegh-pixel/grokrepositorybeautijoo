@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/restore-auth-svc-41.yml'
-      - '.github/auth_svc_41.b64'
+      - 'scripts/patch_auth_svc_41.py'
   workflow_dispatch:
 jobs:
   restore:
@@ -12,15 +12,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Write auth.service.ts from b64
-        run: |
-          python3 -c "import base64,pathlib; pathlib.Path('backend/src/auth/auth.service.ts').write_bytes(base64.b64decode(pathlib.Path('.github/auth_svc_41.b64').read_text()))"
-          wc -c backend/src/auth/auth.service.ts
-          head -5 backend/src/auth/auth.service.ts
+        with:
+          fetch-depth: 40
+      - name: Patch auth.service
+        run: python3 scripts/patch_auth_svc_41.py
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add backend/src/auth/auth.service.ts
-          git diff --cached --quiet || git commit -m "fix(#41): restore AuthService with OTP-required register"
+          git status
+          git diff --cached --stat
+          git commit -m "fix(#41): restore AuthService with OTP-required register" || true
           git push
