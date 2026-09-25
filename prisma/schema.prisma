@@ -123,6 +123,8 @@ model User {
   favorites            Favorite[]
   notifications        Notification[]
   auditLogs            AuditLog[]      @relation("AuditActor")
+  supportTickets       SupportTicket[]
+  supportMessages      SupportTicketMessage[]
   @@unique([phone, accountType])
   @@index([phone])
   @@index([status])
@@ -631,4 +633,35 @@ model ServiceDurationRule {
   professionalService ProfessionalService @relation(fields: [professionalServiceId], references: [id], onDelete: Cascade)
   @@index([professionalServiceId])
   @@map("service_duration_rules")
+}
+
+model SupportTicket {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  subject   String   @db.VarChar(200)
+  status    String   @default("open") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  SupportTicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  body      String   @db.Text
+  isStaff   Boolean  @default(false) @map("is_staff")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@map("support_ticket_messages")
 }
