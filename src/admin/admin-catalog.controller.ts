@@ -56,6 +56,24 @@ class UpdateCatalogServiceDto {
   @IsOptional() @IsString() description?: string;
 }
 
+
+class CreateCatalogAddOnDto {
+  @IsString() @MinLength(1) name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultPrice?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultExtraDurationMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+}
+
+class UpdateCatalogAddOnDto {
+  @IsOptional() @IsString() @MinLength(1) name?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultPrice?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultExtraDurationMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
 @ApiTags('admin-catalog')
 @ApiBearerAuth()
 @Roles('SUPER_ADMIN', 'admin')
@@ -205,4 +223,58 @@ export class AdminCatalogController {
     });
     return { id, deleted: true, hard: false, isActive: updated.isActive };
   }
+  // --- Catalog Add-Ons (#30) ---
+  @Get('catalog-addons')
+  @ApiOperation({ summary: 'List all catalog add-on templates (admin)' })
+  listCatalogAddOns() {
+    return this.prisma.catalogAddOn.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  @Post('catalog-addons')
+  async createCatalogAddOn(@Body() dto: CreateCatalogAddOnDto) {
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name required');
+    return this.prisma.catalogAddOn.create({
+      data: {
+        name,
+        description: dto.description?.trim() || null,
+        defaultPrice: dto.defaultPrice ?? 0,
+        defaultExtraDurationMin: dto.defaultExtraDurationMin ?? 0,
+        sortOrder: dto.sortOrder ?? 0,
+        isActive: true,
+      },
+    });
+  }
+
+  @Patch('catalog-addons/:id')
+  async updateCatalogAddOn(@Param('id') id: string, @Body() dto: UpdateCatalogAddOnDto) {
+    const row = await this.prisma.catalogAddOn.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('catalog add-on not found');
+    return this.prisma.catalogAddOn.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description.trim() || null } : {}),
+        ...(dto.defaultPrice !== undefined ? { defaultPrice: dto.defaultPrice } : {}),
+        ...(dto.defaultExtraDurationMin !== undefined
+          ? { defaultExtraDurationMin: dto.defaultExtraDurationMin }
+          : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
+  }
+
+  @Delete('catalog-addons/:id')
+  async deleteCatalogAddOn(@Param('id') id: string) {
+    const row = await this.prisma.catalogAddOn.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('catalog add-on not found');
+    return this.prisma.catalogAddOn.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
 }
