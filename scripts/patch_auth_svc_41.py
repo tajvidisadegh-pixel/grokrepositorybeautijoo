@@ -1,11 +1,20 @@
 from pathlib import Path
 import subprocess
+import urllib.request
 
-sha = '51992d0e7536b2b97805b731bdaa77c57f02075f'
-raw = subprocess.check_output(
-    ['git', 'show', f'{sha}:backend/src/auth/auth.service.ts'],
-    text=True,
-)
+sha = '9bc3134ffec7cd91e451f59f5e9a52aab3f352c5'
+try:
+    raw = subprocess.check_output(
+        ['git', 'show', f'{sha}:backend/src/auth/auth.service.ts'],
+        text=True,
+    )
+except subprocess.CalledProcessError:
+    url = (
+        'https://raw.githubusercontent.com/tajvidisadegh-pixel/'
+        f'grokrepositorybeautijoo/{sha}/backend/src/auth/auth.service.ts'
+    )
+    raw = urllib.request.urlopen(url, timeout=30).read().decode()
+
 p = Path('backend/src/auth/auth.service.ts')
 text = raw
 
