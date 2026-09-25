@@ -1,0 +1,27 @@
+name: Restore FE pre catalog UI
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-fe-pre-catalog-ui.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 40
+      - name: Restore ServiceEditPanel and admin page from support commit
+        run: |
+          set -e
+          git show 592154f:frontend/src/app/zibagar/services/ServiceEditPanel.tsx > frontend/src/app/zibagar/services/ServiceEditPanel.tsx
+          git show 592154f:frontend/src/app/admin/service-categories/page.tsx > frontend/src/app/admin/service-categories/page.tsx
+          # Keep panel-api CatalogAddOn helpers (backend still works)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/services/ServiceEditPanel.tsx frontend/src/app/admin/service-categories/page.tsx
+          git status
+          git commit -m "fix(#30): restore ServiceEditPanel + admin categories to green baseline; CatalogAddOn API remains" || echo no-change
+          git push
