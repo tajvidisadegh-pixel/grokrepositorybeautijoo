@@ -1,0 +1,1 @@
+trigger ci after catalog add-ons 2026-09-25
