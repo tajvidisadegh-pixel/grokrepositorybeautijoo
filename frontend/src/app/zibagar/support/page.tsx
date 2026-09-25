@@ -75,7 +75,7 @@ export default function ZibagarSupportPage() {
     setReply('');
     setMsg(null);
     try {
-      const d = await apiClient.get<TicketDetail>(\`/support/tickets/\${id}\`);
+      const d = await apiClient.get<TicketDetail>(`/support/tickets/${id}`);
       setDetail(d);
     } catch (e) {
       setMsg(friendlyApiError(e));
@@ -114,7 +114,7 @@ export default function ZibagarSupportPage() {
     setBusy(true);
     setMsg(null);
     try {
-      await apiClient.post(\`/support/tickets/\${selectedId}/messages\`, { body: reply.trim() });
+      await apiClient.post(`/support/tickets/${selectedId}/messages`, { body: reply.trim() });
       setReply('');
       setMsg('پیام ارسال شد.');
       await openTicket(selectedId);
