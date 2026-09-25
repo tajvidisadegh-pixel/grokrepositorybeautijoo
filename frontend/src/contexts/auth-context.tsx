@@ -39,6 +39,7 @@ type AuthContextValue = {
   register: (
     phone: string,
     password: string,
+    code: string,
     displayName?: string,
     role?: AccountType,
   ) => Promise<AuthMeResponse>;
@@ -66,12 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthMeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /**
-   * Bootstrap session:
-   * 1) Use in-memory access token if present
-   * 2) Otherwise silent refresh via httpOnly cookie (survives F5)
-   * 3) Load /auth/me
-   */
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -127,10 +122,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (
       phone: string,
       password: string,
+      code: string,
       displayName?: string,
       role?: AccountType,
     ) => {
-      const res = await authApi.register({ phone, password, displayName, role });
+      const res = await authApi.register({
+        phone,
+        password,
+        code,
+        displayName,
+        role,
+      });
       setTokens(res.accessToken, res.refreshToken);
       const me = await authApi.me(res.accessToken);
       setUser(me);
@@ -168,15 +170,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     if (getImpersonationMeta()) {
-      try { await endImpersonationAudit().catch(() => undefined); } catch { /* ignore */ }
+      try {
+        await endImpersonationAudit().catch(() => undefined);
+      } catch {
+        /* ignore */
+      }
       const adminToken = takeAdminAccessBackup();
       clearImpersonationMeta();
       if (adminToken) {
         setTokens(adminToken);
-        try { const me = await authApi.me(adminToken); setUser(me); return; } catch { /* fall through */ }
+        try {
+          const me = await authApi.me(adminToken);
+          setUser(me);
+          return;
+        } catch {
+          /* fall through */
+        }
       }
     }
-    try { await authApi.logout(); } catch { /* ignore network errors on logout */ }
+    try {
+      await authApi.logout();
+    } catch {
+      /* ignore network errors on logout */
+    }
     clearTokens();
     clearImpersonationMeta();
     setUser(null);
@@ -199,36 +215,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
-
   const startImpersonation = useCallback(async (customerId: string) => {
     const current = getAccessToken();
-    if (!current) throw new Error('نشست مدیر یافت نشد');
+    if (current) saveAdminAccessBackup(current);
     const res = await impersonateCustomer(customerId);
-    saveAdminAccessBackup(current);
-    setImpersonationMeta({
-      customerId: res.customer.id,
-      customerName: res.customer.displayName,
-      customerPhone: res.customer.phone,
-      startedAt: new Date().toISOString(),
-    });
     setTokens(res.accessToken);
+    setImpersonationMeta({ customerId });
     const me = await authApi.me(res.accessToken);
     setUser(me);
   }, []);
 
   const stopImpersonation = useCallback(async () => {
-    try { await endImpersonationAudit().catch(() => undefined); } catch { /* ignore */ }
+    try {
+      await endImpersonationAudit().catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
     const adminToken = takeAdminAccessBackup();
     clearImpersonationMeta();
     if (adminToken) {
       setTokens(adminToken);
-      try { const me = await authApi.me(adminToken); setUser(me); return; } catch { /* fall through */ }
+      const me = await authApi.me(adminToken);
+      setUser(me);
+    } else {
+      clearTokens();
+      setUser(null);
     }
-    clearTokens();
-    await reload();
-  }, [reload]);
+  }, []);
 
-  const value = useMemo<AuthContextValue>(
+  const value = useMemo(
     () => ({
       user,
       loading,
@@ -242,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       reload,
       startImpersonation,
       stopImpersonation,
-      isImpersonating: !!user?.isImpersonating || !!getImpersonationMeta(),
+      isImpersonating: !!getImpersonationMeta(),
     }),
     [
       user,
@@ -262,10 +277,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth(): AuthContextValue {
+export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
