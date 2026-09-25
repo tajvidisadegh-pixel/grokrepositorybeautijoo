@@ -1,28 +1,24 @@
-name: Restore panel-api and privacy
+name: Restore panel-api baseline
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/restore-panel-api.yml'
+permissions:
+  contents: write
 jobs:
   restore:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Restore files
+          fetch-depth: 50
+      - name: Restore panel-api from support commit
         run: |
-          set -euo pipefail
-          git show 60439944e5152fb5b657d269d9361dc1e1bdae41:frontend/src/lib/panel-api.ts > frontend/src/lib/panel-api.ts
-          wc -c frontend/src/lib/panel-api.ts
-          test "$(wc -c < frontend/src/lib/panel-api.ts)" -gt 10000
-          python3 scripts/patch-locations-issue21.py
-      - name: Commit
-        run: |
+          set -e
+          git show 592154f:frontend/src/lib/panel-api.ts > frontend/src/lib/panel-api.ts
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/lib/panel-api.ts backend/src/professionals/professionals.service.ts
-          if git diff --staged --quiet; then echo No change; else git commit -m "fix(locations): restore panel-api + public privacy (issue #21)" && git push; fi
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/panel-api.ts
+          git commit -m "fix(#30): restore panel-api without CatalogAddOn helpers (backend API remains)" || echo no-change
+          git push
