@@ -1,0 +1,30 @@
+name: Apply issue30 support tickets
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/apply_i30_support.py'
+      - '.github/workflows/apply-i30-support.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run apply script
+        run: |
+          set -e
+          mkdir -p scripts
+          if [ -f scripts/apply_i30_support.py ]; then
+            python3 scripts/apply_i30_support.py
+          else
+            echo "script missing"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "feat(#30): support tickets backend + zibagar/admin pages + migration" || echo no-change
+          git push
