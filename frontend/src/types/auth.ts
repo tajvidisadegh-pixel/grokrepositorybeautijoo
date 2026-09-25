@@ -54,6 +54,8 @@ export type OtpRequestResponse = {
 
 export type RegisterPayload = {
   phone: string;
+  /** OTP code received via SMS (required) */
+  code: string;
   password: string;
   displayName?: string;
   /** Public registration: only customer | professional (backend validates) */
