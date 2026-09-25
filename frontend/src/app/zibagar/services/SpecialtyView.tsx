@@ -10,7 +10,7 @@ import {
   type ProfessionalServiceItem,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
-import { formatPrice, formatPriceDigits, parsePriceInput } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
 import {
   findCategory,
   isVideoMime,
@@ -48,11 +48,11 @@ export type SpecialtyViewProps = {
   onDeleteMedia: (id: string) => void | Promise<void>;
   onUploadMedia: (file: File, attachToPsId?: string) => void | Promise<void>;
   removeRootSpecialty: (rootId: string) => void | Promise<void>;
-  createAndEditCustomService: (
+  createAndEditCustomService?: (
     name: string,
     initial?: { price?: number; durationMin?: number },
   ) => void | Promise<void>;
-  createFeature: (name: string) => void | Promise<void>;
+  createFeature?: (name: string) => void | Promise<void>;
 };
 
 export function SpecialtyView(props: SpecialtyViewProps) {
@@ -82,16 +82,8 @@ export function SpecialtyView(props: SpecialtyViewProps) {
     onDeleteMedia,
     onUploadMedia,
     removeRootSpecialty,
-    createAndEditCustomService,
-    createFeature,
   } = props;
 
-  const [showAddFeature, setShowAddFeature] = useState(false);
-  const [newFeatureName, setNewFeatureName] = useState('');
-  const [showAddFinal, setShowAddFinal] = useState(false);
-  const [newFinalName, setNewFinalName] = useState('');
-  const [newFinalPrice, setNewFinalPrice] = useState(0);
-  const [newFinalDuration, setNewFinalDuration] = useState(60);
 
   const rootDirectChildren = useMemo(() => {
     if (!activeRootId) return [];
@@ -153,8 +145,6 @@ export function SpecialtyView(props: SpecialtyViewProps) {
           })}
         </ul>
       )}
-        </div>
-      )}
 
       {rootDirectChildren.length > 0 && (
         <div className="overflow-x-auto pb-1">
@@ -202,40 +192,11 @@ export function SpecialtyView(props: SpecialtyViewProps) {
               })}
             </ul>
           )}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {!showAddFeature ? (
-              <button type="button" onClick={() => { setShowAddFeature(true); setShowAddFinal(false); }} className="rounded-xl border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-700 hover:border-[#0B2C4A]/40">+ افزودن ویژگی</button>
-            ) : (
-              <div className="w-full space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
-                <Input autoFocus placeholder="نام ویژگی بعدی..." value={newFeatureName} onChange={(e) => setNewFeatureName(e.target.value)} className="text-right" />
-                <div className="flex gap-2">
-                  <button type="button" disabled={busy || !newFeatureName.trim()} onClick={async () => { await createFeature(newFeatureName.trim()); setNewFeatureName(''); setShowAddFeature(false); }} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}>تأیید</button>
-                  <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setShowAddFeature(false); setNewFeatureName(''); }}>انصراف</button>
-                </div>
-              </div>
-            )}
-            {!showAddFinal ? (
-              <button type="button" onClick={() => { setShowAddFinal(true); setShowAddFeature(false); }} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn}`}>+ افزودن گزینه نهایی</button>
-            ) : (
-              <div className="w-full space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
-                <Input autoFocus placeholder="نام گزینه نهایی" value={newFinalName} onChange={(e) => setNewFinalName(e.target.value)} className="text-right" />
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-0.5 block text-[11px] text-gray-500">قیمت (اختیاری)</label>
-                    <Input inputMode="numeric" placeholder="۰" value={newFinalPrice ? formatPriceDigits(newFinalPrice) : ''} onChange={(e) => setNewFinalPrice(parsePriceInput(e.target.value))} className="text-right" />
-                  </div>
-                  <div>
-                    <label className="mb-0.5 block text-[11px] text-gray-500">مدت (دقیقه)</label>
-                    <Input type="number" min={5} placeholder="۶۰" value={newFinalDuration || ''} onChange={(e) => setNewFinalDuration(Number(e.target.value) || 60)} className="text-right" />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" disabled={busy || !newFinalName.trim()} onClick={async () => { await createAndEditCustomService(newFinalName.trim(), { price: newFinalPrice || 0, durationMin: newFinalDuration || 60 }); setNewFinalName(''); setNewFinalPrice(0); setNewFinalDuration(60); setShowAddFinal(false); }} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}>ایجاد و ذخیره</button>
-                  <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setShowAddFinal(false); setNewFinalName(''); setNewFinalPrice(0); setNewFinalDuration(60); }}>انصراف</button>
-                </div>
-              </div>
-            )}
-          </div>
+          {verticalItems.length === 0 && currentLeafServices.length === 0 && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              زیرمجموعه‌ای در این سطح از کاتالوگ نیست. از پنل سوپرادمین خدمات یا زیردسته اضافه کنید.
+            </p>
+          )}
         </div>
       )}
 
