@@ -1,0 +1,46 @@
+name: apply-i33-gallery
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-i33-gallery.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch public pro page salon gallery
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text()
+          t = t.replace('<h2 className="font-bold text-foreground">مکان‌ها</h2>', '<h2 className="font-bold text-foreground">مکان کار</h2>', 1)
+          if 'عکس‌های سالن' not in t:
+              old = """          <ServicePortfolioGallery\n            slug={pro.slug}\n            services={(pro.professionalServices || []) as ProfessionalServiceItem[]}\n          />"""
+              new = """          {(() => {\n            const salon = (pro.mediaAssets || []).filter(\n              (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),\n            );\n            if (!salon.length) return null;\n            return (\n              <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">\n                <h2 className="text-lg font-bold text-foreground">عکس‌های سالن</h2>\n                <div className="mt-4 flex gap-3 overflow-x-auto pb-2">\n                  {salon.map((m) => {\n                    const url = m.publicUrl || (m as { url?: string }).url || '';\n                    const video = (m.mimeType || '').startsWith('video/');\n                    return (\n                      <div key={m.id} className="h-36 w-52 shrink-0 overflow-hidden rounded-2xl border border-border bg-gray-light/30">\n                        {video ? (\n                          <video src={url} className="h-full w-full object-cover" controls playsInline />\n                        ) : (\n                          <img src={url} alt="" className="h-full w-full object-cover" />\n                        )}\n                      </div>\n                    );\n                  })}\n                </div>\n              </section>\n            );\n          })()}\n\n          <ServicePortfolioGallery\n            slug={pro.slug}\n            services={(pro.professionalServices || []) as ProfessionalServiceItem[]}\n          />"""
+              if old not in t:
+                  raise SystemExit('ServicePortfolioGallery block not found')
+              t = t.replace(old, new, 1)
+          p.write_text(t)
+          assert 'عکس‌های سالن' in t
+          print('public page ok', len(t))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "frontend/src/app/professionals/[slug]/page.tsx"
+          git diff --cached --quiet || git commit -m "feat(#33): horizontal salon gallery on public pro page"
+          git push
+      - name: Cleanup helpers
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-i33-rest.yml .github/workflows/apply-i33-loc.yml .github/workflows/apply-i33-gallery.yml
+          git add -A .github/workflows || true
+          git diff --cached --quiet || git commit -m "chore(#33): remove one-shot helper workflows"
+          git push
