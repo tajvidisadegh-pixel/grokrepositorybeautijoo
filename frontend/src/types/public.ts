@@ -78,20 +78,6 @@ export type ProfessionalServiceItem = {
   durationRules?: ProfessionalServiceDurationRule[];
 };
 
-export type WorkingHour = {
-  dayOfWeek: string;
-  startTime: string;
-  endTime: string;
-  isActive?: boolean;
-};
-
-export type ReviewItem = {
-  id: string;
-  rating: number;
-  comment?: string | null;
-  customer?: { profile?: ProfileSnippet | null } | null;
-};
-
 export type ProfessionalListItem = {
   id: string;
   slug: string;
@@ -125,35 +111,64 @@ export type ProfessionalListItem = {
   }>;
 };
 
-export type ProfessionalDetail = ProfessionalListItem & {
+export type ProfessionalsSearchResponse = {
+  items: ProfessionalListItem[];
+  meta: { page: number; limit: number; total: number };
+};
+
+export type WorkingHourBreak = {
+  startTime: string;
+  endTime: string;
+};
+
+export type WorkingHour = {
+  id: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  isActive?: boolean;
+  breaks?: WorkingHourBreak[];
+};
+
+export type ReviewItem = {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  customer?: { profile?: { displayName?: string | null } | null } | null;
+};
+
+export type ProfessionalDetail = Omit<
+  ProfessionalListItem,
+  'professionalServices' | 'locations'
+> & {
+  locations: { location: LocationSnippet; isPrimary?: boolean }[];
+  professionalServices: ProfessionalServiceItem[];
+  workingHours: WorkingHour[];
+  reviews: ReviewItem[];
+  /** Professional-level media (salon + portfolio), issue #33 */
+  mediaAssets?: ProfessionalServiceMedia[];
   publishedAt?: string | null;
   logoUrl?: string | null;
   socialLinks?: Record<string, string | null> | null;
-  workingHours?: WorkingHour[];
-  mediaAssets?: Array<{
-    id: string;
-    kind: string;
-    publicUrl?: string | null;
-    url?: string | null;
-    mimeType?: string;
-  }>;
-  professionalServices?: ProfessionalServiceItem[];
-  reviews?: ReviewItem[];
 };
 
-export type SearchProfessionalsResult = {
-  items: ProfessionalListItem[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-    sort?: string;
-    filters?: Record<string, unknown>;
-  };
-};
-
-export type FilterCategory = {
+export type ServiceCategory = {
   id: string;
   name: string;
   slug: string;
+  description?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+  services?: ServiceItem[];
+};
+
+export type ServiceItem = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  isActive?: boolean;
+  category?: ServiceCategory | null;
+  categoryId?: string;
 };
