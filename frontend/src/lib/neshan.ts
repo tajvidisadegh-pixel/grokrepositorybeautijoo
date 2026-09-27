@@ -1,6 +1,20 @@
 /**
  * Neshan (نشان) map helpers — Iranian maps for accurate local routing (issue #33).
  */
+
+export function getNeshanApiKey(): string {
+  if (typeof process === 'undefined') return '';
+  return (process.env.NEXT_PUBLIC_NESHAN_API_KEY || '').trim();
+}
+
+/** Leaflet-compatible Neshan raster tiles when API key is set. */
+export function neshanTileUrlTemplate(): string | null {
+  const key = getNeshanApiKey();
+  if (!key) return null;
+  // Official raster tiles — see https://platform.neshan.org
+  return `https://api.neshan.org/tile/{z}/{x}/{y}?key=${encodeURIComponent(key)}`;
+}
+
 export function neshanMapUrl(lat: number, lng: number, zoom = 15): string {
   return `https://neshan.org/maps/@${lat},${lng},${zoom}z`;
 }
@@ -14,10 +28,7 @@ export function neshanStaticMapUrl(
   lng: number,
   opts?: { width?: number; height?: number; zoom?: number },
 ): string | null {
-  const key =
-    typeof process !== 'undefined'
-      ? (process.env.NEXT_PUBLIC_NESHAN_API_KEY || '').trim()
-      : '';
+  const key = getNeshanApiKey();
   if (!key) return null;
   const w = opts?.width ?? 640;
   const h = opts?.height ?? 360;

@@ -3,9 +3,12 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { neshanDirectionsUrl, neshanMapUrl } from '@/lib/neshan';
+import {
+  neshanDirectionsUrl,
+  neshanMapUrl,
+  neshanTileUrlTemplate,
+} from '@/lib/neshan';
 
-// Fix default marker icons in bundlers
 const DefaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -49,10 +52,21 @@ export default function LocationPicker({
       zoom: latitude != null ? 15 : 11,
       scrollWheelZoom: true,
     });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; Neshan / OSM',
-      maxZoom: 19,
-    }).addTo(map);
+
+    const neshanTiles = neshanTileUrlTemplate();
+    if (neshanTiles) {
+      L.tileLayer(neshanTiles, {
+        attribution: '&copy; <a href="https://neshan.org" target="_blank" rel="noopener">نشان</a>',
+        maxZoom: 19,
+      }).addTo(map);
+    } else {
+      // Fallback without API key — still label as interim; routing always via Neshan links
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:
+          '&copy; <a href="https://neshan.org" target="_blank" rel="noopener">نشان</a> (مسیریابی) · OSM',
+        maxZoom: 19,
+      }).addTo(map);
+    }
 
     if (latitude != null && longitude != null) {
       markerRef.current = L.marker([latitude, longitude]).addTo(map);
@@ -71,7 +85,6 @@ export default function LocationPicker({
     }
 
     mapRef.current = map;
-
     setTimeout(() => map.invalidateSize(), 100);
 
     return () => {
@@ -109,7 +122,12 @@ export default function LocationPicker({
         style={{ height }}
       />
       <p className="text-xs text-gray">
-        برای انتخاب نقطه روی نقشه کلیک کنید. مسیریابی مشتری با نقشهٔ نشان انجام می‌شود.
+        برای انتخاب نقطه روی نقشه کلیک کنید. مسیریابی مشتری همیشه با «نشان» انجام می‌شود.
+        {!neshanTileUrlTemplate() && (
+          <span className="block mt-1 text-gray-muted">
+            برای تایل‌های نقشهٔ نشان، <code className="text-[10px]">NEXT_PUBLIC_NESHAN_API_KEY</code> را در env تنظیم کنید.
+          </span>
+        )}
       </p>
       {latitude != null && longitude != null && (
         <div className="flex flex-wrap gap-2">
