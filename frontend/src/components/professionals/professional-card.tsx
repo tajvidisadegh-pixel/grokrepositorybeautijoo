@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ProfessionalListItem } from '@/types/public';
 import { cn, formatDistanceFromYou } from '@/lib/utils';
+import { TrustBadge } from '@/components/professionals/trust-badge';
 
 type Props = {
   pro: ProfessionalListItem;
@@ -16,6 +17,7 @@ export function ProfessionalCard({ pro, className }: Props) {
   const rating =
     pro.ratingAvg != null ? Number(pro.ratingAvg).toFixed(1) : null;
   const count = pro.ratingCount ?? 0;
+  const verifiedAt = (pro as { verifiedAt?: string | null }).verifiedAt;
 
   return (
     <Link
@@ -49,11 +51,7 @@ export function ProfessionalCard({ pro, className }: Props) {
                   ویژه
                 </span>
               )}
-              {(pro.status === 'approved' || !pro.status) && (
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:text-xs">
-                  ✓ تأییدشده
-                </span>
-              )}
+              <TrustBadge status={pro.status} verifiedAt={verifiedAt} />
             </div>
           </div>
           {pro.title && pro.title !== name && (
