@@ -1,0 +1,63 @@
+name: fix-i33-select
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-i33-select.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow mediaAssets select
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/professionals/professionals.service.ts')
+          t = p.read_text()
+          old = """      mediaAssets: {
+        where: { kind: { in: [MediaKind.salon, MediaKind.portfolio] } },
+        orderBy: { sortOrder: 'asc' as const },
+      },"""
+          new = """      mediaAssets: {
+        where: { kind: { in: [MediaKind.salon, MediaKind.portfolio] } },
+        orderBy: { sortOrder: 'asc' as const },
+        select: {
+          id: true,
+          kind: true,
+          url: true,
+          mimeType: true,
+          title: true,
+          sortOrder: true,
+          status: true,
+        },
+      },"""
+          if old not in t:
+              if 'select: {' in t and 'MediaKind.salon' in t:
+                  print('already has select')
+              else:
+                  raise SystemExit('mediaAssets block not found')
+          else:
+              t = t.replace(old, new, 1)
+              p.write_text(t)
+              print('patched select')
+          assert 'MediaKind.salon' in p.read_text()
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/professionals/professionals.service.ts
+          git diff --cached --quiet || git commit -m "fix(#33): select only safe media fields for public API (e2e)"
+          git push
+      - name: Cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/fix-i33-select.yml
+          git add -A .github/workflows || true
+          git diff --cached --quiet || git commit -m "chore(#33): remove fix-i33-select helper"
+          git push
