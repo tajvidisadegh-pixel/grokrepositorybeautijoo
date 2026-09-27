@@ -10,8 +10,10 @@ import {
   fetchMyProfessional,
   publishMyProfessional,
   unpublishMyProfessional,
+  updateMyProfessional,
   resolveMediaUrl,
   type OwnProfessional,
+  type SocialLinks,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { persianProfessionalStatus } from '@/lib/persian-status';
@@ -35,6 +37,9 @@ export default function ZibagarProfilePage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [socialForm, setSocialForm] = useState<SocialLinks>({});
+  const [socialBusy, setSocialBusy] = useState(false);
+  const [socialMsg, setSocialMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -42,7 +47,17 @@ export default function ZibagarProfilePage() {
     (async () => {
       try {
         const data = await fetchMyProfessional();
-        if (!c) setPro(data);
+        if (!c) {
+          setPro(data);
+          const sl = (data as OwnProfessional).socialLinks || {};
+          setSocialForm({
+            instagram: sl.instagram || '',
+            telegram: sl.telegram || '',
+            website: sl.website || '',
+            phone: sl.phone || '',
+            whatsapp: sl.whatsapp || '',
+          });
+        }
       } catch (e) {
         if (!c) setError(friendlyApiError(e));
       } finally {
@@ -101,6 +116,26 @@ export default function ZibagarProfilePage() {
   const services = (pro?.professionalServices || []).filter((s) => s.isActive !== false);
   const hours = pro?.workingHours || [];
   const locations = pro?.locations || [];
+
+  async function saveSocialLinks() {
+    setSocialBusy(true);
+    setSocialMsg(null);
+    setError(null);
+    try {
+      const payload: SocialLinks = {};
+      for (const k of ['instagram', 'telegram', 'website', 'phone', 'whatsapp'] as const) {
+        const v = (socialForm[k] || '').trim();
+        if (v) payload[k] = v;
+      }
+      const updated = await updateMyProfessional({ socialLinks: payload });
+      setPro(updated);
+      setSocialMsg('saved');
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setSocialBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -333,6 +368,26 @@ export default function ZibagarProfilePage() {
         <div className="flex justify-between gap-3">
           <span className="text-gray">عنوان</span>
           <span className="font-medium">{pro?.title || '—'}</span>
+        </div>
+      </Card>
+
+
+      <Card className="space-y-3 border-dashed border-border/70 bg-gray-light/20">
+        <div>
+          <h3 className="text-sm font-medium text-gray">social links (optional)</h3>
+          <p className="mt-0.5 text-xs text-gray-muted">shown at bottom of public page only</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {([['instagram','Instagram'],['telegram','Telegram'],['website','Website'],['phone','Phone'],['whatsapp','WhatsApp']] as const).map(([key,label]) => (
+            <label key={key} className="block text-xs text-gray">{label}
+              <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-coral" dir="ltr"
+                value={(socialForm as any)[key] || ''} onChange={(e) => setSocialForm((prev) => ({ ...prev, [key]: e.target.value }))} />
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" loading={socialBusy} onClick={saveSocialLinks}>Save links</Button>
+          {socialMsg && <span className="text-xs text-coral">{socialMsg}</span>}
         </div>
       </Card>
 

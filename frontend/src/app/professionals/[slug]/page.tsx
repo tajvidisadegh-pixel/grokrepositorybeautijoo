@@ -363,6 +363,34 @@ export default async function ProfessionalProfilePage({ params }: Props) {
           ساعات کاری: {hoursLine}
         </p>
       )}
+
+      {/* Issue #36 */}
+      {(() => {
+        const sl = (pro as { socialLinks?: Record<string, string | null> | null }).socialLinks;
+        if (!sl || typeof sl !== 'object') return null;
+        const items: { label: string; href: string; text: string }[] = [];
+        const ig = (sl.instagram || '').trim();
+        if (ig) { const href = ig.startsWith('http') ? ig : `https://instagram.com/${ig.replace(/^@/, '')}`; items.push({ label: 'IG', href, text: ig }); }
+        const tg = (sl.telegram || '').trim();
+        if (tg) { const href = tg.startsWith('http') ? tg : `https://t.me/${tg.replace(/^@/, '')}`; items.push({ label: 'TG', href, text: tg }); }
+        const web = (sl.website || '').trim();
+        if (web) { const href = web.startsWith('http') ? web : `https://${web}`; items.push({ label: 'Web', href, text: web }); }
+        const phone = (sl.phone || '').trim();
+        if (phone) items.push({ label: 'Tel', href: `tel:${phone}`, text: phone });
+        const wa = (sl.whatsapp || '').trim();
+        if (wa) { const num = wa.replace(/\D/g, ''); items.push({ label: 'WA', href: `https://wa.me/${num.startsWith('98') ? num : num.replace(/^0/, '98')}`, text: wa }); }
+        if (!items.length) return null;
+        return (
+          <p className="mt-6 border-t border-border/40 pt-4 text-center text-xs text-gray-muted">
+            {items.map((it, i) => (
+              <span key={it.label}>{i > 0 && <span className="mx-2 opacity-40">.</span>}
+                <a href={it.href} target="_blank" rel="noopener noreferrer" className="hover:text-coral transition-colors">{it.label}: <span dir="ltr">{it.text}</span></a>
+              </span>
+            ))}
+          </p>
+        );
+      })()}
+
     </div>
   );
 }
