@@ -11,6 +11,7 @@ import { ServicePortfolioGallery } from '@/components/professionals/service-port
 import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
 import LocationMapView from '@/components/location/location-map-view'
 import { StickyBookBar } from '@/components/professionals/sticky-book-bar';
+import { TrustBadge } from '@/components/professionals/trust-badge';
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -199,9 +200,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="text-xl font-bold text-blue sm:text-2xl">{name}</h1>
-                {(pro.status === 'approved' || !pro.status) && (
-                  <p className="mt-1 text-xs font-medium text-emerald-700">✓ زیباگر تأییدشده بیوتی‌جو</p>
-                )}
+                <div className="mt-1"><TrustBadge status={pro.status} verifiedAt={(pro as { verifiedAt?: string | null }).verifiedAt} size="md" /></div>
                 {pro.title && pro.title !== name && (
                   <p className="mt-1 text-sm text-gray">{pro.title}</p>
                 )}

@@ -79,6 +79,8 @@ export type ProfessionalServiceItem = {
 };
 
 export type ProfessionalListItem = {
+  status?: string | null;
+  verifiedAt?: string | null;
   id: string;
   slug: string;
   title: string;
