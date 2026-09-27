@@ -452,12 +452,27 @@ export class AuthService {
       where: { id: userId },
       include: {
         profile: true,
-        userRoles: { include: { role: true } },
+        userRoles: {
+          include: {
+            role: {
+              include: {
+                rolePermissions: { include: { permission: true } },
+              },
+            },
+          },
+        },
         professional: { select: { id: true, status: true, title: true, slug: true } },
       },
     });
     if (!user || user.status !== UserStatus.active) {
       throw new UnauthorizedException('کاربر یافت نشد');
+    }
+    const roles = user.userRoles.map((ur) => ur.role.name);
+    const permissions = new Set<string>();
+    for (const ur of user.userRoles) {
+      for (const rp of ur.role?.rolePermissions || []) {
+        if (rp.permission?.code) permissions.add(rp.permission.code);
+      }
     }
     return {
       id: user.id,
@@ -467,7 +482,8 @@ export class AuthService {
       phoneVerified: user.phoneVerified,
       displayName: user.profile?.displayName,
       avatarUrl: user.profile?.avatarUrl,
-      roles: user.userRoles.map((ur) => ur.role.name),
+      roles,
+      permissions: Array.from(permissions),
       professional: user.professional,
       isImpersonating: opts?.isImpersonating || false,
       impersonatorId: opts?.impersonatorId || null,

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DEFAULT_PLATFORM_SETTINGS,
@@ -18,6 +19,7 @@ export class AdminSettingsController {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Unread / unreviewed counts for admin sidebar badges (issue #35). */
+  @RequirePermissions('admin.dashboard.read')
   @Get('nav-badges')
   @ApiOperation({ summary: 'Pending counts for admin nav badges' })
   async navBadges() {
@@ -44,6 +46,7 @@ export class AdminSettingsController {
     };
   }
 
+  @RequirePermissions('admin.settings.read')
   @Get('settings')
   @ApiOperation({ summary: 'Get hierarchical platform settings' })
   async getSettings() {
@@ -53,6 +56,7 @@ export class AdminSettingsController {
     return mergePlatformSettings(row?.value);
   }
 
+  @RequirePermissions('admin.settings.write')
   @Put('settings')
   @ApiOperation({ summary: 'Update platform settings (partial groups allowed)' })
   async putSettings(@Body() body: Partial<PlatformSettingsV1>) {
@@ -85,6 +89,7 @@ export class AdminSettingsController {
     return next;
   }
 
+  @RequirePermissions('admin.settings.read')
   @Get('settings/defaults')
   defaults() {
     return DEFAULT_PLATFORM_SETTINGS;

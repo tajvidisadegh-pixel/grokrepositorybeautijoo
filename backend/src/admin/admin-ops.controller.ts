@@ -4,6 +4,7 @@ import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-valida
 import { PaymentStatus, UserStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 class CreateCustomerDto { @IsString() phone!: string; @IsOptional() @IsString() displayName?: string; @IsOptional() @IsString() firstName?: string; @IsOptional() @IsString() lastName?: string; }
@@ -19,6 +20,7 @@ class FeaturedDto { @IsBoolean() isFeatured!: boolean; }
 export class AdminOpsController {
   constructor(private readonly prisma: PrismaService) {}
 
+  @RequirePermissions('admin.site_builder.manage')
   @Get('content')
   async getContent() {
     const [draftRow, publishedRow] = await Promise.all([
@@ -76,6 +78,7 @@ export class AdminOpsController {
     return value;
   }
 
+  @RequirePermissions('admin.site_builder.manage')
   @Get('site-builder')
   async getSiteBuilder() {
     const [draftRow, publishedRow] = await Promise.all([
@@ -105,6 +108,7 @@ export class AdminOpsController {
     return list;
   }
 
+  @RequirePermissions('admin.users.write')
   @Post('users')
   async createCustomer(@Body() dto: CreateCustomerDto) {
     const phone = String(dto.phone || '').trim();
@@ -119,6 +123,7 @@ export class AdminOpsController {
     });
   }
 
+  @RequirePermissions('admin.users.write')
   @Patch('users/:id/profile')
   async updateUserProfile(@Param('id') id: string, @Body() dto: UpdateUserProfileDto) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
@@ -140,6 +145,7 @@ export class AdminOpsController {
     return this.prisma.user.findUnique({ where: { id }, include: { profile: true, userRoles: { include: { role: true } } } });
   }
 
+  @RequirePermissions('admin.notifications.send')
   @Post('notifications/notify')
   async notifyUsers(@Body() dto: NotifyUsersDto) {
     const title = String(dto.title || '').trim();
@@ -157,6 +163,7 @@ export class AdminOpsController {
     return { success: true, notified, smsSent: 0, campaignId, failed };
   }
 
+  @RequirePermissions('admin.notifications.send')
   @Post('notifications/notify-by-filter')
   async notifyByFilter(@Body() dto: NotifyByFilterDto) {
     const limit = Math.min(5000, Math.max(1, Number(dto.limit) || 500));
@@ -168,6 +175,7 @@ export class AdminOpsController {
     return this.notifyUsers({ userIds: users.map(u => u.id), title: dto.title, body: dto.body, sms: dto.sms });
   }
 
+  @RequirePermissions('admin.notifications.send')
   @Get('notifications/campaigns')
   async listCampaigns(@Query('page') pageStr?: string, @Query('limit') limitStr?: string) {
     const page = Math.max(1, Number(pageStr) || 1);
@@ -183,6 +191,7 @@ export class AdminOpsController {
     return { items: all.slice((page - 1) * limit, page * limit), meta: { page, limit, total: all.length, totalPages: Math.ceil(all.length / limit) || 0 } };
   }
 
+  @RequirePermissions('admin.notifications.send')
   @Get('notifications/campaigns/:campaignId')
   async campaignRecipients(@Param('campaignId') campaignId: string, @Query('page') pageStr?: string, @Query('limit') limitStr?: string) {
     const page = Math.max(1, Number(pageStr) || 1);
@@ -195,11 +204,13 @@ export class AdminOpsController {
     return { campaignId, items: rows.map(r => ({ id: r.id, userId: r.userId, phone: r.user?.phone, displayName: r.user?.profile?.displayName, status: r.readAt ? 'read' : 'sent', createdAt: r.createdAt })), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }
 
+  @RequirePermissions('admin.notifications.send')
   @Post('notifications/campaigns/:campaignId/retry-failed')
   retryCampaign(@Param('campaignId') campaignId: string) {
     return { success: true, retried: 0, campaignId, totalFailed: 0 };
   }
 
+  @RequirePermissions('admin.professionals.write')
   @Patch('professionals/:id/feature')
   async setFeaturedAlias(@Param('id') id: string, @Body() dto: FeaturedDto) {
     const pro = await this.prisma.professional.findUnique({ where: { id } });
@@ -207,6 +218,7 @@ export class AdminOpsController {
     return this.prisma.professional.update({ where: { id }, data: { isFeatured: !!dto.isFeatured } });
   }
 
+  @RequirePermissions('admin.professionals.write')
   @Post('professionals/create')
   async createProfessional(
     @Body() body: { phone: string; title?: string; displayName?: string; firstName?: string; lastName?: string },
