@@ -8,18 +8,19 @@ import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
-/** Privileged admin roles that bypass normal role/permission checks. */
-const FULL_ACCESS_ROLES = new Set(['SUPER_ADMIN', 'admin']);
+/** Only SUPER_ADMIN bypasses role/permission checks. `admin` is NOT privileged (issue #37). */
+const FULL_ACCESS_ROLES = new Set(['SUPER_ADMIN']);
 
 /**
  * Global roles and permissions guard.
  * Roles and permissions come only from JWT → DB (JwtStrategy),
  * never from request body/query/headers controlled by the client.
  *
- * - SUPER_ADMIN and admin always have full access (except while impersonating).
+ * - SUPER_ADMIN always has full access (except while impersonating).
+ * - `admin` and channel roles rely solely on @Roles / @RequirePermissions (no bypass).
  * - If only @Roles: user must have one of the roles.
  * - If only @RequirePermissions: user must have all listed permissions.
- * - If both: pass when role OR permissions match (issue #37 channel admins).
+ * - If both: pass when role OR permissions match (channel admins).
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -63,7 +64,6 @@ export class RolesGuard implements CanActivate {
     const permsRequired = !!requiredPermissions?.length;
 
     if (rolesRequired && permsRequired) {
-      // Issue #37: channel admin may have permissions without the broad admin role
       if (hasRole || hasPerms) return true;
       throw new ForbiddenException('دسترسی مجاز نیست: نقش یا مجوز لازم یافت نشد');
     }
