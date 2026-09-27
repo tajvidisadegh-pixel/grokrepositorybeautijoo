@@ -1,0 +1,67 @@
+name: Patch sticky book bar
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-sticky-book.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch slug page
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          s = p.read_text()
+          if 'StickyBookBar' in s:
+              print('already')
+          else:
+              s = s.replace(
+                  "import LocationMapView from '@/components/location/location-map-view';",
+                  "import LocationMapView from '@/components/location/location-map-view';\nimport { StickyBookBar } from '@/components/professionals/sticky-book-bar';",
+              )
+              # outer wrapper padding for mobile bar
+              s = s.replace(
+                  '<div className="mx-auto max-w-6xl px-4 py-10">',
+                  '<div className="mx-auto max-w-6xl px-4 py-10 pb-24 md:pb-10">',
+                  1,
+              )
+              # before final closing of root div - insert sticky bar before last closing
+              # Find social links section end / last hoursLine block
+              needle = '    </div>\n  );\n}'
+              insert = '      <StickyBookBar slug={pro.slug} />\n    </div>\n  );\n}'
+              if needle in s and 'StickyBookBar' not in s:
+                  # only replace last occurrence
+                  idx = s.rfind(needle)
+                  s = s[:idx] + insert + s[idx+len(needle):]
+              p.write_text(s)
+              print('patched', 'StickyBookBar' in s)
+          # search page banner for near-me without coords
+          sp = Path('frontend/src/app/search/page.tsx')
+          t = sp.read_text()
+          if 'sort === \'distance\' && !lat' not in t and 'مرتب‌سازی نزدیک‌ترین' not in t:
+              old = '      <div className="mt-8">'
+              ban = '''      {sort === 'distance' && !(lat && lng) && (
+        <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          برای مرتب‌سازی «نزدیک‌ترین»، دکمه <strong>نزدیک من</strong> را بزنید تا موقعیت شما دریافت شود.
+        </p>
+      )}
+      <div className="mt-8">'''
+              if old in t:
+                  t = t.replace(old, ban, 1)
+                  sp.write_text(t)
+                  print('search banner')
+          Path('.github/workflows/patch-sticky-book.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet || git commit -m 'feat: sticky book bar on pro page + near-me sort hint'
+          git push
