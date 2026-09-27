@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppCacheService } from '../cache/app-cache.service';
-import { ProfessionalStatus, Prisma } from '@prisma/client';
+import { MediaKind, ProfessionalStatus, Prisma } from '@prisma/client';
 import { boundingBox, haversineKm, parseGeoQuery } from '../common/geo';
 
 export type CompletionFieldKey =
@@ -331,8 +331,28 @@ export class ProfessionalsService {
       throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
     }
     const safe = this.sanitizePublicLocations(pro);
-    this.cache.set(cacheKey, safe, 120_000);
-    return safe;
+    const withMedia = this.attachMediaPublicUrls(safe);
+    this.cache.set(cacheKey, withMedia, 120_000);
+    return withMedia;
+  }
+
+  private attachMediaPublicUrls<T extends {
+    mediaAssets?: Array<{ url?: string | null; publicUrl?: string | null }> | null;
+    professionalServices?: Array<{ mediaAssets?: Array<{ url?: string | null; publicUrl?: string | null }> | null }> | null;
+  }>(pro: T): T {
+    if (!pro) return pro;
+    const mapRow = <R extends { url?: string | null; publicUrl?: string | null }>(row: R): R => ({
+      ...row,
+      publicUrl: row.publicUrl ?? row.url ?? null,
+    });
+    const mediaAssets = Array.isArray(pro.mediaAssets) ? pro.mediaAssets.map(mapRow) : pro.mediaAssets;
+    const professionalServices = Array.isArray(pro.professionalServices)
+      ? pro.professionalServices.map((ps) => ({
+          ...ps,
+          mediaAssets: Array.isArray(ps.mediaAssets) ? ps.mediaAssets.map(mapRow) : ps.mediaAssets,
+        }))
+      : pro.professionalServices;
+    return { ...pro, mediaAssets, professionalServices };
   }
 
   async getOwn(userId: string) {
@@ -556,7 +576,15 @@ export class ProfessionalsService {
           },
         },
       },
-      locations: { include: { location: true } },
+      locations: {
+        include: { location: true },
+        where: { isPrimary: true },
+        take: 1,
+      },
+      mediaAssets: {
+        where: { kind: { in: [MediaKind.salon, MediaKind.portfolio] } },
+        orderBy: { sortOrder: 'asc' as const },
+      },
       professionalServices: {
         where: { isActive: true },
         include: {
