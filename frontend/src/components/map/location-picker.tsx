@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { neshanDirectionsUrl, neshanMapUrl } from '@/lib/neshan';
 
 // Fix default marker icons in bundlers
 const DefaultIcon = L.icon({
@@ -49,7 +50,7 @@ export default function LocationPicker({
       scrollWheelZoom: true,
     });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap',
+      attribution: '&copy; Neshan / OSM',
       maxZoom: 19,
     }).addTo(map);
 
@@ -101,10 +102,35 @@ export default function LocationPicker({
   }, [latitude, longitude]);
 
   return (
-    <div
-      ref={containerRef}
-      className="z-0 w-full overflow-hidden rounded-xl border border-border"
-      style={{ height }}
-    />
+    <div className="space-y-2">
+      <div
+        ref={containerRef}
+        className="z-0 w-full overflow-hidden rounded-xl border border-border"
+        style={{ height }}
+      />
+      <p className="text-xs text-gray">
+        برای انتخاب نقطه روی نقشه کلیک کنید. مسیریابی مشتری با نقشهٔ نشان انجام می‌شود.
+      </p>
+      {latitude != null && longitude != null && (
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={neshanDirectionsUrl(latitude, longitude)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-full bg-coral px-3 py-1.5 text-xs font-medium text-white hover:bg-coral-dark"
+          >
+            تست مسیریابی نشان
+          </a>
+          <a
+            href={neshanMapUrl(latitude, longitude)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-full border border-border bg-white px-3 py-1.5 text-xs text-foreground"
+          >
+            مشاهده در نشان
+          </a>
+        </div>
+      )}
+    </div>
   );
 }
