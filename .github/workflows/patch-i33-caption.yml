@@ -11,39 +11,31 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Patch caption
+      - name: Patch caption with sed
         run: |
           set -euo pipefail
-          python3 << 'PY'
+          FILE="frontend/src/app/professionals/[slug]/page.tsx"
+          # Replace fixed approximate label with precision-aware text via python line-based edit
+          python3 -c "
           from pathlib import Path
-          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
-          t = p.read_text()
-          old = '''                return (
-                  <div className="mt-4">
-                    <LocationMapView position={{ lat, lng }} height="200px" />
-                    <p className="mt-2 text-xs text-gray-muted">موقعیت تقریبی روی نقشه</p>
-                  </div>
-                );'''
-          new = '''                const isExact = loc?.precision === 'exact';
-                return (
-                  <div className="mt-4">
-                    <LocationMapView position={{ lat, lng }} height="200px" />
-                    <p className="mt-2 text-xs text-gray-muted">
-                      {isExact
-                        ? 'موقعیت دقیق — مشتری می‌تواند با نشان مسیریابی کند'
-                        : 'موقعیت تقریبی (شهر/محله) — پین دقیق عمومی نیست'}
-                    </p>
-                  </div>
-                );'''
-          if old not in t:
-              if 'موقعیت دقیق' in t:
-                  print('already patched')
-              else:
-                  raise SystemExit('block not found')
-          else:
-              p.write_text(t.replace(old, new, 1))
-              print('ok')
-          PY
+          p = Path('$FILE')
+          lines = p.read_text().splitlines(True)
+          out = []
+          i = 0
+          while i < len(lines):
+              if 'موقعیت تقریبی روی نقشه' in lines[i] and 'موقعیت دقیق' not in lines[i]:
+                  # insert isExact before the return that owns this block: find previous 'return (' within a few lines
+                  # Simple: replace the paragraph content only
+                  lines[i] = lines[i].replace(
+                      'موقعیت تقریبی روی نقشه',
+                      """{loc?.precision === 'exact' ? 'موقعیت دقیق — مشتری می‌تواند با نشان مسیریابی کند' : 'موقعیت تقریبی (شهر/محله) — پین دقیق عمومی نیست'}""",
+                  )
+              out.append(lines[i])
+              i += 1
+          p.write_text(''.join(out))
+          assert 'موقعیت دقیق' in p.read_text()
+          print('ok')
+          "
       - name: Commit and cleanup
         run: |
           git config user.name "github-actions[bot]"
