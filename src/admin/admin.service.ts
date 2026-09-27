@@ -372,6 +372,22 @@ export class AdminService {
       throw new BadRequestException('حداقل یک نقش باید مشخص شود');
     }
 
+    // Issue #37: only SUPER_ADMIN may grant SUPER_ADMIN; admin is fully separate
+    if (normalized.some((r) => r.toLowerCase() === 'super_admin')) {
+      if (actorId) {
+        const actor = await this.prisma.user.findUnique({
+          where: { id: actorId },
+          include: { userRoles: { include: { role: true } } },
+        });
+        const actorRoles = actor?.userRoles.map((ur) => ur.role.name) || [];
+        if (!actorRoles.includes('SUPER_ADMIN')) {
+          throw new ForbiddenException('فقط سوپر ادمین می‌تواند نقش SUPER_ADMIN را اختصاص دهد');
+        }
+      } else {
+        throw new ForbiddenException('فقط سوپر ادمین می‌تواند نقش SUPER_ADMIN را اختصاص دهد');
+      }
+    }
+
     const roleRows = await this.prisma.role.findMany({
       where: {
         OR: [

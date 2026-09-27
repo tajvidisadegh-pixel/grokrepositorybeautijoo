@@ -15,7 +15,6 @@ class FeaturedDto { @IsBoolean() isFeatured!: boolean; }
 
 @ApiTags('admin-ops')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'admin')
 @Controller('admin')
 export class AdminOpsController {
   constructor(private readonly prisma: PrismaService) {}
@@ -71,6 +70,7 @@ export class AdminOpsController {
     };
   }
 
+  @RequirePermissions('admin.site_builder.manage')
   @Put('content')
   async putContent(@Body() body: any) {
     const value = { hero: body?.hero ?? {}, texts: body?.texts ?? {}, features: body?.features ?? {} } as any;
@@ -101,6 +101,7 @@ export class AdminOpsController {
     };
   }
 
+  @RequirePermissions('admin.site_builder.manage')
   @Put('site-builder')
   async putSiteBuilder(@Body() body: any) {
     const list = Array.isArray(body) ? body : body?.sections ?? [];

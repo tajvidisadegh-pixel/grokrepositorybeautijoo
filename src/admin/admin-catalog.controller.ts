@@ -77,7 +77,6 @@ class UpdateCatalogAddOnDto {
 
 @ApiTags('admin-catalog')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'admin')
 @RequirePermissions('admin.catalog.manage')
 @Controller('admin')
 export class AdminCatalogController {
