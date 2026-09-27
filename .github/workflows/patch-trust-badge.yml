@@ -1,0 +1,60 @@
+name: Patch trust badge on pro page
+on:
+  push:
+    paths: ['.github/workflows/patch-trust-badge.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          s = p.read_text()
+          if 'TrustBadge' not in s:
+            s = s.replace(
+              "import { StickyBookBar } from '@/components/professionals/sticky-book-bar';",
+              "import { StickyBookBar } from '@/components/professionals/sticky-book-bar';\nimport { TrustBadge } from '@/components/professionals/trust-badge';",
+            )
+            old = "{(pro.status === 'approved' || !pro.status) && (\n                  <p className=\"mt-1 text-xs font-medium text-emerald-700\">✓ زیباگر تأییدشده بیوتی‌جو</p>\n                )}"
+            new = "<div className=\"mt-1\"><TrustBadge status={pro.status} verifiedAt={(pro as { verifiedAt?: string | null }).verifiedAt} size=\"md\" /></div>"
+            if old in s:
+              s = s.replace(old, new, 1)
+            else:
+              # alternate whitespace
+              import re
+              s2, n = re.subn(
+                r"\{\(pro\.status === 'approved' \|\| !pro\.status\) && \(\s*<p className=\"mt-1 text-xs font-medium text-emerald-700\">✓ زیباگر تأییدشده بیوتی‌جو</p>\s*\)\}",
+                new,
+                s,
+                count=1,
+              )
+              if n:
+                s = s2
+                print('regex replace', n)
+              else:
+                print('WARN: status line not found')
+            p.write_text(s)
+            print('TrustBadge' in s)
+          # types: ensure list item has status + verifiedAt optional
+          t = Path('frontend/src/types/public.ts')
+          tt = t.read_text()
+          if 'export type ProfessionalListItem' in tt and 'verifiedAt' not in tt.split('ProfessionalListItem')[1][:800]:
+            tt = tt.replace(
+              'export type ProfessionalListItem = {',
+              'export type ProfessionalListItem = {\n  status?: string | null;\n  verifiedAt?: string | null;',
+              1,
+            )
+            t.write_text(tt)
+            print('types updated')
+          Path('.github/workflows/patch-trust-badge.yml').unlink(missing_ok=True)
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet || git commit -m 'feat: trust badges on public pro header + types'
+          git push
