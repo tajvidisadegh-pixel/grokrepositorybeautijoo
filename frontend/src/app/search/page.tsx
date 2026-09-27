@@ -155,6 +155,12 @@ export default async function SearchPage({ searchParams }: Props) {
         </div>
       </form>
 
+      {sort === 'distance' && !(lat && lng) && (
+        <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          برای مرتب‌سازی «نزدیک‌ترین»، دکمه نزدیک من را بزنید تا موقعیت شما دریافت شود.
+        </p>
+      )}
+
       <div className="mt-8">
         {errorMsg && <ApiErrorState message={errorMsg} />}
         {!errorMsg && result && result.items.length === 0 && (
