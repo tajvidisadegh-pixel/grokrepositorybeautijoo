@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { neshanDirectionsUrl, neshanMapUrl } from '@/lib/neshan';
 
-export type MapPosition = { lat: number; lng: number };
+type Position = { lat: number; lng: number };
 
 type Props = {
-  position: MapPosition;
+  position: Position;
   height?: string;
   zoom?: number;
   className?: string;
@@ -62,14 +63,34 @@ function LocationMapViewInner({ position, height = '220px', zoom = 14, className
   const center: [number, number] = [position.lat, position.lng];
 
   return (
-    <div
-      className={`relative z-0 overflow-hidden rounded-xl border border-border ${className || ''}`}
-      style={{ height }}
-    >
-      <MapContainer center={center} zoom={zoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
-        <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <Marker position={center} />
-      </MapContainer>
+    <div className={className}>
+      <div
+        className={`relative z-0 overflow-hidden rounded-xl border border-border`}
+        style={{ height }}
+      >
+        <MapContainer center={center} zoom={zoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
+          <TileLayer attribution='&copy; Neshan / OSM' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <Marker position={center} />
+        </MapContainer>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <a
+          href={neshanDirectionsUrl(position.lat, position.lng)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center rounded-full bg-coral px-3 py-1.5 text-xs font-medium text-white hover:bg-coral-dark"
+        >
+          مسیریابی با نشان
+        </a>
+        <a
+          href={neshanMapUrl(position.lat, position.lng)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center rounded-full border border-border bg-white px-3 py-1.5 text-xs text-foreground"
+        >
+          مشاهده در نقشه نشان
+        </a>
+      </div>
     </div>
   );
 }
