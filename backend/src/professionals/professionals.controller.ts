@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min } from 'class-validator';
+import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ProfessionalsService } from './professionals.service';
 import { Public } from '../common/decorators/public.decorator';
@@ -24,6 +24,14 @@ class UpdateProDto {
   @IsOptional() @IsString() @MaxLength(512) avatarUrl?: string;
   @IsOptional() @IsString() @MaxLength(5000) profileBio?: string;
   @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedCategoryIds?: string[];
+  /** Optional social links — issue #36 */
+  @IsOptional() @IsObject() socialLinks?: {
+    instagram?: string;
+    telegram?: string;
+    website?: string;
+    phone?: string;
+    whatsapp?: string;
+  };
 }
 
 class PayoutRequestDto {
