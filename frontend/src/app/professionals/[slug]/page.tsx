@@ -9,7 +9,8 @@ import { absoluteUrl, professionalJsonLd, siteName } from '@/lib/seo';
 import { ServiceOfferCard } from '@/components/professionals/service-offer-card';
 import { ServicePortfolioGallery } from '@/components/professionals/service-portfolio-gallery';
 import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
-import LocationMapView from '@/components/location/location-map-view';
+import LocationMapView from '@/components/location/location-map-view'
+import { StickyBookBar } from '@/components/professionals/sticky-book-bar';
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -170,7 +171,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
   const hoursLine = summarizeWorkingHours(pro.workingHours || []);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-10 pb-24 md:pb-10">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -391,6 +392,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
         );
       })()}
 
+      <StickyBookBar slug={pro.slug} />
     </div>
   );
 }
