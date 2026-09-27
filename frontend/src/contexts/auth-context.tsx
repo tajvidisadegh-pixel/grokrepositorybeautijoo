@@ -203,11 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user?.roles?.length) return false;
       const need = Array.isArray(role) ? role : [role];
       if (need.some((r) => user.roles.includes(r))) return true;
-      const privileged = new Set(['SUPER_ADMIN', 'admin']);
-      if (
-        need.some((r) => privileged.has(r)) &&
-        user.roles.some((r) => privileged.has(r))
-      ) {
+      // Issue #37: admin is NOT equivalent to SUPER_ADMIN
+      if (need.includes('SUPER_ADMIN') && user.roles.includes('SUPER_ADMIN')) {
         return true;
       }
       return false;

@@ -13,7 +13,6 @@ import { BookingStatus, MediaStatus, ProfessionalStatus } from '@prisma/client';
 
 @ApiTags('admin-settings')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'admin')
 @Controller('admin')
 export class AdminSettingsController {
   constructor(private readonly prisma: PrismaService) {}

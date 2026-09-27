@@ -17,7 +17,7 @@ type Props = {
   hideWhenForbidden?: boolean;
 };
 
-const PRIVILEGED = new Set(['SUPER_ADMIN', 'admin']);
+const PRIVILEGED = new Set(['SUPER_ADMIN']); // admin is separate (issue #37)
 
 export function RequireAuth({
   children,

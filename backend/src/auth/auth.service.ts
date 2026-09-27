@@ -27,7 +27,7 @@ function ttlToMs(ttl: string | undefined, fallbackMs: number): number {
   return n * mult;
 }
 
-const PRIVILEGED_ROLES = new Set(['SUPER_ADMIN', 'admin']);
+const PRIVILEGED_ROLES = new Set(['SUPER_ADMIN']); // admin is NOT privileged (issue #37)
 
 @Injectable()
 export class AuthService {

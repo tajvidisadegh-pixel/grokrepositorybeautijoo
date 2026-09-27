@@ -113,7 +113,6 @@ class ReviewPublishDto {
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'admin')
 @Controller('admin')
 export class AdminController {
   constructor(private readonly service: AdminService) {}
@@ -163,6 +162,7 @@ export class AdminController {
     return this.service.getCommissionSetting();
   }
 
+  @RequirePermissions('admin.finance.write')
   @Put('finance/settings/commission')
   setCommission(@Body() dto: CommissionDto, @CurrentUser('id') actorId?: string) {
     return this.service.updateCommissionSetting(dto.rate, actorId);
@@ -227,7 +227,8 @@ export class AdminController {
     return this.service.impersonateCustomer(adminId, customerId);
   }
 
-@Patch('users/:id/status')
+  @RequirePermissions('admin.users.write')
+  @Patch('users/:id/status')
   setUserStatus(@Param('id') id: string, @Body() dto: UserStatusDto, @CurrentUser('id') actorId?: string) {
     return this.service.setUserStatus(id, dto.status, actorId, dto.reason);
   }

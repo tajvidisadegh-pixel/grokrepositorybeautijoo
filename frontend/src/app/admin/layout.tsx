@@ -36,7 +36,7 @@ const BASE_ITEMS: NavDef[] = [
   { href: '/admin/audit', label: '\u0644\u0627\u06af \u0641\u0639\u0627\u0644\u06cc\u062a\u200c\u0647\u0627', anyOf: ['admin.audit.read'] },
 ];
 
-const PRIVILEGED = new Set(['SUPER_ADMIN', 'admin']);
+const PRIVILEGED = new Set(['SUPER_ADMIN']); // full nav only for super admin
 const CHANNEL_ROLES = [
   'admin_customers',
   'admin_professionals',
