@@ -11,64 +11,59 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore schema and add socialLinks
+      - name: Download and patch schema
         run: |
           set -e
-          git show fa63205669c9f679693de7683a2754581f2f0f20:backend/prisma/schema.prisma > backend/prisma/schema.prisma
-          python3 -c "
-from pathlib import Path
-p = Path('backend/prisma/schema.prisma')
-t = p.read_text()
-if 'socialLinks' not in t:
-    old = '  selectedCategoryIds  Json?              @map(\"selected_category_ids\")\n  verifiedAt'
-    new = '  selectedCategoryIds  Json?              @map(\"selected_category_ids\")\n  socialLinks          Json?              @map(\"social_links\")\n  verifiedAt'
-    assert old in t, 'anchor missing'
-    p.write_text(t.replace(old, new, 1))
-print('schema lines', len(p.read_text().splitlines()))
-"
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/fa63205669c9f679693de7683a2754581f2f0f20/backend/prisma/schema.prisma" -o backend/prisma/schema.prisma
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/prisma/schema.prisma')
+          t = p.read_text()
+          assert 'model Professional' in t
+          if 'socialLinks' not in t:
+              old = '  selectedCategoryIds  Json?              @map("selected_category_ids")\n  verifiedAt'
+              new = '  selectedCategoryIds  Json?              @map("selected_category_ids")\n  socialLinks          Json?              @map("social_links")\n  verifiedAt'
+              assert old in t
+              p.write_text(t.replace(old, new, 1))
+          print('schema bytes', p.stat().st_size)
+          PY
           mkdir -p backend/prisma/migrations/20260927140000_professional_social_links
-          printf '%s\n' '-- Issue #36' 'ALTER TABLE \"professionals\" ADD COLUMN IF NOT EXISTS \"social_links\" JSONB;' > backend/prisma/migrations/20260927140000_professional_social_links/migration.sql
-      - name: Patch controller DTO
+          echo 'ALTER TABLE "professionals" ADD COLUMN IF NOT EXISTS "social_links" JSONB;' > backend/prisma/migrations/20260927140000_professional_social_links/migration.sql
+      - name: Patch API files
         run: |
-          python3 -c "
-from pathlib import Path
-c = Path('backend/src/professionals/professionals.controller.ts').read_text()
-c2 = c.replace(
-  \"import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min } from 'class-validator';\",
-  \"import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min, IsObject } from 'class-validator';\",
-)
-if 'socialLinks' not in c2:
-  c2 = c2.replace(
-    \"  @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedCategoryIds?: string[];\\n}\",
-    \"  @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedCategoryIds?: string[];\\n  @IsOptional() @IsObject() socialLinks?: { instagram?: string; telegram?: string; website?: string; phone?: string; whatsapp?: string };\\n}\",
-  )
-Path('backend/src/professionals/professionals.controller.ts').write_text(c2)
-print('controller', 'socialLinks' in c2, 'IsObject' in c2)
-"
-      - name: Patch service
-        run: |
-          python3 -c "
-from pathlib import Path
-s = Path('backend/src/professionals/professionals.service.ts').read_text()
-if 'socialLinks?:' not in s:
-  s = s.replace(
-    'selectedCategoryIds?: string[];\\n  }) {',
-    'selectedCategoryIds?: string[];\\n    socialLinks?: { instagram?: string | null; telegram?: string | null; website?: string | null; phone?: string | null; whatsapp?: string | null } | null;\\n  }) {',
-  )
-  block = '''    if (data.selectedCategoryIds !== undefined) {
+          python3 << 'PY'
+          from pathlib import Path
+          # controller
+          c = Path('backend/src/professionals/professionals.controller.ts').read_text()
+          c = c.replace(
+              "import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min } from 'class-validator';",
+              "import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min, IsObject } from 'class-validator';",
+          )
+          if 'socialLinks' not in c:
+              c = c.replace(
+                  "  @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedCategoryIds?: string[];\n}",
+                  "  @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedCategoryIds?: string[];\n  @IsOptional() @IsObject() socialLinks?: { instagram?: string; telegram?: string; website?: string; phone?: string; whatsapp?: string };\n}",
+              )
+          Path('backend/src/professionals/professionals.controller.ts').write_text(c)
+          # service
+          s = Path('backend/src/professionals/professionals.service.ts').read_text()
+          if 'socialLinks?:' not in s:
+              s = s.replace(
+                  'selectedCategoryIds?: string[];\n  }) {',
+                  'selectedCategoryIds?: string[];\n    socialLinks?: { instagram?: string | null; telegram?: string | null; website?: string | null; phone?: string | null; whatsapp?: string | null } | null;\n  }) {',
+              )
+              old = '''    if (data.selectedCategoryIds !== undefined) {
       proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;
     }
     if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;'''
-  insert = '''    if (data.selectedCategoryIds !== undefined) {
+              new = '''    if (data.selectedCategoryIds !== undefined) {
       proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;
     }
     if (data.socialLinks !== undefined) {
       if (data.socialLinks === null) {
         proData.socialLinks = Prisma.JsonNull;
       } else {
-        const allowed = [\"instagram\", \"telegram\", \"website\", \"phone\", \"whatsapp\"] as const;
+        const allowed = ['instagram', 'telegram', 'website', 'phone', 'whatsapp'] as const;
         const cleaned: Record<string, string> = {};
         for (const k of allowed) {
           const raw = data.socialLinks[k];
@@ -80,18 +75,13 @@ if 'socialLinks?:' not in s:
       }
     }
     if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;'''
-  if block in s:
-    s = s.replace(block, insert)
-  Path('backend/src/professionals/professionals.service.ts').write_text(s)
-print('service count', s.count('socialLinks'))
-"
-      - name: Patch panel-api
-        run: |
-          python3 -c "
-from pathlib import Path
-p = Path('frontend/src/lib/panel-api.ts').read_text()
-if 'SocialLinks' not in p:
-  p = p.replace('export type OwnProfessional = {', '''export type SocialLinks = {
+              if old in s:
+                  s = s.replace(old, new)
+          Path('backend/src/professionals/professionals.service.ts').write_text(s)
+          # panel-api
+          p = Path('frontend/src/lib/panel-api.ts').read_text()
+          if 'SocialLinks' not in p:
+              p = p.replace('export type OwnProfessional = {', '''export type SocialLinks = {
   instagram?: string | null;
   telegram?: string | null;
   website?: string | null;
@@ -99,18 +89,18 @@ if 'SocialLinks' not in p:
   whatsapp?: string | null;
 };
 export type OwnProfessional = {''')
-  p = p.replace(
-    '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\\n  professionalServices?: ProfessionalServiceItem[];',
-    '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\\n  socialLinks?: SocialLinks | null;\\n  professionalServices?: ProfessionalServiceItem[];',
-  )
-Path('frontend/src/lib/panel-api.ts').write_text(p)
-print('panel', 'SocialLinks' in p)
-"
-      - name: Commit and push
+              p = p.replace(
+                  '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\n  professionalServices?: ProfessionalServiceItem[];',
+                  '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\n  socialLinks?: SocialLinks | null;\n  professionalServices?: ProfessionalServiceItem[];',
+              )
+          Path('frontend/src/lib/panel-api.ts').write_text(p)
+          print('done', 'socialLinks' in Path('backend/src/professionals/professionals.service.ts').read_text())
+          PY
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status
-          git diff --staged --quiet || git commit -m "feat(#36): socialLinks on Professional (schema, migration, API, types)"
+          git diff --staged --quiet || git commit -m "feat(#36): socialLinks schema+API+types"
           git push
