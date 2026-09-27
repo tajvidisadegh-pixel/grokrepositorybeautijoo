@@ -25,36 +25,36 @@ const PERMISSIONS = [
   { code: 'admin.audit.read', displayName: '\u0644\u0627\u06af \u0641\u0639\u0627\u0644\u06cc\u062a\u200c\u0647\u0627' },
 ];
 
-/** Channel roles → permission codes */
+/** Channel roles \u2192 permission codes (issue #37) */
 const CHANNEL_ROLES = [
   {
     name: 'admin_customers',
     displayName: '\u0627\u062f\u0645\u06cc\u0646 \u0645\u0634\u062a\u0631\u06cc\u0627\u0646',
-    description: 'Issue #37 — only customers/users section',
+    description: 'Issue #37 \u2014 only customers/users section',
     perms: ['admin.dashboard.read', 'admin.users.read', 'admin.users.write'],
   },
   {
     name: 'admin_professionals',
     displayName: '\u0627\u062f\u0645\u06cc\u0646 \u0632\u06cc\u0628\u0627\u06af\u0631\u0627\u0646',
-    description: 'Issue #37 — only professionals section',
+    description: 'Issue #37 \u2014 only professionals section',
     perms: ['admin.dashboard.read', 'admin.professionals.read', 'admin.professionals.write', 'admin.media.moderate'],
   },
   {
     name: 'admin_bookings',
     displayName: '\u0627\u062f\u0645\u06cc\u0646 \u0631\u0632\u0631\u0648\u0647\u0627',
-    description: 'Issue #37 — only bookings section',
+    description: 'Issue #37 \u2014 only bookings section',
     perms: ['admin.dashboard.read', 'admin.bookings.read', 'admin.bookings.write'],
   },
   {
     name: 'admin_finance',
     displayName: '\u0627\u062f\u0645\u06cc\u0646 \u0645\u0627\u0644\u06cc',
-    description: 'Issue #37 — only finance section',
+    description: 'Issue #37 \u2014 only finance section',
     perms: ['admin.dashboard.read', 'admin.finance.read', 'admin.finance.write'],
   },
   {
     name: 'admin_content',
     displayName: '\u0627\u062f\u0645\u06cc\u0646 \u0645\u062d\u062a\u0648\u0627',
-    description: 'Issue #37 — reviews, media, catalog',
+    description: 'Issue #37 \u2014 reviews, media, catalog',
     perms: [
       'admin.dashboard.read',
       'admin.reviews.moderate',
@@ -65,7 +65,7 @@ const CHANNEL_ROLES = [
   {
     name: 'admin_support',
     displayName: '\u0627\u062f\u0645\u06cc\u0646 \u067e\u0634\u062a\u06cc\u0628\u0627\u0646\u06cc',
-    description: 'Issue #37 — support + notifications',
+    description: 'Issue #37 \u2014 support + notifications',
     perms: ['admin.dashboard.read', 'admin.support.handle', 'admin.notifications.send'],
   },
 ];
@@ -111,7 +111,6 @@ async function main() {
   });
   const byCode = Object.fromEntries(allPerms.map((p) => [p.code, p]));
 
-  // Full admin role gets every admin.* permission (redundant with FULL_ACCESS but useful for UI)
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'admin' } });
   for (const p of allPerms) {
     await prisma.rolePermission.upsert({
