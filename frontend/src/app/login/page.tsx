@@ -25,6 +25,7 @@ function LoginForm() {
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (isAuthenticated) {
     let dest = nextParam || '/panel';
@@ -134,15 +135,26 @@ function LoginForm() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">رمز عبور</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              autoComplete="current-password"
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className="pl-16"
+              />
+              <button
+                type="button"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray hover:text-foreground"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+              >
+                {showPassword ? 'مخفی' : 'نمایش'}
+              </button>
+            </div>
           </div>
           {error && (
             <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">

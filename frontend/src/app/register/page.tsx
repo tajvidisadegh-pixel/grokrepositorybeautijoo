@@ -32,6 +32,7 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [expiresIn, setExpiresIn] = useState<number | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -258,15 +259,26 @@ function RegisterForm() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">رمز عبور</label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                placeholder="حداقل ۸ کاراکتر"
-                autoComplete="new-password"
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  placeholder="حداقل ۸ کاراکتر"
+                  autoComplete="new-password"
+                  className="pl-16"
+                />
+                <button
+                  type="button"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray hover:text-foreground"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? 'مخفی' : 'نمایش'}
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray">
               شماره: <span dir="ltr">{phone}</span>
