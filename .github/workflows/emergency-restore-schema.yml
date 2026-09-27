@@ -12,43 +12,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Ensure schema has socialLinks
+      - name: Patch service socialLinks
         run: |
-          set -eux
-          if ! grep -q socialLinks backend/prisma/schema.prisma 2>/dev/null; then
-            curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/fa63205669c9f679693de7683a2754581f2f0f20/backend/prisma/schema.prisma" -o backend/prisma/schema.prisma
-            python3 -c "
-from pathlib import Path
-p=Path('backend/prisma/schema.prisma')
-t=p.read_text()
-old='  selectedCategoryIds  Json?              @map(\"selected_category_ids\")\n  verifiedAt'
-new='  selectedCategoryIds  Json?              @map(\"selected_category_ids\")\n  socialLinks          Json?              @map(\"social_links\")\n  verifiedAt'
-assert old in t
-p.write_text(t.replace(old,new,1))
-print('schema fixed', p.stat().st_size)
-"
-          fi
-          mkdir -p backend/prisma/migrations/20260927140000_professional_social_links
-          echo 'ALTER TABLE "professionals" ADD COLUMN IF NOT EXISTS "social_links" JSONB;' > backend/prisma/migrations/20260927140000_professional_social_links/migration.sql
-          grep socialLinks backend/prisma/schema.prisma
-      - name: Patch professionals.service socialLinks
-        run: |
-          python3 << 'PY'
+          python3 -c "
           from pathlib import Path
-          s = Path('backend/src/professionals/professionals.service.ts').read_text()
+          p = Path('backend/src/professionals/professionals.service.ts')
+          s = p.read_text()
           if 'socialLinks?:' in s:
-              print('service already has socialLinks')
+              print('already done')
           else:
               s = s.replace(
-                  'selectedCategoryIds?: string[];\n  }) {',
-                  'selectedCategoryIds?: string[];\n    socialLinks?: { instagram?: string | null; telegram?: string | null; website?: string | null; phone?: string | null; whatsapp?: string | null } | null;\n  }) {',
+                  'selectedCategoryIds?: string[];\\n  }) {',
+                  'selectedCategoryIds?: string[];\\n    socialLinks?: { instagram?: string | null; telegram?: string | null; website?: string | null; phone?: string | null; whatsapp?: string | null } | null;\\n  }) {',
               )
-              old = '''    if (data.selectedCategoryIds !== undefined) {
-      proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;
-    }
-    if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;'''
+              old = '    if (data.selectedCategoryIds !== undefined) {\\n      proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;\\n    }\\n    if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;'
               new = '''    if (data.selectedCategoryIds !== undefined) {
       proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;
     }
@@ -56,7 +34,7 @@ print('schema fixed', p.stat().st_size)
       if (data.socialLinks === null) {
         proData.socialLinks = Prisma.JsonNull;
       } else {
-        const allowed = ['instagram', 'telegram', 'website', 'phone', 'whatsapp'] as const;
+        const allowed = [\\'instagram\\', \\'telegram\\', \\'website\\', \\'phone\\', \\'whatsapp\\'] as const;
         const cleaned: Record<string, string> = {};
         for (const k of allowed) {
           const raw = data.socialLinks[k];
@@ -69,39 +47,36 @@ print('schema fixed', p.stat().st_size)
     }
     if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;'''
               if old not in s:
-                  raise SystemExit('service anchor missing')
+                  raise SystemExit('anchor missing')
               s = s.replace(old, new)
-              Path('backend/src/professionals/professionals.service.ts').write_text(s)
-              print('service patched', s.count('socialLinks'))
-          PY
-      - name: Patch panel-api SocialLinks type
+              p.write_text(s)
+              print('service ok', s.count('socialLinks'))
+          "
+      - name: Patch panel-api
         run: |
-          python3 << 'PY'
+          python3 -c "
           from pathlib import Path
-          p = Path('frontend/src/lib/panel-api.ts').read_text()
-          if 'SocialLinks' in p:
-              print('panel already has SocialLinks')
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text()
+          if 'SocialLinks' in t:
+              print('panel ok')
           else:
-              p = p.replace('export type OwnProfessional = {', '''export type SocialLinks = {
-  instagram?: string | null;
-  telegram?: string | null;
-  website?: string | null;
-  phone?: string | null;
-  whatsapp?: string | null;
-};
-export type OwnProfessional = {''')
-              p = p.replace(
-                  '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\n  professionalServices?: ProfessionalServiceItem[];',
-                  '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\n  socialLinks?: SocialLinks | null;\n  professionalServices?: ProfessionalServiceItem[];',
+              t = t.replace(
+                  'export type OwnProfessional = {',
+                  'export type SocialLinks = { instagram?: string | null; telegram?: string | null; website?: string | null; phone?: string | null; whatsapp?: string | null; };\\nexport type OwnProfessional = {',
               )
-              Path('frontend/src/lib/panel-api.ts').write_text(p)
+              t = t.replace(
+                  '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\\n  professionalServices?: ProfessionalServiceItem[];',
+                  '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\\n  socialLinks?: SocialLinks | null;\\n  professionalServices?: ProfessionalServiceItem[];',
+              )
+              p.write_text(t)
               print('panel patched')
-          PY
+          "
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status
-          git diff --staged --quiet || git commit -m "feat(#36): socialLinks in service + panel-api types"
+          git diff --staged --quiet || git commit -m "feat(#36): socialLinks service + panel-api"
           git push
