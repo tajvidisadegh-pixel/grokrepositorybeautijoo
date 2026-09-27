@@ -14,6 +14,8 @@ export type LocationSnippet = {
   province?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
+  /** exact = public pin; approximate = city/area only */
+  precision?: 'exact' | 'approximate' | string | null;
 };
 
 export type ServiceSnippet = {
@@ -142,6 +144,8 @@ export type ProfessionalDetail = Omit<
   professionalServices: ProfessionalServiceItem[];
   workingHours: WorkingHour[];
   reviews: ReviewItem[];
+  /** Professional-level media (salon + portfolio), issue #33 */
+  mediaAssets?: ProfessionalServiceMedia[];
 };
 
 export type ServiceCategory = {
