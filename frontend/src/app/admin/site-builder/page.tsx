@@ -20,6 +20,8 @@ type Hero = {
   minHeight?: number;
   textAlign?: 'center' | 'right' | 'left';
   textColor?: 'auto' | 'light' | 'dark';
+  titleSize?: 'sm' | 'md' | 'lg' | 'xl';
+  subtitleSize?: 'sm' | 'md' | 'lg';
   searchPlaceholder?: string;
 };
 
@@ -295,6 +297,16 @@ export default function AdminSiteBuilderPage() {
   const hasBanner = Boolean(hero.desktopImageUrl || hero.mobileImageUrl);
   const overlayPct = Math.min(90, Math.max(0, Number(hero.overlayOpacity ?? 40)));
   const layout = hero.layout || (hasBanner ? 'image-background' : 'gradient-only');
+  const titleSizeCls =
+    hero.titleSize === 'sm'
+      ? 'text-lg'
+      : hero.titleSize === 'md'
+        ? 'text-xl'
+        : hero.titleSize === 'xl'
+          ? 'text-3xl'
+          : 'text-2xl';
+  const subtitleSizeCls =
+    hero.subtitleSize === 'sm' ? 'text-sm' : hero.subtitleSize === 'lg' ? 'text-lg' : 'text-base';
 
   return (
     <div className="min-h-screen bg-[#f0f0f1]" dir="rtl">
@@ -447,8 +459,8 @@ export default function AdminSiteBuilderPage() {
                         <div className="grid gap-0 md:grid-cols-2">
                           <div className="flex flex-col justify-center bg-white p-6 text-right">
                             {hero.badge && <p className="mb-2 text-xs font-semibold text-[#FF6F61]">{hero.badge}</p>}
-                            <p className="text-xl font-bold text-[#0B2C4A]">{hero.title || 'عنوان'}</p>
-                            {hero.subtitle && <p className="mt-1 text-base text-gray-800">{hero.subtitle}</p>}
+                            <p className={`${titleSizeCls} font-bold text-[#0B2C4A]`}>{hero.title || 'عنوان'}</p>
+                            {hero.subtitle && <p className={`mt-1 ${subtitleSizeCls} text-gray-800`}>{hero.subtitle}</p>}
                             {hero.description && <p className="mt-2 text-sm text-gray-600">{hero.description}</p>}
                           </div>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -472,7 +484,7 @@ export default function AdminSiteBuilderPage() {
                             {hero.title || 'عنوان Hero'}
                           </p>
                           {hero.subtitle && (
-                            <p className={`mt-1 text-lg ${forceLight ? 'text-white/95' : 'text-gray-800'}`}>{hero.subtitle}</p>
+                            <p className={`mt-1 ${subtitleSizeCls} ${forceLight ? 'text-white/95' : 'text-gray-800'}`}>{hero.subtitle}</p>
                           )}
                           {hero.description && (
                             <p className={`mx-auto mt-2 max-w-md text-sm ${forceLight ? 'text-white/85' : 'text-gray-600'}`}>
@@ -599,8 +611,10 @@ export default function AdminSiteBuilderPage() {
                 <Range label={`تاریکی روی تصویر (فقط برای خوانایی متن): ${overlayPct}%`} value={overlayPct} min={0} max={80} onChange={(v) => patchHero({ overlayOpacity: v })} />
                 <p className="text-[11px] text-[#646970]">برای بنر کاملاً واضح، عدد را نزدیک ۰ بگذارید. برای خوانایی متن روی تصویر شلوغ، ۳۰–۵۰ مناسب است.</p>
                 <Range label={`حداقل ارتفاع بنر: ${hero.minHeight ?? 420}px`} value={Number(hero.minHeight ?? 420)} min={280} max={700} onChange={(v) => patchHero({ minHeight: v })} />
-                <Select label="تراز متن" value={hero.textAlign || 'center'} onChange={(v) => patchHero({ textAlign: v as Hero['textAlign'] })} options={[{ value: 'center', label: 'وسط' }, { value: 'right', label: 'راست' }, { value: 'left', label: 'چپ' }]} />
+                <Select label="تراز متن (موقعیت)" value={hero.textAlign || 'center'} onChange={(v) => patchHero({ textAlign: v as Hero['textAlign'] })} options={[{ value: 'center', label: 'وسط' }, { value: 'right', label: 'راست' }, { value: 'left', label: 'چپ' }]} />
                 <Select label="رنگ متن" value={hero.textColor || 'auto'} onChange={(v) => patchHero({ textColor: v as Hero['textColor'] })} options={[{ value: 'auto', label: 'خودکار (روشن روی تصویر)' }, { value: 'light', label: 'روشن (سفید)' }, { value: 'dark', label: 'تیره' }]} />
+                <Select label="اندازه عنوان" value={hero.titleSize || 'lg'} onChange={(v) => patchHero({ titleSize: v as Hero['titleSize'] })} options={[{ value: 'sm', label: 'کوچک' }, { value: 'md', label: 'متوسط' }, { value: 'lg', label: 'بزرگ' }, { value: 'xl', label: 'خیلی بزرگ' }]} />
+                <Select label="اندازه زیرعنوان" value={hero.subtitleSize || 'md'} onChange={(v) => patchHero({ subtitleSize: v as Hero['subtitleSize'] })} options={[{ value: 'sm', label: 'کوچک' }, { value: 'md', label: 'متوسط' }, { value: 'lg', label: 'بزرگ' }]} />
               </>
             )}
 

@@ -58,6 +58,8 @@ type HeroCfg = NonNullable<PublishedSiteConfig['content']['hero']> & {
   minHeight?: number;
   textAlign?: 'center' | 'right' | 'left';
   textColor?: 'auto' | 'light' | 'dark';
+  titleSize?: 'sm' | 'md' | 'lg' | 'xl';
+  subtitleSize?: 'sm' | 'md' | 'lg';
   searchPlaceholder?: string;
 };
 
@@ -152,6 +154,20 @@ export default async function HomePage() {
   const layout = hero.layout || (hasBanner ? 'image-background' : 'gradient-only');
   const overlayPct = Math.min(90, Math.max(0, Number(hero.overlayOpacity ?? (hasBanner ? 40 : 0))));
   const minH = Math.min(800, Math.max(280, Number(hero.minHeight ?? 420)));
+  const titleSizeCls =
+    hero.titleSize === 'sm'
+      ? 'text-xl sm:text-2xl md:text-3xl'
+      : hero.titleSize === 'md'
+        ? 'text-2xl sm:text-3xl md:text-4xl'
+        : hero.titleSize === 'xl'
+          ? 'text-3xl sm:text-4xl md:text-5xl lg:text-6xl'
+          : 'text-2xl sm:text-3xl md:text-4xl lg:text-5xl';
+  const subtitleSizeCls =
+    hero.subtitleSize === 'sm'
+      ? 'text-sm sm:text-base'
+      : hero.subtitleSize === 'lg'
+        ? 'text-lg sm:text-xl'
+        : 'text-base sm:text-lg';
   const align =
     hero.textAlign === 'right'
       ? 'text-right items-end'
@@ -181,10 +197,10 @@ export default async function HomePage() {
                       {hero.badge}
                     </p>
                   ) : null}
-                  <h1 className="text-2xl font-bold leading-snug text-blue sm:text-3xl md:text-4xl">
+                  <h1 className={`${titleSizeCls} font-bold leading-snug text-blue`}>
                     {hero.title}
                     {hero.subtitle ? (
-                      <span className="mt-1 block text-foreground">{hero.subtitle}</span>
+                      <span className={`mt-1 block ${subtitleSizeCls} text-foreground`}>{hero.subtitle}</span>
                     ) : null}
                   </h1>
                   {hero.description ? (
@@ -277,10 +293,10 @@ export default async function HomePage() {
                   </p>
                 ) : null}
                 <h1
-                  className={`text-2xl font-bold leading-snug sm:text-3xl sm:leading-tight md:text-4xl lg:text-5xl ${titleCls}`}
+                  className={`${titleSizeCls} font-bold leading-snug sm:leading-tight ${titleCls}`}
                 >
                   {hero.title}
-                  {hero.subtitle ? <span className={`block ${subCls}`}>{hero.subtitle}</span> : null}
+                  {hero.subtitle ? <span className={`block ${subtitleSizeCls} ${subCls}`}>{hero.subtitle}</span> : null}
                 </h1>
                 {hero.description ? (
                   <p className={`mt-3 text-sm leading-7 sm:mt-4 sm:text-base md:text-lg ${descCls}`}>
