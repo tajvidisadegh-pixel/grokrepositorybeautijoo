@@ -11,42 +11,22 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Drop enum filter on mediaAssets include
+      - name: Drop MediaKind.salon where filter
         run: |
           set -euo pipefail
-          python3 -c "
-          from pathlib import Path
-          p = Path('backend/src/professionals/professionals.service.ts')
-          t = p.read_text()
-          old = \""\"      mediaAssets: {
-        where: { kind: { in: [MediaKind.salon, MediaKind.portfolio] } },
-        orderBy: { sortOrder: 'asc' as const },
-        select: { id: true, kind: true, url: true, mimeType: true, title: true, sortOrder: true, status: true },
-      },\""\"
-          new = \""\"      mediaAssets: {
-        // Filter salon/portfolio in attachMediaPublicUrls (avoids enum cast before DB migration)
-        orderBy: { sortOrder: 'asc' as const },
-        select: { id: true, kind: true, url: true, mimeType: true, title: true, sortOrder: true, status: true },
-      },\""\"
-          if old not in t:
-              raise SystemExit('block not found')
-          t = t.replace(old, new, 1)
-          # filter kinds in attachMediaPublicUrls
-          old2 = 'const mediaAssets = Array.isArray(pro.mediaAssets) ? pro.mediaAssets.map(mapRow) : pro.mediaAssets;'
-          new2 = \"const mediaAssets = Array.isArray(pro.mediaAssets) ? pro.mediaAssets.filter((m) => m && ((m as {kind?: string}).kind === 'salon' || (m as {kind?: string}).kind === 'portfolio')).map(mapRow) : pro.mediaAssets;\"
-          if old2 in t:
-              t = t.replace(old2, new2, 1)
-          p.write_text(t)
-          print('ok')
-          "
+          FILE=backend/src/professionals/professionals.service.ts
+          # Remove the where line that casts salon enum
+          sed -i '/where: { kind: { in: \[MediaKind.salon, MediaKind.portfolio\] } },/d' "$FILE"
+          grep -n "MediaKind.salon\|mediaAssets:" "$FILE" | head -20
+          grep -q "mediaAssets:" "$FILE"
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add backend/src/professionals/professionals.service.ts
-          git diff --cached --quiet || git commit -m "fix(#33): avoid MediaKind.salon filter until DB enum migrated"
+          git diff --cached --quiet || git commit -m "fix(#33): drop MediaKind.salon where filter for e2e DB compatibility"
           git push
-      - name: Cleanup and trigger
+      - name: Cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
