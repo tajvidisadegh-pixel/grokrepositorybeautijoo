@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Remove one-shot apply/fix/restore GitHub workflows (gap 18.15).
+"""Remove one-shot apply/fix/restore GitHub workflows.
 
-Keeps stable pipelines: ci, codeql, production-zips, create-release-tag,
-sync-backend-deploy-branch, post-deploy-smoke, emergency-restore-schema.
+Keeps only stable pipelines. Does not touch application source code.
 """
 from __future__ import annotations
 
@@ -13,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WF = ROOT / ".github" / "workflows"
 
+# Stable pipelines only — no emergency/patch helpers
 KEEP = {
     "ci.yml",
     "codeql.yml",
@@ -20,28 +20,28 @@ KEEP = {
     "create-release-tag.yml",
     "sync-backend-deploy-branch.yml",
     "post-deploy-smoke.yml",
-    "emergency-restore-schema.yml",
-    # cleanup itself — deleted after success by the workflow if desired
-    "cleanup-ad-hoc-workflows.yml",
 }
 
-# Prefixes / patterns that mark temporary patch/restore workflows
 AD_HOC_RE = re.compile(
     r"^(apply-|fix-|restore-|patch-|install-|remove-|reapply-|run-|add-|admin-|"
-    r"r184-|sed-|emergency-restore(?!-schema))",
+    r"r184-|sed-|emergency-|decode-|diag-|social-links)",
     re.I,
 )
+
+# Explicit leftovers that do not match prefix patterns
+EXTRA_AD_HOC = {
+    "sed-18-4.yml",
+    "r184-jalali_ts.yml",
+    "cleanup-ad-hoc-workflows.yml",  # self — remove after last successful run via commit
+}
 
 
 def is_ad_hoc(name: str) -> bool:
     if name in KEEP:
         return False
-    if name == "emergency-restore-schema.yml":
-        return False
-    if AD_HOC_RE.match(name):
+    if name in EXTRA_AD_HOC:
         return True
-    # leftover one-offs
-    if name in {"sed-18-4.yml", "r184-jalali_ts.yml"}:
+    if AD_HOC_RE.match(name):
         return True
     return False
 
@@ -64,7 +64,6 @@ def main() -> int:
     print(f"kept {len(kept)}")
     for n in kept:
         print(f"  + {n}")
-    # drop ci-trigger noise files under .github/
     gh = ROOT / ".github"
     for p in gh.glob("ci-trigger-*.txt"):
         p.unlink()
