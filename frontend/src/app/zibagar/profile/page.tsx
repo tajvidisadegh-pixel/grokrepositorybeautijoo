@@ -129,7 +129,7 @@ export default function ZibagarProfilePage() {
       }
       const updated = await updateMyProfessional({ socialLinks: payload });
       setPro(updated);
-      setSocialMsg('saved');
+      setSocialMsg('لینک‌ها ذخیره شد');
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -374,11 +374,11 @@ export default function ZibagarProfilePage() {
 
       <Card className="space-y-3 border-dashed border-border/70 bg-gray-light/20">
         <div>
-          <h3 className="text-sm font-medium text-gray">social links (optional)</h3>
-          <p className="mt-0.5 text-xs text-gray-muted">shown at bottom of public page only</p>
+          <h3 className="text-sm font-medium text-gray">لینک‌های ارتباطی (اختیاری)</h3>
+          <p className="mt-0.5 text-xs text-gray-muted">فقط در پایین صفحه عمومی نمایش داده می‌شود</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          {([['instagram','Instagram'],['telegram','Telegram'],['website','Website'],['phone','Phone'],['whatsapp','WhatsApp']] as const).map(([key,label]) => (
+          {([['instagram','اینستاگرام'],['telegram','تلگرام'],['website','وب‌سایت'],['phone','شماره تماس'],['whatsapp','واتساپ']] as const).map(([key,label]) => (
             <label key={key} className="block text-xs text-gray">{label}
               <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-coral" dir="ltr"
                 value={(socialForm as any)[key] || ''} onChange={(e) => setSocialForm((prev) => ({ ...prev, [key]: e.target.value }))} />
@@ -386,7 +386,7 @@ export default function ZibagarProfilePage() {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" loading={socialBusy} onClick={saveSocialLinks}>Save links</Button>
+          <Button size="sm" variant="outline" loading={socialBusy} onClick={saveSocialLinks}>ذخیره لینک‌ها</Button>
           {socialMsg && <span className="text-xs text-coral">{socialMsg}</span>}
         </div>
       </Card>
