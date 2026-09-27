@@ -37,6 +37,8 @@ export type AuthMeResponse = {
     bio?: string | null;
   } | null;
   roles: string[];
+  /** Issue #37 — granular admin permissions from role assignments */
+  permissions?: string[];
   professional: {
     id: string;
     slug: string;
