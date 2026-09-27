@@ -1,0 +1,35 @@
+name: Apply issue 29 Shamsi dates
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-i29-dates.yml'
+      - 'scripts/i29_patch_p*.b64'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: |
+          set -e
+          cat scripts/i29_patch_p*.b64 | tr -d '\n' | base64 -d > /tmp/i29.patch
+          git apply --whitespace=nowarn /tmp/i29.patch || git apply --3way /tmp/i29.patch
+          echo "Patch applied"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/utils.ts frontend/src/lib/jalali.ts \
+            frontend/src/app/admin/bookings/page.tsx \
+            frontend/src/app/panel/bookings/page.tsx \
+            frontend/src/app/panel/notifications/page.tsx \
+            frontend/src/app/panel/page.tsx \
+            'frontend/src/app/professionals/[slug]/page.tsx' \
+            frontend/src/app/zibagar/bookings/page.tsx \
+            frontend/src/app/zibagar/hours/page.tsx \
+            frontend/src/app/zibagar/page.tsx
+          git diff --staged --quiet || git commit -m "feat(#29): unify all dates to Shamsi (Jalali) with relative labels"
+          git push
