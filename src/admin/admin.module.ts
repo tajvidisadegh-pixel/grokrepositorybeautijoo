@@ -7,6 +7,7 @@ import { AdminSiteCmsController } from './admin-site-cms.controller';
 import { PublicSiteController } from './public-site.controller';
 import { AdminCatalogController } from './admin-catalog.controller';
 import { AdminOpsController } from './admin-ops.controller';
+import { AdminSettingsController } from './admin-settings.controller';
 
 @Module({
   imports: [AuthModule],
@@ -17,6 +18,7 @@ import { AdminOpsController } from './admin-ops.controller';
     PublicSiteController,
     AdminCatalogController,
     AdminOpsController,
+    AdminSettingsController,
   ],
   providers: [AdminService],
   exports: [AdminService],
