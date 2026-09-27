@@ -11,29 +11,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Restore media.service.ts from known good commit + salon patch
+      - name: Restore media.service.ts
         run: |
-          set -e
+          set -euo pipefail
           curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/c9774cbae4f8210179d84fae72c54eb13a51ffcd/backend/src/media/media.service.ts" -o backend/src/media/media.service.ts
-          python3 - <<'PY'
-          from pathlib import Path
-          t = Path('backend/src/media/media.service.ts').read_text()
-          old = """      if (isVideo && kind !== MediaKind.portfolio && kind !== MediaKind.service) {
-        throw new BadRequestException('ویدیو فقط برای پورتفولیو یا خدمت مجاز است');
-      }"""
-          new = """      if (
-        isVideo &&
-        kind !== MediaKind.portfolio &&
-        kind !== MediaKind.service &&
-        kind !== MediaKind.salon
-      ) {
-        throw new BadRequestException('ویدیو فقط برای پورتفولیو، خدمت یا سالن مجاز است');
-      }"""
-          if old not in t:
-            raise SystemExit('pattern missing')
-          Path('backend/src/media/media.service.ts').write_text(t.replace(old, new, 1))
-          print('ok', Path('backend/src/media/media.service.ts').stat().st_size)
-          PY
+          python3 -c "from pathlib import Path; t=Path('backend/src/media/media.service.ts').read_text(); t2=t.replace('kind !== MediaKind.portfolio && kind !== MediaKind.service', 'kind !== MediaKind.portfolio && kind !== MediaKind.service && kind !== MediaKind.salon', 1); assert 'MediaKind.salon' in t2; Path('backend/src/media/media.service.ts').write_text(t2); print(len(t2))"
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
