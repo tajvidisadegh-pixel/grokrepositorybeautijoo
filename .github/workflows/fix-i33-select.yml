@@ -14,38 +14,21 @@ jobs:
       - name: Narrow mediaAssets select
         run: |
           set -euo pipefail
-          python3 << 'PY'
+          python3 -c "
           from pathlib import Path
           p = Path('backend/src/professionals/professionals.service.ts')
           t = p.read_text()
-          old = """      mediaAssets: {
-        where: { kind: { in: [MediaKind.salon, MediaKind.portfolio] } },
-        orderBy: { sortOrder: 'asc' as const },
-      },"""
-          new = """      mediaAssets: {
-        where: { kind: { in: [MediaKind.salon, MediaKind.portfolio] } },
-        orderBy: { sortOrder: 'asc' as const },
-        select: {
-          id: true,
-          kind: true,
-          url: true,
-          mimeType: true,
-          title: true,
-          sortOrder: true,
-          status: true,
-        },
-      },"""
-          if old not in t:
-              if 'select: {' in t and 'MediaKind.salon' in t:
-                  print('already has select')
-              else:
-                  raise SystemExit('mediaAssets block not found')
+          needle = \"orderBy: { sortOrder: 'asc' as const },\\n      },\\n      professionalServices:\"
+          insert = \"orderBy: { sortOrder: 'asc' as const },\\n        select: { id: true, kind: true, url: true, mimeType: true, title: true, sortOrder: true, status: true },\\n      },\\n      professionalServices:\"
+          if 'select: { id: true, kind: true' in t:
+              print('already patched')
+          elif needle not in t:
+              raise SystemExit('needle missing')
           else:
-              t = t.replace(old, new, 1)
+              t = t.replace(needle, insert, 1)
               p.write_text(t)
-              print('patched select')
-          assert 'MediaKind.salon' in p.read_text()
-          PY
+              print('patched', len(t))
+          "
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
