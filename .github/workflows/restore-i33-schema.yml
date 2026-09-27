@@ -1,0 +1,36 @@
+name: restore-i33-schema
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore schema.prisma with salon kind
+        run: |
+          set -e
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/c9774cbae4f8210179d84fae72c54eb13a51ffcd/backend/prisma/schema.prisma" -o backend/prisma/schema.prisma
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/prisma/schema.prisma')
+          t = p.read_text()
+          old = "enum MediaKind {\n  avatar\n  cover\n  logo\n  portfolio\n  service\n}"
+          new = "enum MediaKind {\n  avatar\n  cover\n  logo\n  portfolio\n  service\n  salon\n}"
+          if 'salon' not in t:
+            if old not in t:
+              raise SystemExit('MediaKind block not found')
+            t = t.replace(old, new, 1)
+            p.write_text(t)
+          assert 'model User' in t
+          assert 'salon' in t
+          print('schema restored', len(t))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/prisma/schema.prisma
+          git diff --cached --quiet || git commit -m "fix(#33): restore full schema.prisma + MediaKind.salon"
+          git push
