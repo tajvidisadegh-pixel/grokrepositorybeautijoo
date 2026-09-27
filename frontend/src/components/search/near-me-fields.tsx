@@ -38,12 +38,10 @@ export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props)
         setLng(ln);
         setStatus('موقعیت دریافت شد. در حال اعمال فیلتر نزدیک‌ترین…');
         setBusy(false);
-        // Submit parent form with distance sort
         const form = document.querySelector('form[action="/search"]') as HTMLFormElement | null;
         if (form) {
-          let sortSel = form.querySelector('select[name="sort"]') as HTMLSelectElement | null;
+          const sortSel = form.querySelector('select[name="sort"]') as HTMLSelectElement | null;
           if (sortSel) sortSel.value = 'distance';
-          // Ensure hidden inputs exist with new values before submit
           window.setTimeout(() => form.requestSubmit(), 50);
         }
       },
