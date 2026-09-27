@@ -12,7 +12,7 @@ import {
 } from '@/lib/panel-api';
 import { persianBookingStatus, persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatRelativeDate } from '@/lib/utils';
 
 type BookingWithReview = BookingListItem & {
   review?: { id?: string } | null;
@@ -143,7 +143,7 @@ export default function PanelBookingsPage() {
                     <div>
                       <p className="font-semibold">{proName}</p>
                       <p className="text-xs text-gray">
-                        {formatDate(b.startAt, { style: 'short', includeTime: true })}
+                        {formatRelativeDate(b.startAt)}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1">

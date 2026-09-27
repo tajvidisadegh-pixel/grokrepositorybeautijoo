@@ -9,7 +9,7 @@ import {
   type NotificationItem,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
-import { cn, formatDateTime } from '@/lib/utils';
+import { cn, formatRelativeDate } from '@/lib/utils';
 
 function emitUnreadChanged() {
   if (typeof window !== 'undefined') {
@@ -158,7 +158,7 @@ export default function PanelNotificationsPage() {
                       >
                         {body}
                       </p>
-                      <p className="mt-1 text-xs text-gray">{formatDateTime(n.createdAt)}</p>
+                      <p className="mt-1 text-xs text-gray">{formatRelativeDate(n.createdAt)}</p>
                     </div>
                     <span className="shrink-0 text-xs text-gray">
                       {isOpen ? 'بستن' : 'باز کردن'}

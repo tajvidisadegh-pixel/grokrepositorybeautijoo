@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { persianBookingStatus } from '@/lib/persian-status';
 import { formatDate, formatPrice } from '@/lib/utils';
+import { tehranTodayIso } from '@/lib/jalali';
 import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 
 type BookingRow = {
@@ -154,8 +155,7 @@ export default function AdminBookingsPage() {
   const applyQuick = (kind: string) => {
     setPage(1);
     if (kind === 'today') {
-      const t = new Date();
-      const y = t.toISOString().slice(0, 10);
+      const y = tehranTodayIso();
       setStartDate(y);
       setEndDate(y);
       setStatus('');
