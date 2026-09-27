@@ -1,0 +1,8 @@
+name: apply-i36-social-links
+on:
+  workflow_dispatch:
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "placeholder - will replace"
