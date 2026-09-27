@@ -11,7 +11,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Download and patch schema
+      - name: Restore schema + migration
         run: |
           set -e
           curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/fa63205669c9f679693de7683a2754581f2f0f20/backend/prisma/schema.prisma" -o backend/prisma/schema.prisma
@@ -19,7 +19,7 @@ jobs:
           from pathlib import Path
           p = Path('backend/prisma/schema.prisma')
           t = p.read_text()
-          assert 'model Professional' in t
+          assert 'model Professional' in t and len(t) > 20000
           if 'socialLinks' not in t:
               old = '  selectedCategoryIds  Json?              @map("selected_category_ids")\n  verifiedAt'
               new = '  selectedCategoryIds  Json?              @map("selected_category_ids")\n  socialLinks          Json?              @map("social_links")\n  verifiedAt'
@@ -29,11 +29,10 @@ jobs:
           PY
           mkdir -p backend/prisma/migrations/20260927140000_professional_social_links
           echo 'ALTER TABLE "professionals" ADD COLUMN IF NOT EXISTS "social_links" JSONB;' > backend/prisma/migrations/20260927140000_professional_social_links/migration.sql
-      - name: Patch API files
+      - name: Patch backend API
         run: |
           python3 << 'PY'
           from pathlib import Path
-          # controller
           c = Path('backend/src/professionals/professionals.controller.ts').read_text()
           c = c.replace(
               "import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min } from 'class-validator';",
@@ -45,7 +44,7 @@ jobs:
                   "  @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedCategoryIds?: string[];\n  @IsOptional() @IsObject() socialLinks?: { instagram?: string; telegram?: string; website?: string; phone?: string; whatsapp?: string };\n}",
               )
           Path('backend/src/professionals/professionals.controller.ts').write_text(c)
-          # service
+
           s = Path('backend/src/professionals/professionals.service.ts').read_text()
           if 'socialLinks?:' not in s:
               s = s.replace(
@@ -78,7 +77,12 @@ jobs:
               if old in s:
                   s = s.replace(old, new)
           Path('backend/src/professionals/professionals.service.ts').write_text(s)
-          # panel-api
+          print('backend patched', s.count('socialLinks'))
+          PY
+      - name: Patch panel-api types
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
           p = Path('frontend/src/lib/panel-api.ts').read_text()
           if 'SocialLinks' not in p:
               p = p.replace('export type OwnProfessional = {', '''export type SocialLinks = {
@@ -94,13 +98,211 @@ export type OwnProfessional = {''')
                   '  logoUrl?: string | null; selectedCategoryIds?: string[] | null;\n  socialLinks?: SocialLinks | null;\n  professionalServices?: ProfessionalServiceItem[];',
               )
           Path('frontend/src/lib/panel-api.ts').write_text(p)
-          print('done', 'socialLinks' in Path('backend/src/professionals/professionals.service.ts').read_text())
+          print('panel-api', 'SocialLinks' in p)
           PY
-      - name: Commit
+      - name: Patch zibagar profile UI
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          zp = Path('frontend/src/app/zibagar/profile/page.tsx').read_text()
+          if 'socialForm' in zp:
+              print('profile already has social UI')
+              raise SystemExit(0)
+          if 'updateMyProfessional' not in zp:
+              zp = zp.replace(
+                  """  fetchMyProfessional,
+  publishMyProfessional,
+  unpublishMyProfessional,
+  resolveMediaUrl,
+  type OwnProfessional,
+} from '@/lib/panel-api';""",
+                  """  fetchMyProfessional,
+  publishMyProfessional,
+  unpublishMyProfessional,
+  updateMyProfessional,
+  resolveMediaUrl,
+  type OwnProfessional,
+  type SocialLinks,
+} from '@/lib/panel-api';""",
+              )
+          zp = zp.replace(
+              '  const [confirm, setConfirm] = useState(false);\n',
+              '''  const [confirm, setConfirm] = useState(false);
+  const [socialForm, setSocialForm] = useState<SocialLinks>({});
+  const [socialBusy, setSocialBusy] = useState(false);
+  const [socialMsg, setSocialMsg] = useState<string | null>(null);
+'''
+          )
+          zp = zp.replace(
+              '        if (!c) setPro(data);\n',
+              '''        if (!c) {
+          setPro(data);
+          const sl = (data as OwnProfessional).socialLinks || {};
+          setSocialForm({
+            instagram: sl.instagram || '',
+            telegram: sl.telegram || '',
+            website: sl.website || '',
+            phone: sl.phone || '',
+            whatsapp: sl.whatsapp || '',
+          });
+        }
+'''
+          )
+          if 'saveSocialLinks' not in zp:
+              handler = '''
+  async function saveSocialLinks() {
+    setSocialBusy(true);
+    setSocialMsg(null);
+    setError(null);
+    try {
+      const payload: SocialLinks = {};
+      for (const k of ['instagram', 'telegram', 'website', 'phone', 'whatsapp'] as const) {
+        const v = (socialForm[k] || '').trim();
+        if (v) payload[k] = v;
+      }
+      const updated = await updateMyProfessional({ socialLinks: payload });
+      setPro(updated);
+      setSocialMsg('لینک‌ها ذخیره شد');
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setSocialBusy(false);
+    }
+  }
+
+'''
+              zp = zp.replace(
+                  '  const locations = pro?.locations || [];\n\n  return (',
+                  '  const locations = pro?.locations || [];\n' + handler + '  return ('
+              )
+          section = '''
+      <Card className="space-y-3 border-dashed border-border/70 bg-gray-light/20">
+        <div>
+          <h3 className="text-sm font-medium text-gray">لینک‌های ارتباطی (اختیاری)</h3>
+          <p className="mt-0.5 text-xs text-gray-muted">
+            این بخش فقط در پایین صفحه عمومی نمایش داده می‌شود و در ثبت‌نام اجباری نیست.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(
+            [
+              ['instagram', 'اینستاگرام', '@username یا لینک'],
+              ['telegram', 'تلگرام', '@channel یا لینک'],
+              ['website', 'وب‌سایت', 'https://...'],
+              ['phone', 'شماره تماس', '09...'],
+              ['whatsapp', 'واتساپ', '09...'],
+            ] as const
+          ).map(([key, label, ph]) => (
+            <label key={key} className="block text-xs text-gray">
+              {label}
+              <input
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-coral"
+                dir="ltr"
+                placeholder={ph}
+                value={(socialForm as any)[key] || ''}
+                onChange={(e) =>
+                  setSocialForm((prev) => ({ ...prev, [key]: e.target.value }))
+                }
+              />
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" loading={socialBusy} onClick={saveSocialLinks}>
+            ذخیره لینک‌ها
+          </Button>
+          {socialMsg && <span className="text-xs text-coral">{socialMsg}</span>}
+        </div>
+      </Card>
+'''
+          if 'لینک‌های ارتباطی' not in zp:
+              zp = zp.replace('      {confirm && (', section + '\n      {confirm && (')
+          Path('frontend/src/app/zibagar/profile/page.tsx').write_text(zp)
+          print('profile UI ok', 'saveSocialLinks' in zp)
+          PY
+      - name: Patch public professional page
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          pub = Path('frontend/src/app/professionals/[slug]/page.tsx').read_text()
+          if 'Issue #36' in pub:
+              print('public already patched')
+              raise SystemExit(0)
+          footer = '''
+      {/* Issue #36 — social links footer */}
+      {(() => {
+        const sl = (pro as { socialLinks?: Record<string, string | null> | null }).socialLinks;
+        if (!sl || typeof sl !== 'object') return null;
+        const items: { label: string; href: string; text: string }[] = [];
+        const ig = (sl.instagram || '').trim();
+        if (ig) {
+          const href = ig.startsWith('http') ? ig : `https://instagram.com/${ig.replace(/^@/, '')}`;
+          items.push({ label: 'اینستاگرام', href, text: ig.startsWith('http') ? 'اینستاگرام' : `@${ig.replace(/^@/, '')}` });
+        }
+        const tg = (sl.telegram || '').trim();
+        if (tg) {
+          const href = tg.startsWith('http') ? tg : `https://t.me/${tg.replace(/^@/, '')}`;
+          items.push({ label: 'تلگرام', href, text: tg.startsWith('http') ? 'تلگرام' : `@${tg.replace(/^@/, '')}` });
+        }
+        const web = (sl.website || '').trim();
+        if (web) {
+          const href = web.startsWith('http') ? web : `https://${web}`;
+          items.push({ label: 'وب‌سایت', href, text: web.replace(/^https?:\\/\\//, '') });
+        }
+        const phone = (sl.phone || '').trim();
+        if (phone) items.push({ label: 'تماس', href: `tel:${phone}`, text: phone });
+        const wa = (sl.whatsapp || '').trim();
+        if (wa) {
+          const num = wa.replace(/\\D/g, '');
+          items.push({ label: 'واتساپ', href: `https://wa.me/${num.startsWith('98') ? num : num.replace(/^0/, '98')}`, text: wa });
+        }
+        if (!items.length) return null;
+        return (
+          <p className="mt-6 border-t border-border/40 pt-4 text-center text-xs text-gray-muted">
+            {items.map((it, i) => (
+              <span key={it.label}>
+                {i > 0 && <span className="mx-2 opacity-40">·</span>}
+                <a href={it.href} target="_blank" rel="noopener noreferrer" className="hover:text-coral transition-colors">
+                  {it.label}: <span dir="ltr">{it.text}</span>
+                </a>
+              </span>
+            ))}
+          </p>
+        );
+      })()}
+'''
+          target = '''      {hoursLine && (
+        <p className="mt-8 border-t border-border/60 pt-4 text-center text-sm text-gray">
+          ساعات کاری: {hoursLine}
+        </p>
+      )}
+    </div>
+  );
+}'''
+          if target in pub:
+              pub = pub.replace(target, '''      {hoursLine && (
+        <p className="mt-8 border-t border-border/60 pt-4 text-center text-sm text-gray">
+          ساعات کاری: {hoursLine}
+        </p>
+      )}
+''' + footer + '''
+    </div>
+  );
+}''')
+              Path('frontend/src/app/professionals/[slug]/page.tsx').write_text(pub)
+              print('public UI ok')
+          else:
+              print('WARNING: public page anchor not found')
+          PY
+      - name: Cleanup helper files
+        run: |
+          rm -f .github/workflows/decode-i36-schema.yml
+          rm -rf .github/i36 || true
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status
-          git diff --staged --quiet || git commit -m "feat(#36): socialLinks schema+API+types"
+          git diff --staged --quiet || git commit -m "feat(#36): social links on professional profile (schema+API+UI)"
           git push
