@@ -1,0 +1,22 @@
+name: apply-i33-loc
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-i33-loc.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write locations page
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          import base64
+          from pathlib import Path
+          b64 = open('/tmp/loc.b64','w')
+          PY
+          echo 'placeholder'
