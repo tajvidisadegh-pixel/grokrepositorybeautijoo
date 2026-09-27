@@ -29,31 +29,13 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 
 const TEHRAN_TZ = 'Asia/Tehran';
 
+/** Group header: weekday + full Jalali date (canonical). */
 function dateKeyFa(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('fa-IR-u-ca-persian', {
-      timeZone: TEHRAN_TZ,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return iso.slice(0, 10);
-  }
+  return formatDate(iso, { style: 'long', weekday: true });
 }
 
 function timeFa(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('fa-IR', {
-      timeZone: TEHRAN_TZ,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-  } catch {
-    return '';
-  }
+  return formatTime24(iso);
 }
 
 function dayKey(d: Date): string {
@@ -172,12 +154,7 @@ export default function ZibagarBookingsPage() {
       d.setUTCDate(weekStart.getUTCDate() + i);
       days.push({
         key: dayKey(d),
-        label: d.toLocaleDateString('fa-IR-u-ca-persian', {
-          timeZone: TEHRAN_TZ,
-          weekday: 'short',
-          day: 'numeric',
-          month: 'short',
-        }),
+        label: formatDate(d, { style: 'short', weekday: 'short' }),
         date: d,
       });
     }
