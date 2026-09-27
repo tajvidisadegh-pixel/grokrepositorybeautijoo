@@ -2,31 +2,73 @@ import {
   assertUploadSize,
   findSuspiciousReason,
   uploadMaxBytes,
+  uploadMaxImageBytes,
+  uploadMaxVideoBytes,
   DEFAULT_UPLOAD_MAX_BYTES,
+  DEFAULT_UPLOAD_MAX_IMAGE_BYTES,
+  DEFAULT_UPLOAD_MAX_VIDEO_BYTES,
+  isVideoMime,
 } from '../../src/media/upload-security';
 import { sniffImage } from '../../src/media/image-sniff';
 
 describe('upload-security', () => {
-  const prev = process.env.UPLOAD_MAX_BYTES;
+  const prevBytes = process.env.UPLOAD_MAX_BYTES;
+  const prevImage = process.env.UPLOAD_MAX_IMAGE_BYTES;
+  const prevVideo = process.env.UPLOAD_MAX_VIDEO_BYTES;
 
   afterEach(() => {
-    if (prev === undefined) delete process.env.UPLOAD_MAX_BYTES;
-    else process.env.UPLOAD_MAX_BYTES = prev;
+    if (prevBytes === undefined) delete process.env.UPLOAD_MAX_BYTES;
+    else process.env.UPLOAD_MAX_BYTES = prevBytes;
+    if (prevImage === undefined) delete process.env.UPLOAD_MAX_IMAGE_BYTES;
+    else process.env.UPLOAD_MAX_IMAGE_BYTES = prevImage;
+    if (prevVideo === undefined) delete process.env.UPLOAD_MAX_VIDEO_BYTES;
+    else process.env.UPLOAD_MAX_VIDEO_BYTES = prevVideo;
   });
 
-  it('default max bytes is 8 MiB', () => {
+  it('default image max is 10 MiB (issue #31)', () => {
     delete process.env.UPLOAD_MAX_BYTES;
+    delete process.env.UPLOAD_MAX_IMAGE_BYTES;
+    expect(DEFAULT_UPLOAD_MAX_IMAGE_BYTES).toBe(10 * 1024 * 1024);
     expect(uploadMaxBytes()).toBe(DEFAULT_UPLOAD_MAX_BYTES);
+    expect(uploadMaxImageBytes()).toBe(DEFAULT_UPLOAD_MAX_IMAGE_BYTES);
   });
 
-  it('assertUploadSize rejects oversized', () => {
-    process.env.UPLOAD_MAX_BYTES = '100';
+  it('default video max is 500 MiB (issue #31)', () => {
+    delete process.env.UPLOAD_MAX_VIDEO_BYTES;
+    expect(DEFAULT_UPLOAD_MAX_VIDEO_BYTES).toBe(500 * 1024 * 1024);
+    expect(uploadMaxVideoBytes()).toBe(DEFAULT_UPLOAD_MAX_VIDEO_BYTES);
+  });
+
+  it('assertUploadSize rejects oversized image', () => {
+    process.env.UPLOAD_MAX_IMAGE_BYTES = '100';
     expect(() => assertUploadSize(101)).toThrow(/حجم فایل/);
+    expect(() => assertUploadSize(101, 'image/jpeg')).toThrow(/حجم فایل/);
   });
 
-  it('assertUploadSize accepts within limit', () => {
-    process.env.UPLOAD_MAX_BYTES = '1000';
+  it('assertUploadSize rejects oversized video', () => {
+    process.env.UPLOAD_MAX_VIDEO_BYTES = '200';
+    expect(() => assertUploadSize(201, 'video/mp4')).toThrow(/حجم فایل/);
+  });
+
+  it('assertUploadSize accepts image within limit', () => {
+    process.env.UPLOAD_MAX_IMAGE_BYTES = '1000';
     expect(() => assertUploadSize(500)).not.toThrow();
+    expect(() => assertUploadSize(500, 'image/png')).not.toThrow();
+  });
+
+  it('assertUploadSize accepts video within limit', () => {
+    process.env.UPLOAD_MAX_VIDEO_BYTES = '5000';
+    expect(() => assertUploadSize(4000, 'video/webm')).not.toThrow();
+  });
+
+  it('assertUploadSize rejects empty file', () => {
+    expect(() => assertUploadSize(0)).toThrow(/خالی/);
+  });
+
+  it('isVideoMime detects video types', () => {
+    expect(isVideoMime('video/mp4')).toBe(true);
+    expect(isVideoMime('image/jpeg')).toBe(false);
+    expect(isVideoMime(null)).toBe(false);
   });
 
   it('flags HTML polyglot', () => {
