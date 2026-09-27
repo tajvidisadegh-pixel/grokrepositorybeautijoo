@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,14 @@ import {
   fetchMyLocations,
   addMyLocation,
   removeMyLocation,
+  deleteMyMedia,
+  resolveMediaUrl,
+  isAllowedImageFile,
   type LocationItem,
 } from '@/lib/panel-api';
 import { apiClient } from '@/lib/api';
 import { friendlyApiError } from '@/lib/api-errors';
+import { uploadMyMedia } from '@/lib/media-upload';
 
 const MapPicker = dynamic(() => import('@/components/map/location-picker'), {
   ssr: false,
@@ -52,6 +56,9 @@ export default function ZibagarLocationsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [salonMedia, setSalonMedia] = useState<Array<{ id: string; publicUrl?: string | null; url?: string | null; mimeType?: string | null }>>([]);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +103,11 @@ export default function ZibagarLocationsPage() {
       } else {
         setForm(emptyForm());
       }
+      try {
+        const res = await apiClient.get<Array<{ id: string; publicUrl?: string; url?: string; mimeType?: string }> | { items?: Array<{ id: string; publicUrl?: string; url?: string; mimeType?: string }> }>('/professionals/me/media?kind=salon');
+        const list = Array.isArray(res) ? res : res.items || [];
+        setSalonMedia(list.map((m) => ({ ...m, publicUrl: resolveMediaUrl(m.publicUrl || m.url) || m.publicUrl || m.url })));
+      } catch { setSalonMedia([]); }
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -172,6 +184,25 @@ export default function ZibagarLocationsPage() {
     } finally {
       setDeleting(false);
     }
+  }
+
+
+  async function onSalonUpload(file: File) {
+    const isVideo = (file.type || '').startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name);
+    if (!isVideo && !isAllowedImageFile(file)) { setMsg('فقط تصویر یا ویدیو مجاز است.'); return; }
+    if (!isVideo && isAllowedImageFile(file) && file.size > 10 * 1024 * 1024) { setMsg('حجم تصویر حداکثر ۱۰ مگابایت است.'); return; }
+    if (isVideo && file.size > 500 * 1024 * 1024) { setMsg('حجم ویدیو حداکثر ۵۰۰ مگابایت است.'); return; }
+    setMediaBusy(true); setMsg(null); setError(null);
+    try { await uploadMyMedia(file, 'salon'); setMsg('رسانه سالن اضافه شد.'); await load(); }
+    catch (e) { setError(friendlyApiError(e)); }
+    finally { setMediaBusy(false); if (mediaInputRef.current) mediaInputRef.current.value = ''; }
+  }
+  async function onSalonDelete(id: string) {
+    if (!confirm('این رسانه سالن حذف شود؟')) return;
+    setMediaBusy(true);
+    try { await deleteMyMedia(id); setSalonMedia((prev) => prev.filter((m) => m.id !== id)); setMsg('رسانه حذف شد.'); }
+    catch (e) { setError(friendlyApiError(e)); }
+    finally { setMediaBusy(false); }
   }
 
   if (loading) return <PanelLoading />;
@@ -300,6 +331,36 @@ export default function ZibagarLocationsPage() {
             </Button>
           )}
         </div>
+      </Card>
+
+
+      <Card className="space-y-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">عکس و فیلم سالن</h2>
+            <p className="mt-1 text-sm text-gray">جدا از نمونه‌کار خدمات</p>
+          </div>
+          <div>
+            <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onSalonUpload(f); }} />
+            <Button size="sm" loading={mediaBusy} onClick={() => mediaInputRef.current?.click()}>افزودن عکس / فیلم</Button>
+          </div>
+        </div>
+        {salonMedia.length === 0 ? (
+          <p className="text-sm text-gray">هنوز رسانه‌ای برای سالن ثبت نشده است.</p>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {salonMedia.map((m) => {
+              const url = m.publicUrl || m.url || '';
+              const video = (m.mimeType || '').startsWith('video/');
+              return (
+                <div key={m.id} className="relative h-28 w-40 shrink-0 overflow-hidden rounded-xl border border-border bg-gray-light/30">
+                  {video ? <video src={url} className="h-full w-full object-cover" muted playsInline /> : <img src={url} alt="" className="h-full w-full object-cover" />}
+                  <button type="button" disabled={mediaBusy} onClick={() => void onSalonDelete(m.id)} className="absolute left-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">حذف</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       {!item && (
