@@ -390,6 +390,7 @@ export class ProfessionalsService {
     firstName?: string; lastName?: string; displayName?: string;
     avatarUrl?: string; profileBio?: string;
     selectedCategoryIds?: string[];
+    socialLinks?: { instagram?: string | null; telegram?: string | null; website?: string | null; phone?: string | null; whatsapp?: string | null } | null;
   }) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
     if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
@@ -404,6 +405,21 @@ export class ProfessionalsService {
     if (data.coverImageUrl !== undefined) proData.coverImageUrl = data.coverImageUrl.trim() || null;
     if (data.selectedCategoryIds !== undefined) {
       proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;
+    }
+    if (data.socialLinks !== undefined) {
+      if (data.socialLinks === null) {
+        proData.socialLinks = Prisma.JsonNull;
+      } else {
+        const allowed = ['instagram', 'telegram', 'website', 'phone', 'whatsapp'] as const;
+        const cleaned: Record<string, string> = {};
+        for (const k of allowed) {
+          const raw = data.socialLinks[k];
+          if (raw == null) continue;
+          const v = String(raw).trim().slice(0, 200);
+          if (v) cleaned[k] = v;
+        }
+        proData.socialLinks = (Object.keys(cleaned).length ? cleaned : Prisma.JsonNull) as Prisma.InputJsonValue;
+      }
     }
     if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;
 
