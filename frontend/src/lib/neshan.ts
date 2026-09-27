@@ -1,19 +1,14 @@
 /**
  * Neshan (نشان) map helpers — Iranian maps for accurate local routing (issue #33).
- * Uses public neshan.org deep-links (no API key required for navigation).
- * Optional NEXT_PUBLIC_NESHAN_API_KEY enables static map images from Neshan API.
  */
-
 export function neshanMapUrl(lat: number, lng: number, zoom = 15): string {
   return `https://neshan.org/maps/@${lat},${lng},${zoom}z`;
 }
 
-/** Car directions to destination (origin = user current location in Neshan app/web). */
 export function neshanDirectionsUrl(lat: number, lng: number): string {
   return `https://neshan.org/maps/routing/car/destination/${lat},${lng}`;
 }
 
-/** Static map image when API key is present; otherwise null. */
 export function neshanStaticMapUrl(
   lat: number,
   lng: number,
