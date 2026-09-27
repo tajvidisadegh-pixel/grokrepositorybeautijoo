@@ -133,8 +133,10 @@ export function dayOfWeekFromIso(iso: string): DayOfWeekValue {
 
 export function isoToJalaliLabel(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
   const { jy, jm, jd } = toJalali(y, m, d);
-  return `${jd} ${jalaliMonthName(jm)} ${jy}`;
+  const fa = new Intl.NumberFormat('fa-IR');
+  return `${fa.format(jd)} ${jalaliMonthName(jm)} ${fa.format(jy)}`;
 }
 
 /** Today as YYYY-MM-DD in Asia/Tehran */
