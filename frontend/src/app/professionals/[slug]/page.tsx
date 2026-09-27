@@ -228,6 +228,33 @@ export default async function ProfessionalProfilePage({ params }: Props) {
             </section>
           )}
 
+          {(() => {
+            const salon = (pro.mediaAssets || []).filter(
+              (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+            );
+            if (!salon.length) return null;
+            return (
+              <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-foreground">عکس‌های سالن</h2>
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+                  {salon.map((m) => {
+                    const url = m.publicUrl || (m as { url?: string }).url || '';
+                    const video = (m.mimeType || '').startsWith('video/');
+                    return (
+                      <div key={m.id} className="h-36 w-52 shrink-0 overflow-hidden rounded-2xl border border-border bg-gray-light/30">
+                        {video ? (
+                          <video src={url} className="h-full w-full object-cover" controls playsInline />
+                        ) : (
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })()}
+
           <ServicePortfolioGallery
             slug={pro.slug}
             services={(pro.professionalServices || []) as ProfessionalServiceItem[]}
@@ -291,7 +318,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
 
           {pro.locations && pro.locations.length > 0 && (
             <div className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
-              <h2 className="font-bold text-foreground">مکان‌ها</h2>
+              <h2 className="font-bold text-foreground">مکان کار</h2>
               <ul className="mt-3 space-y-3 text-sm">
                 {pro.locations.map((pl) => (
                   <li key={pl.location.id}>
