@@ -9,7 +9,8 @@ type Props = {
 };
 
 /**
- * Hidden lat/lng fields + optional radius + "near me" geolocation button for search form.
+ * Hidden lat/lng + radius + geolocation for near-me search (issue #38 / near-me).
+ * After location is granted, form can be submitted with sort=distance.
  */
 export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props) {
   const [lat, setLat] = useState(defaultLat || '');
@@ -28,16 +29,26 @@ export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props)
       return;
     }
     setBusy(true);
-    setStatus('برای پیدا کردن زیباگرهای نزدیک شما، اجازه دسترسی به موقعیت مکانی را بدهید…');
+    setStatus('اجازه دسترسی به موقعیت مکانی را بدهید…');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLat(String(pos.coords.latitude.toFixed(6)));
-        setLng(String(pos.coords.longitude.toFixed(6)));
-        setStatus('موقعیت دریافت شد — روی «اعمال فیلتر» بزنید یا مرتب‌سازی «نزدیک‌ترین» را انتخاب کنید');
+        const la = pos.coords.latitude.toFixed(6);
+        const ln = pos.coords.longitude.toFixed(6);
+        setLat(la);
+        setLng(ln);
+        setStatus('موقعیت دریافت شد. در حال اعمال فیلتر نزدیک‌ترین…');
         setBusy(false);
+        // Submit parent form with distance sort
+        const form = document.querySelector('form[action="/search"]') as HTMLFormElement | null;
+        if (form) {
+          let sortSel = form.querySelector('select[name="sort"]') as HTMLSelectElement | null;
+          if (sortSel) sortSel.value = 'distance';
+          // Ensure hidden inputs exist with new values before submit
+          window.setTimeout(() => form.requestSubmit(), 50);
+        }
       },
       () => {
-        setStatus('برای استفاده از «نزدیک من»، دسترسی موقعیت مکانی را در مرورگر فعال کنید.');
+        setStatus('برای «نزدیک من»، دسترسی موقعیت مکانی را در مرورگر فعال کنید.');
         setBusy(false);
       },
       { enableHighAccuracy: false, timeout: 12000, maximumAge: 60_000 },
@@ -95,7 +106,9 @@ export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props)
       </div>
       {status && <p className="text-xs text-gray">{status}</p>}
       {lat && lng && (
-        <p className="text-xs text-emerald-700">موقعیت شما برای جستجوی نزدیک فعال است</p>
+        <p className="text-xs text-emerald-700">
+          جستجو بر اساس فاصله از موقعیت شما فعال است — نتایج نزدیک‌تر بالاتر می‌آیند.
+        </p>
       )}
     </div>
   );

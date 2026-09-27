@@ -60,7 +60,8 @@ export function ServicePortfolioGallery({
 
   return (
     <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-bold">نمونه‌کارها</h2>
+      <h2 className="text-lg font-bold">نمونه‌کار خدمات</h2>
+      <p className="mt-1 text-xs text-gray">جدا از عکس‌های سالن — به‌صورت افقی مرور کنید</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
@@ -84,31 +85,34 @@ export function ServicePortfolioGallery({
           </button>
         ))}
       </div>
-      <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {/* Horizontal gallery (issue #33 / #38) */}
+      <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
         {visible.map((m) => (
-          <li key={m.id}>
-            <button
-              type="button"
-              onClick={() => setActive(m)}
-              className="w-full overflow-hidden rounded-2xl border border-border text-right"
-            >
-              {isVideo(m.mimeType) ? (
-                <video src={m.publicUrl} className="aspect-square w-full object-cover" muted playsInline />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={m.publicUrl} alt="" className="aspect-square w-full object-cover" />
-              )}
-              <div className="p-2">
-                <p className="truncate text-xs font-medium">{m.serviceName}</p>
-                <p className="text-xs text-coral">{formatPrice(m.price)}</p>
-              </div>
-            </button>
-          </li>
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setActive(m)}
+            className="w-40 shrink-0 overflow-hidden rounded-2xl border border-border text-right sm:w-52"
+          >
+            {isVideo(m.mimeType) ? (
+              <video src={m.publicUrl} className="h-36 w-full object-cover" muted playsInline />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={m.publicUrl} alt="" className="h-36 w-full object-cover" />
+            )}
+            <div className="p-2">
+              <p className="truncate text-xs font-medium">{m.serviceName}</p>
+              <p className="text-xs text-coral">{formatPrice(m.price)}</p>
+            </div>
+          </button>
         ))}
-      </ul>
+      </div>
 
       {active && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={() => setActive(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          onClick={() => setActive(null)}
+        >
           <div
             className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
