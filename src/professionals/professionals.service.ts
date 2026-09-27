@@ -584,6 +584,7 @@ export class ProfessionalsService {
       mediaAssets: {
         where: { kind: { in: [MediaKind.salon, MediaKind.portfolio] } },
         orderBy: { sortOrder: 'asc' as const },
+        select: { id: true, kind: true, url: true, mimeType: true, title: true, sortOrder: true, status: true },
       },
       professionalServices: {
         where: { isActive: true },
