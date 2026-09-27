@@ -16,10 +16,10 @@ const FULL_ACCESS_ROLES = new Set(['SUPER_ADMIN', 'admin']);
  * Roles and permissions come only from JWT → DB (JwtStrategy),
  * never from request body/query/headers controlled by the client.
  *
- * - SUPER_ADMIN and admin always have full access to all protected resources,
- *   except while in an impersonation session (issue #22).
- * - If @Roles specified: user must have one of the roles (or full-access role).
- * - If @RequirePermissions specified: user must have the permissions (or full-access role).
+ * - SUPER_ADMIN and admin always have full access (except while impersonating).
+ * - If only @Roles: user must have one of the roles.
+ * - If only @RequirePermissions: user must have all listed permissions.
+ * - If both: pass when role OR permissions match (issue #37 channel admins).
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -47,26 +47,33 @@ export class RolesGuard implements CanActivate {
     const roles: string[] = Array.isArray(user?.roles) ? user.roles : [];
     const permissions: string[] = Array.isArray(user?.permissions) ? user.permissions : [];
 
-    // Impersonation sessions must never inherit Super Admin privileges (issue #22)
     const isImpersonating = !!user?.isImpersonating;
 
-    // SUPER_ADMIN and legacy `admin` role have full access — but not while impersonating
     if (!isImpersonating && roles.some((r) => FULL_ACCESS_ROLES.has(r))) {
       return true;
     }
 
-    if (requiredRoles && requiredRoles.length > 0) {
-      const hasRole = requiredRoles.some((r) => roles.includes(r));
-      if (!hasRole) {
-        throw new ForbiddenException('دسترسی مجاز نیست: نقش مورد نیاز یافت نشد');
-      }
+    const hasRole =
+      !!requiredRoles?.length && requiredRoles.some((r) => roles.includes(r));
+    const hasPerms =
+      !!requiredPermissions?.length &&
+      requiredPermissions.every((p) => permissions.includes(p));
+
+    const rolesRequired = !!requiredRoles?.length;
+    const permsRequired = !!requiredPermissions?.length;
+
+    if (rolesRequired && permsRequired) {
+      // Issue #37: channel admin may have permissions without the broad admin role
+      if (hasRole || hasPerms) return true;
+      throw new ForbiddenException('دسترسی مجاز نیست: نقش یا مجوز لازم یافت نشد');
     }
 
-    if (requiredPermissions && requiredPermissions.length > 0) {
-      const hasAllPermissions = requiredPermissions.every((p) => permissions.includes(p));
-      if (!hasAllPermissions) {
-        throw new ForbiddenException('دسترسی مجاز نیست: مجوز لازم را ندارید');
-      }
+    if (rolesRequired && !hasRole) {
+      throw new ForbiddenException('دسترسی مجاز نیست: نقش مورد نیاز یافت نشد');
+    }
+
+    if (permsRequired && !hasPerms) {
+      throw new ForbiddenException('دسترسی مجاز نیست: مجوز لازم را ندارید');
     }
 
     return true;
