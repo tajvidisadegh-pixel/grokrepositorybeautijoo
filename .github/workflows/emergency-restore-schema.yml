@@ -6,6 +6,7 @@ on:
       - '.github/workflows/emergency-restore-schema.yml'
       - 'scripts/patch_social_links.py'
       - 'scripts/patch_i37_admin.py'
+      - 'scripts/patch_i37_finish.py'
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -17,7 +18,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run patches
         run: |
-          if [ -f scripts/patch_i37_admin.py ]; then python3 scripts/patch_i37_admin.py; fi
+          if [ -f scripts/patch_i37_admin.py ]; then python3 scripts/patch_i37_admin.py || true; fi
+          if [ -f scripts/patch_i37_finish.py ]; then python3 scripts/patch_i37_finish.py; fi
           if [ -f scripts/patch_social_links.py ]; then python3 scripts/patch_social_links.py || true; fi
       - name: Commit
         run: |
@@ -25,5 +27,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status
-          git diff --staged --quiet || git commit -m "feat(#37): apply admin channel permissions on APIs"
+          git diff --staged --quiet || git commit -m "feat(#37): finish role cache + panel-api setUserRoles"
           git push
