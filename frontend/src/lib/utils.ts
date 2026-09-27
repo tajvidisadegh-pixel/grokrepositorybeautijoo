@@ -102,7 +102,11 @@ export function priceToWords(amount: number): string {
  */
 export function formatDate(
   iso?: string | Date | null,
-  opts?: { style?: 'short' | 'long'; includeTime?: boolean },
+  opts?: {
+    style?: 'short' | 'long';
+    includeTime?: boolean;
+    weekday?: boolean | 'short' | 'long';
+  },
 ): string {
   if (iso == null || iso === '') return '—';
   try {
@@ -116,6 +120,9 @@ export function formatDate(
       day: 'numeric',
       hourCycle: 'h23',
     };
+    if (opts?.weekday) {
+      options.weekday = opts.weekday === true || opts.weekday === 'long' ? 'long' : 'short';
+    }
     if (opts?.includeTime) {
       options.hour = '2-digit';
       options.minute = '2-digit';
@@ -145,6 +152,60 @@ export function formatTime24(iso?: string | Date | null): string {
       hour12: false,
       hourCycle: 'h23',
     }).format(d);
+  } catch {
+    return String(iso);
+  }
+}
+
+/** Tehran calendar day as YYYY-MM-DD (for comparisons, not display). */
+function tehranDayKey(d: Date): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tehran',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * Practical relative + absolute Jalali label.
+ * e.g. «امروز · ۱۳:۳۰» or «دیروز، ۴ مهر» or full date for older.
+ */
+export function formatRelativeDate(
+  iso?: string | Date | null,
+  opts?: { includeTime?: boolean },
+): string {
+  if (iso == null || iso === '') return '—';
+  try {
+    const d = typeof iso === 'string' || typeof iso === 'number' ? new Date(iso) : iso;
+    if (Number.isNaN(d.getTime())) return String(iso);
+
+    const todayKey = tehranDayKey(new Date());
+    const dayKey = tehranDayKey(d);
+    const includeTime = opts?.includeTime !== false;
+    const timePart = includeTime ? ` · ${formatTime24(d)}` : '';
+
+    if (dayKey === todayKey) {
+      return `امروز${timePart}`;
+    }
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dayKey === tehranDayKey(yesterday)) {
+      return `دیروز، ${formatDate(d, { style: 'short' })}${timePart}`;
+    }
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (dayKey === tehranDayKey(tomorrow)) {
+      return `فردا، ${formatDate(d, { style: 'short' })}${timePart}`;
+    }
+
+    return formatDate(d, { style: 'short', includeTime, weekday: true });
   } catch {
     return String(iso);
   }
