@@ -1,0 +1,56 @@
+name: patch-i33-caption
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-i33-caption.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch caption
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text()
+          old = '''                return (
+                  <div className="mt-4">
+                    <LocationMapView position={{ lat, lng }} height="200px" />
+                    <p className="mt-2 text-xs text-gray-muted">موقعیت تقریبی روی نقشه</p>
+                  </div>
+                );'''
+          new = '''                const isExact = loc?.precision === 'exact';
+                return (
+                  <div className="mt-4">
+                    <LocationMapView position={{ lat, lng }} height="200px" />
+                    <p className="mt-2 text-xs text-gray-muted">
+                      {isExact
+                        ? 'موقعیت دقیق — مشتری می‌تواند با نشان مسیریابی کند'
+                        : 'موقعیت تقریبی (شهر/محله) — پین دقیق عمومی نیست'}
+                    </p>
+                  </div>
+                );'''
+          if old not in t:
+              if 'موقعیت دقیق' in t:
+                  print('already patched')
+              else:
+                  raise SystemExit('block not found')
+          else:
+              p.write_text(t.replace(old, new, 1))
+              print('ok')
+          PY
+      - name: Commit and cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "frontend/src/app/professionals/[slug]/page.tsx"
+          git diff --cached --quiet || git commit -m "fix(#33): location map caption respects exact vs approximate"
+          rm -f .github/workflows/patch-i33-caption.yml
+          git add -A .github/workflows || true
+          git diff --cached --quiet || git commit -m "chore(#33): remove caption helper workflow"
+          git push
