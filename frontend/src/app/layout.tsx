@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/contexts/auth-context';
+import { ThemeProvider } from '@/components/theme/theme-provider';
 import { ImpersonationBanner } from '@/components/auth/impersonation-banner';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -46,7 +47,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#fc7074',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fc7074' },
+    { media: '(prefers-color-scheme: dark)', color: '#12141a' },
+  ],
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -56,7 +60,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fa" dir="rtl">
+    <html lang="fa" dir="rtl" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -68,19 +72,26 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('bj-theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'}}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className="min-h-screen flex flex-col antialiased">
         <a href="#main-content" className="skip-link">
           پرش به محتوای اصلی
         </a>
-        <AuthProvider>
-          <ImpersonationBanner />
-          <Header />
-          <main id="main-content" className="flex-1" tabIndex={-1}>
-            {children}
-          </main>
-          <Footer />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ImpersonationBanner />
+            <Header />
+            <main id="main-content" className="flex-1" tabIndex={-1}>
+              {children}
+            </main>
+            <Footer />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
