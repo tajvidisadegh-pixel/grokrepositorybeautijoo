@@ -1,0 +1,41 @@
+name: Apply issue 31 portfolio full
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-i31-portfolio.yml'
+      - 'scripts/apply_i31_b.py'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore schema + patch MediaAsset + write media files
+        run: |
+          set -e
+          curl -sL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/7989df5c9941a137ca77f5d52aaa9f965486465c/backend/prisma/schema.prisma" -o backend/prisma/schema.prisma
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path("backend/prisma/schema.prisma")
+          t = p.read_text()
+          old = """  mimeType              String?     @map(\"mime_type\") @db.VarChar(100)\n  sizeBytes             Int?        @map(\"size_bytes\")\n  sortOrder             Int         @default(0) @map(\"sort_order\")"""
+          new = """  mimeType              String?     @map(\"mime_type\") @db.VarChar(100)\n  sizeBytes             Int?        @map(\"size_bytes\")\n  title                 String?     @db.VarChar(200)\n  price                 Int?\n  durationMin           Int?        @map(\"duration_min\")\n  sortOrder             Int         @default(0) @map(\"sort_order\")"""
+          if old not in t:
+              raise SystemExit("schema pattern missing")
+          p.write_text(t.replace(old, new, 1))
+          print("schema patched", p.stat().st_size)
+          PY
+          if [ -f scripts/apply_i31_b.py ]; then
+            python3 scripts/apply_i31_b.py
+          fi
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then echo "No changes"; else
+            git commit -m "feat(#31): MediaAsset title/price/duration + portfolio edit/video"
+            git push
+          fi
