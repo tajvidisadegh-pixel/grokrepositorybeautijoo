@@ -14,6 +14,7 @@ import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Min, MinLength } from '
 import { Type } from 'class-transformer';
 import { PrismaService } from '../prisma/prisma.service';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 
 function slugify(input: string): string {
   const base = input
@@ -77,6 +78,7 @@ class UpdateCatalogAddOnDto {
 @ApiTags('admin-catalog')
 @ApiBearerAuth()
 @Roles('SUPER_ADMIN', 'admin')
+@RequirePermissions('admin.catalog.manage')
 @Controller('admin')
 export class AdminCatalogController {
   constructor(private readonly prisma: PrismaService) {}

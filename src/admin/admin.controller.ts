@@ -18,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import {
   ProfessionalStatus,
@@ -117,6 +118,7 @@ class ReviewPublishDto {
 export class AdminController {
   constructor(private readonly service: AdminService) {}
 
+  @RequirePermissions('admin.dashboard.read')
   @Get('stats')
   stats() {
     return this.service.stats();
@@ -127,11 +129,13 @@ export class AdminController {
     return this.service.dashboard();
   }
 
+  @RequirePermissions('admin.finance.read')
   @Get('finance/summary')
   financeSummary(@Query('period') period?: string) {
     return this.service.getFinancialSummary(period);
   }
 
+  @RequirePermissions('admin.finance.read')
   @Get('finance/transactions')
   financeTransactions(
     @Query('page') page?: string,
@@ -147,11 +151,13 @@ export class AdminController {
     });
   }
 
+  @RequirePermissions('admin.finance.read')
   @Get('finance/transactions/:id')
   financeTransactionDetail(@Param('id') id: string) {
     return this.service.getFinancialTransactionDetail(id);
   }
 
+  @RequirePermissions('admin.finance.read')
   @Get('finance/settings/commission')
   getCommission() {
     return this.service.getCommissionSetting();
@@ -162,21 +168,25 @@ export class AdminController {
     return this.service.updateCommissionSetting(dto.rate, actorId);
   }
 
+  @RequirePermissions('admin.finance.read')
   @Get('finance/failed-alert')
   failedAlert() {
     return this.service.getFailedTransactionsAlert();
   }
 
+  @RequirePermissions('admin.finance.write')
   @Post('finance/settings/commission')
   setCommissionPost(@Body() dto: CommissionDto, @CurrentUser('id') actorId?: string) {
     return this.service.updateCommissionSetting(dto.rate, actorId);
   }
 
+  @RequirePermissions('admin.finance.write')
   @Post('finance/failed-alert/threshold')
   setFailedThreshold(@Body() body: { threshold?: number }, @CurrentUser('id') actorId?: string) {
     return this.service.setFailedTransactionsThreshold(Number(body?.threshold ?? 0), actorId);
   }
 
+  @RequirePermissions('admin.users.read')
   @Get('users')
   listUsers(
     @Query('page') page?: string,
@@ -194,11 +204,13 @@ export class AdminController {
     });
   }
 
+  @RequirePermissions('admin.users.read')
   @Get('customers/stats')
   customersStats() {
     return this.service.getCustomersStats();
   }
 
+  @RequirePermissions('admin.users.read')
   @Get('users/:id')
   userDetail(@Param('id') id: string) {
     return this.service.getUserDetail(id);
@@ -220,26 +232,31 @@ export class AdminController {
     return this.service.setUserStatus(id, dto.status, actorId, dto.reason);
   }
 
+  @RequirePermissions('admin.users.write')
   @Patch('users/:id/roles')
   setUserRoles(@Param('id') id: string, @Body() dto: RolesDto, @CurrentUser('id') actorId?: string) {
     return this.service.setUserRoles(id, dto.roles, actorId);
   }
 
+  @RequirePermissions('admin.users.write')
   @Delete('users/:id')
   hardDeleteUser(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.hardDeleteUser(id, actorId);
   }
 
+  @RequirePermissions('admin.users.write')
   @Post('users/bulk-delete')
   bulkHardDeleteUsers(@Body() dto: BulkDeleteUsersDto, @CurrentUser('id') actorId?: string) {
     return this.service.bulkHardDeleteUsers(dto.userIds, actorId);
   }
 
+  @RequirePermissions('admin.professionals.write')
   @Delete('professionals/:id')
   hardDeleteProfessional(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.hardDeleteProfessional(id, actorId);
   }
 
+  @RequirePermissions('admin.professionals.read')
   @Get('professionals')
   listProfessionals(
     @Query('page') page?: string,
@@ -255,26 +272,31 @@ export class AdminController {
     });
   }
 
+  @RequirePermissions('admin.professionals.read')
   @Get('professionals/:id')
   professionalDetail(@Param('id') id: string) {
     return this.service.getProfessionalDetail(id);
   }
 
+  @RequirePermissions('admin.professionals.write')
   @Patch('professionals/:id/status')
   setProfessionalStatus(@Param('id') id: string, @Body() dto: StatusDto, @CurrentUser('id') actorId?: string) {
     return this.service.setProfessionalStatus(id, dto.status, actorId, dto.reason);
   }
 
+  @RequirePermissions('admin.professionals.write')
   @Patch('professionals/:id/featured')
   setFeatured(@Param('id') id: string, @Body() dto: FeaturedDto, @CurrentUser('id') actorId?: string) {
     return this.service.setProfessionalFeatured(id, dto.isFeatured, actorId);
   }
 
+  @RequirePermissions('admin.bookings.read')
   @Get('bookings-stats')
   bookingsStats() {
     return this.service.getBookingsStats();
   }
 
+  @RequirePermissions('admin.bookings.read')
   @Get('bookings')
   listBookings(
     @Query('page') page?: string,
@@ -296,16 +318,19 @@ export class AdminController {
     });
   }
 
+  @RequirePermissions('admin.bookings.read')
   @Get('bookings/:id')
   bookingDetail(@Param('id') id: string) {
     return this.service.getBookingDetail(id);
   }
 
+  @RequirePermissions('admin.bookings.write')
   @Patch('bookings/:id/status')
   updateBookingStatus(@Param('id') id: string, @Body() dto: BookingStatusDto, @CurrentUser('id') actorId?: string) {
     return this.service.updateBookingStatus(id, dto.status, actorId, dto.reason);
   }
 
+  @RequirePermissions('admin.reviews.moderate')
   @Get('reviews')
   listReviews(
     @Query('page') page?: string,
@@ -324,6 +349,7 @@ export class AdminController {
     });
   }
 
+  @RequirePermissions('admin.reviews.moderate')
   @Patch('reviews/:id/publish')
   @ApiOperation({ summary: 'Publish or hide a review' })
   setReviewPublished(
@@ -334,12 +360,14 @@ export class AdminController {
     return this.service.setReviewPublished(id, dto.isPublished, actorId);
   }
 
+  @RequirePermissions('admin.reviews.moderate')
   @Delete('reviews/:id')
   @ApiOperation({ summary: 'Delete a review and recalc professional rating' })
   deleteReview(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.deleteReview(id, actorId);
   }
 
+  @RequirePermissions('admin.media.moderate')
   @Get('media')
   listMedia(
     @Query('page') page?: string,
@@ -359,22 +387,26 @@ export class AdminController {
     });
   }
 
+  @RequirePermissions('admin.media.moderate')
   @Get('media-stats')
   @ApiOperation({ summary: 'Media KPI cards' })
   mediaStats() {
     return this.service.getMediaStats();
   }
 
+  @RequirePermissions('admin.media.moderate')
   @Patch('media/:id/status')
   setMediaStatus(@Param('id') id: string, @Body() dto: MediaStatusDto, @CurrentUser('id') actorId?: string) {
     return this.service.setMediaStatus(id, dto.status, actorId);
   }
 
+  @RequirePermissions('admin.media.moderate')
   @Delete('media/:id')
   deleteMedia(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.deleteMedia(id, actorId);
   }
 
+  @RequirePermissions('admin.audit.read')
   @Get('audit-logs')
   auditLogs(
     @Query('page') page?: string,
@@ -398,6 +430,7 @@ export class AdminController {
     });
   }
 
+  @RequirePermissions('admin.notifications.send')
   @Get('notifications')
   listNotifications(
     @Query('page') page?: string,
