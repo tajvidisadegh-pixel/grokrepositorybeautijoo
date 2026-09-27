@@ -1,2 +1,2 @@
--- Issue #36: optional social links on professional profile (panel + public page)
+-- Issue #36: optional socialLinks JSON on professionals (panel + public footer)
 ALTER TABLE "professionals" ADD COLUMN IF NOT EXISTS "social_links" JSONB;
