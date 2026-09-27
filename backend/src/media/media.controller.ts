@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Param,
   Query,
   Body,
@@ -16,13 +17,12 @@ import { diskStorage } from 'multer';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { MediaKind } from '@prisma/client';
 import { MediaService } from './media.service';
-import { uploadMaxBytes } from './upload-security';
+import { uploadMaxBytesMulter } from './upload-security';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import * as os from 'os';
 import { randomBytes } from 'crypto';
 
-/** Broad accept at multer; MediaService sniffs magic bytes. */
 const MULTER_ACCEPT = new Set([
   'image/jpeg',
   'image/jpg',
@@ -39,6 +39,7 @@ const MULTER_ACCEPT = new Set([
   'video/mp4',
   'video/webm',
   'video/quicktime',
+  'video/x-m4v',
 ]);
 
 @ApiTags('media')
@@ -77,16 +78,21 @@ export class MediaController {
           cb(null, `bj-${Date.now()}-${randomBytes(6).toString('hex')}-${safe}`);
         },
       }),
-      limits: { fileSize: uploadMaxBytes(), files: 1 },
+      limits: { fileSize: uploadMaxBytesMulter(), files: 1 },
       fileFilter: (_req, file, cb) => {
         if (!file) {
-          return cb(new BadRequestException('\u0641\u0627\u06cc\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a') as unknown as Error, false);
+          return cb(new BadRequestException('فایل ارسال نشده است') as unknown as Error, false);
         }
         const mime = (file.mimetype || '').toLowerCase().trim();
-        if (mime && !MULTER_ACCEPT.has(mime) && !mime.startsWith('image/')) {
+        if (
+          mime &&
+          !MULTER_ACCEPT.has(mime) &&
+          !mime.startsWith('image/') &&
+          !mime.startsWith('video/')
+        ) {
           return cb(
             new BadRequestException(
-              '\u0641\u0631\u0645\u062a \u0627\u06cc\u0646 \u0641\u0627\u06cc\u0644 \u067e\u0634\u062a\u06cc\u0628\u0627\u0646\u06cc \u0646\u0645\u06cc\u200c\u0634\u0648\u062f. \u0641\u0642\u0637 JPG\u060c PNG\u060c WEBP\u060c GIF \u06cc\u0627 HEIC \u0645\u062c\u0627\u0632 \u0627\u0633\u062a.',
+              'فرمت این فایل پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP، GIF، HEIC یا ویدیو MP4/WEBM/MOV مجاز است.',
             ) as unknown as Error,
             false,
           );
@@ -109,15 +115,15 @@ export class MediaController {
     @Body('professionalServiceId') professionalServiceId?: string,
   ) {
     if (!file || (!file.path && !file.buffer?.length)) {
-      throw new BadRequestException('\u0641\u0627\u06cc\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a');
+      throw new BadRequestException('فایل ارسال نشده است');
     }
     if (!kind || typeof kind !== 'string') {
-      throw new BadRequestException('\u0646\u0648\u0639 \u062a\u0635\u0648\u06cc\u0631 \u0645\u0634\u062e\u0635 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a');
+      throw new BadRequestException('نوع تصویر مشخص نشده است');
     }
     const normalizedKind = kind.trim().toLowerCase() as MediaKind;
     const validKinds = Object.values(MediaKind) as string[];
     if (!validKinds.includes(normalizedKind)) {
-      throw new BadRequestException('\u0646\u0648\u0639 \u062a\u0635\u0648\u06cc\u0631 \u0646\u0627\u0645\u0639\u062a\u0628\u0631 \u0627\u0633\u062a. \u0644\u0637\u0641\u0627\u064b \u062f\u0648\u0628\u0627\u0631\u0647 \u062a\u0644\u0627\u0634 \u06a9\u0646\u06cc\u062f.');
+      throw new BadRequestException('نوع تصویر نامعتبر است. لطفاً دوباره تلاش کنید.');
     }
 
     this.logger.log(
@@ -131,6 +137,22 @@ export class MediaController {
       this.logger.error(`upload failed user=${userId}: ${(err as Error)?.message}`);
       throw err;
     }
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      title?: string | null;
+      price?: number | null;
+      durationMin?: number | null;
+      professionalServiceId?: string | null;
+      sortOrder?: number;
+    },
+  ) {
+    return this.service.updateMine(userId, id, body || {});
   }
 
   @Post('publish')
