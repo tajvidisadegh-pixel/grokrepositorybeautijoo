@@ -540,6 +540,9 @@ export async function adminSetProfessionalStatus(id: string, status: string, rea
 export async function adminSetUserStatus(id: string, status: string, reason?: string) {
   return apiClient.patch(`/admin/users/${id}/status`, { status, reason });
 }
+export async function adminSetUserRoles(id: string, roles: string[]) {
+  return apiClient.patch(`/admin/users/${id}/roles`, { roles });
+}
 export async function adminCreateCustomer(payload: { phone: string; displayName?: string; firstName?: string; lastName?: string }) {
   return apiClient.post<AdminUserDetail>('/admin/users', payload ?? {});
 }

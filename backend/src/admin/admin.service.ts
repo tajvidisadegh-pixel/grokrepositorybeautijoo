@@ -23,6 +23,7 @@ import {
   type StorageProvider,
 } from '../storage/storage.provider';
 import { AppCacheService } from '../cache/app-cache.service';
+import { userAuthCache } from '../auth/user-auth-cache';
 
 @Injectable()
 export class AdminService {
@@ -341,7 +342,8 @@ export class AdminService {
       include: { profile: true, userRoles: { include: { role: true } } },
     });
     if (!u) throw new NotFoundException('User not found');
-    return u;
+    const roles = u.userRoles.map((ur) => ur.role.name);
+    return { ...u, roles };
   }
 
   async setUserStatus(id: string, status: UserStatus | string, actorId?: string, reason?: string) {
@@ -413,6 +415,7 @@ export class AdminService {
       { roles: roleRows.map((r) => r.name) },
     );
 
+    userAuthCache.invalidate(id);
     return updated;
   }
 
