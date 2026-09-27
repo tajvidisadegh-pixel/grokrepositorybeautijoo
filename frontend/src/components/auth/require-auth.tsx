@@ -33,6 +33,10 @@ export function RequireAuth({
     if (!roles?.length) return true;
     const userRoles = user?.roles || [];
     if (userRoles.some((r) => PRIVILEGED.has(r))) return true;
+    // Issue #37: channel admin roles (admin_customers, …) or any admin.* permission
+    if (userRoles.some((r) => r.startsWith('admin_'))) return true;
+    const perms = user?.permissions || [];
+    if (perms.some((p) => p.startsWith('admin.'))) return true;
     return roles.some((r) => userRoles.includes(r));
   })();
 
@@ -51,7 +55,7 @@ export function RequireAuth({
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-gray">
-        در حال بارگذاری...
+        \u062f\u0631 \u062d\u0627\u0644 \u0628\u0627\u0631\u06af\u0630\u0627\u0631\u06cc...
       </div>
     );
   }
