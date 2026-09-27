@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { RequireAuth } from '@/components/auth/require-auth';
 import { fetchUnreadCount } from '@/lib/panel-api';
 
-export type PanelNavItem = { href: string; label: string; disabled?: boolean };
+export type PanelNavItem = { href: string; label: string; disabled?: boolean; badge?: number };
 
 type Props = { title: string; items: PanelNavItem[]; roles: string[]; children: ReactNode };
 
@@ -87,7 +87,11 @@ export function PanelShell({ title, items, roles, children }: Props) {
                 const active =
                   pathname === item.href ||
                   (item.href !== items[0]?.href && pathname?.startsWith(item.href + '/'));
-                const showBadge = isPersonalNotificationsHref(item.href) && unread > 0;
+                const personalUnread =
+                  isPersonalNotificationsHref(item.href) && unread > 0 ? unread : 0;
+                const itemBadge =
+                  typeof item.badge === 'number' && item.badge > 0 ? item.badge : 0;
+                const badgeCount = personalUnread || itemBadge;
                 return (
                   <Link
                     key={item.href}
@@ -98,12 +102,12 @@ export function PanelShell({ title, items, roles, children }: Props) {
                     )}
                   >
                     <span>{item.label}</span>
-                    {showBadge && (
+                    {badgeCount > 0 && (
                       <span
                         className="inline-flex min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-coral px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
-                        aria-label={`${unread} اعلان خوانده‌نشده`}
+                        aria-label={`${badgeCount} مورد جدید`}
                       >
-                        {unread > 99 ? '99+' : unread}
+                        {badgeCount > 99 ? '99+' : badgeCount}
                       </span>
                     )}
                   </Link>
