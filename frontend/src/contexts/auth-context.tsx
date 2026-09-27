@@ -217,10 +217,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const startImpersonation = useCallback(async (customerId: string) => {
     const current = getAccessToken();
-    if (current) saveAdminAccessBackup(current);
+    if (!current) throw new Error('نشست مدیر یافت نشد');
     const res = await impersonateCustomer(customerId);
+    saveAdminAccessBackup(current);
+    setImpersonationMeta({
+      customerId: res.customer.id,
+      customerName: res.customer.displayName,
+      customerPhone: res.customer.phone,
+      startedAt: new Date().toISOString(),
+    });
     setTokens(res.accessToken);
-    setImpersonationMeta({ customerId });
     const me = await authApi.me(res.accessToken);
     setUser(me);
   }, []);
@@ -235,13 +241,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearImpersonationMeta();
     if (adminToken) {
       setTokens(adminToken);
-      const me = await authApi.me(adminToken);
-      setUser(me);
-    } else {
-      clearTokens();
-      setUser(null);
+      try {
+        const me = await authApi.me(adminToken);
+        setUser(me);
+        return;
+      } catch {
+        /* fall through */
+      }
     }
-  }, []);
+    clearTokens();
+    await reload();
+  }, [reload]);
 
   const value = useMemo(
     () => ({
@@ -257,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       reload,
       startImpersonation,
       stopImpersonation,
-      isImpersonating: !!getImpersonationMeta(),
+      isImpersonating: !!user?.isImpersonating || !!getImpersonationMeta(),
     }),
     [
       user,
