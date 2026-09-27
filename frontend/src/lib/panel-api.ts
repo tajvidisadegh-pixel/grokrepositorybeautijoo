@@ -104,12 +104,20 @@ export type AuditLogsQuery = {
 };
 export type CompletionField = { key: string; label: string; done: boolean };
 export type ProfileCompletion = { percent: number; complete: boolean; fields: CompletionField[] };
+export type SocialLinks = {
+  instagram?: string | null;
+  telegram?: string | null;
+  website?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+};
 export type OwnProfessional = {
   id: string; userId: string; slug: string; title: string; bio?: string | null; status: string;
   coverImageUrl?: string | null; publishedAt?: string | null; verifiedAt?: string | null;
   user?: { phone?: string | null; profile?: { displayName?: string | null; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null; bio?: string | null } | null } | null;
   locations?: Array<{ isPrimary?: boolean; location: { id: string; name: string; address: string; city: string; province?: string | null; latitude?: number | null; longitude?: number | null } }>;
   logoUrl?: string | null; selectedCategoryIds?: string[] | null;
+  socialLinks?: SocialLinks | null;
   professionalServices?: ProfessionalServiceItem[]; workingHours?: WorkingHourItem[]; completion?: ProfileCompletion;
 };
 
