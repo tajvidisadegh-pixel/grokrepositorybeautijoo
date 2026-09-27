@@ -381,7 +381,7 @@ export default function ZibagarProfilePage() {
           {([['instagram','اینستاگرام'],['telegram','تلگرام'],['website','وب‌سایت'],['phone','شماره تماس'],['whatsapp','واتساپ']] as const).map(([key,label]) => (
             <label key={key} className="block text-xs text-gray">{label}
               <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-coral" dir="ltr"
-                value={(socialForm as any)[key] || ''} onChange={(e) => setSocialForm((prev) => ({ ...prev, [key]: e.target.value }))} />
+                value={socialForm[key] || ''} onChange={(e) => setSocialForm((prev) => ({ ...prev, [key]: e.target.value }))} />
             </label>
           ))}
         </div>
