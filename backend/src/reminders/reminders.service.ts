@@ -16,7 +16,7 @@ export type ReminderStats = {
  * - booking_reminder ~24h and ~2h before confirmed appointments
  * - review_request after completed bookings (once, if no review yet)
  *
- * Uses in-app notifications only (SMS out of scope for #11).
+ * In-app always; SMS when REMINDERS_SMS=true (or production default for 2h).
  * Dedup: skip if a notification of the same type already exists for that bookingId in data.
  */
 @Injectable()
@@ -119,7 +119,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
         professionalId: true,
         startAt: true,
         professional: {
-          select: { title: true },
+          select: { title: true, userId: true },
         },
       },
       take: 200,
@@ -142,17 +142,68 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
           ? `نوبت شما با ${proName} حدود ۲۴ ساعت دیگر است (${when}).`
           : `نوبت شما با ${proName} حدود ۲ ساعت دیگر است (${when}).`;
 
+      const smsEnabled = this.shouldSendSms(windowKey);
+
       const result = await this.notifications.notify({
         userId: b.customerId,
         type: NotificationType.booking_reminder,
         title,
         body,
-        data: { bookingId: b.id, professionalId: b.professionalId, window: windowKey },
-        sms: false,
+        data: {
+          bookingId: b.id,
+          professionalId: b.professionalId,
+          window: windowKey,
+          href: `/panel/bookings`,
+        },
+        sms: smsEnabled,
       });
       if (result?.id) sent += 1;
+
+      // Soft in-app reminder for professional (no SMS by default)
+      const proUserId = (
+        b as { professional?: { userId?: string | null } }
+      ).professional?.userId;
+      if (proUserId) {
+        const proAlready = await this.hasNotification(
+          proUserId,
+          NotificationType.booking_reminder,
+          { bookingId: b.id, window: `${windowKey}-pro` },
+        );
+        if (!proAlready) {
+          await this.notifications.notify({
+            userId: proUserId,
+            type: NotificationType.booking_reminder,
+            title:
+              windowKey === '24h'
+                ? 'یادآوری نوبت فردا'
+                : 'یادآوری نوبت نزدیک',
+            body:
+              windowKey === '24h'
+                ? `فردا حدود این ساعت نوبت دارید (${when}).`
+                : `حدود ۲ ساعت دیگر نوبت دارید (${when}).`,
+            data: {
+              bookingId: b.id,
+              window: `${windowKey}-pro`,
+              href: `/zibagar/bookings`,
+            },
+            sms: false,
+          });
+        }
+      }
     }
     return sent;
+  }
+
+  /** SMS for reminders: REMINDERS_SMS=true|false; default true in production for 2h only. */
+  private shouldSendSms(windowKey: '24h' | '2h'): boolean {
+    const raw = (process.env.REMINDERS_SMS || '').trim().toLowerCase();
+    if (raw === 'true' || raw === '1' || raw === 'yes') return true;
+    if (raw === 'false' || raw === '0' || raw === 'no') return false;
+    // default: production 2h reminders only (cost-aware)
+    return (
+      (process.env.NODE_ENV || '').toLowerCase() === 'production' &&
+      windowKey === '2h'
+    );
   }
 
   /**
