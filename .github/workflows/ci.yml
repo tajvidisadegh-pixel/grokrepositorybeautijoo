@@ -104,6 +104,9 @@ jobs:
       - name: E2E Bookings race
         run: npm run test:e2e -- --testPathPattern=bookings/race
 
+      - name: E2E Bookings lifecycle (pay→complete→review)
+        run: npm run test:e2e -- --testPathPattern=bookings/lifecycle
+
       - name: E2E Public professionals smoke
         run: npm run test:e2e -- --testPathPattern=professionals/public-smoke
 
