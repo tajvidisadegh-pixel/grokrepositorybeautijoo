@@ -1,0 +1,30 @@
+name: Run reschedule patch
+on:
+  push:
+    paths:
+      - '.github/workflows/run-reschedule-patch.yml'
+      - 'scripts/patch-reschedule.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-reschedule.py
+      - name: Build backend
+        working-directory: backend
+        run: |
+          npm install
+          npx prisma generate --schema=./prisma/schema.prisma
+          npx nest build
+          test -f dist/main.js || test -f dist/src/main.js
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/run-reschedule-patch.yml
+          git add backend/src/bookings/bookings.service.ts backend/src/bookings/bookings.controller.ts frontend/src/lib/panel-api.ts frontend/src/app/panel/bookings/page.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "feat(bookings): reschedule to new slot with availability check (#40)"
+          git push
