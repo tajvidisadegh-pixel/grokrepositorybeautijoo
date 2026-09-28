@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { getBooking, persianBookingStatus } from '@/lib/booking-api';
+import { getBooking, initiatePayment, persianBookingStatus } from '@/lib/booking-api';
 import { persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate } from '@/lib/utils';
@@ -14,11 +14,14 @@ import type { BookingRecord } from '@/types/booking';
 
 function ConfirmationBody() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = String(params?.id || '');
   const { isAuthenticated } = useAuth();
   const [booking, setBooking] = useState<BookingRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+  const [payMsg, setPayMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id || !isAuthenticated) return;
@@ -40,13 +43,35 @@ function ConfirmationBody() {
     };
   }, [id, isAuthenticated]);
 
+  async function onPay() {
+    if (!booking) return;
+    setPaying(true);
+    setPayMsg(null);
+    setError(null);
+    try {
+      const origin =
+        typeof window !== 'undefined' ? window.location.origin : '';
+      const callbackUrl = `${origin}/payment/callback`;
+      const result = await initiatePayment(booking.id, callbackUrl);
+      if (result.redirectUrl) {
+        window.location.href = result.redirectUrl;
+        return;
+      }
+      setPayMsg('لینک درگاه دریافت نشد — دوباره تلاش کنید');
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setPaying(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="py-16 text-center text-gray">در حال بارگذاری...</div>
     );
   }
 
-  if (error) {
+  if (error && !booking) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <p className="text-red-700">{error}</p>
@@ -67,7 +92,12 @@ function ConfirmationBody() {
   const payStatus = booking.payment?.status || '';
   const isPaid = payStatus === 'paid';
   const payFailed = payStatus === 'failed' || payStatus === 'cancelled';
-  const awaitingPay = !isPaid && !payFailed;
+  const canPay =
+    !isPaid &&
+    (booking.status === 'pending' || booking.status === 'confirmed') &&
+    (!payStatus || payStatus === 'pending' || payStatus === 'processing' || payFailed);
+
+  const payHint = searchParams.get('pay');
 
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
@@ -78,6 +108,11 @@ function ConfirmationBody() {
             ? 'پرداخت انجام نشد'
             : 'بررسی و وضعیت رزرو'}
       </h1>
+      {payHint === 'paid' && !isPaid && (
+        <p className="mt-2 text-sm text-amber-800">
+          درگاه نتیجه را گزارش کرد؛ در حال همگام‌سازی با سرور — صفحه را تازه کنید.
+        </p>
+      )}
       {isPaid && (
         <p className="mt-2 text-sm text-emerald-700">
           پرداخت از سرور تأیید شده و رزرو شما نهایی است.
@@ -85,20 +120,21 @@ function ConfirmationBody() {
       )}
       {payFailed && (
         <p className="mt-2 text-sm text-red-700">
-          پرداخت انجام نشد و رزرو شما نهایی نشده است. در صورت نیاز دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.
+          پرداخت انجام نشد. می‌توانید دوباره از دکمه زیر اقدام کنید.
         </p>
       )}
-      {awaitingPay && (
+      {!isPaid && !payFailed && (
         <p className="mt-2 text-sm text-amber-800">
-          رزرو هنوز در انتظار پرداخت یا تأیید است. موفقیت فقط پس از تأیید سرور اعلام می‌شود.
+          برای نهایی شدن رزرو، پرداخت آنلاین را انجام دهید.
         </p>
       )}
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {payMsg && <p className="mt-2 text-sm text-gray">{payMsg}</p>}
+
       <Card className="mt-6 space-y-3 text-sm">
         <div className="flex justify-between gap-2">
           <span className="text-gray">وضعیت رزرو</span>
-          <span className="font-bold">
-            {persianBookingStatus(booking.status)}
-          </span>
+          <span className="font-bold">{persianBookingStatus(booking.status)}</span>
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">زیباگر</span>
@@ -110,9 +146,7 @@ function ConfirmationBody() {
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">مبلغ</span>
-          <span className="font-bold text-coral">
-            {formatPrice(booking.totalPrice)}
-          </span>
+          <span className="font-bold text-coral">{formatPrice(booking.totalPrice)}</span>
         </div>
         {booking.items && booking.items.length > 0 && (
           <div>
@@ -131,14 +165,25 @@ function ConfirmationBody() {
           <span className="font-medium">
             {booking.payment
               ? persianPaymentStatus(booking.payment.status)
-              : 'هنوز پرداختی از سرور تأیید نشده'}
+              : 'پرداخت نشده'}
           </span>
         </div>
       </Card>
+
       <div className="mt-6 flex flex-wrap gap-3">
+        {canPay && (
+          <button
+            type="button"
+            disabled={paying}
+            onClick={onPay}
+            className="inline-flex h-11 items-center rounded-2xl bg-coral px-5 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {paying ? 'در حال اتصال به درگاه…' : 'پرداخت آنلاین'}
+          </button>
+        )}
         <Link
           href="/panel/bookings"
-          className="inline-flex h-11 items-center rounded-2xl bg-coral px-5 text-sm font-medium text-white"
+          className="inline-flex h-11 items-center rounded-2xl border border-border px-5 text-sm"
         >
           رزروهای من
         </Link>
@@ -149,6 +194,12 @@ function ConfirmationBody() {
           صفحه اصلی
         </Link>
       </div>
+
+      <p className="mt-6 text-xs text-gray">
+        درگاه فعال با متغیر محیطی سرور تعیین می‌شود (مثلاً{' '}
+        <code className="rounded bg-gray-light px-1">PAYMENT_PROVIDER=zarinpal</code>
+        ). بدون پیکربندی، پرداخت آنلاین غیرفعال است.
+      </p>
     </div>
   );
 }
