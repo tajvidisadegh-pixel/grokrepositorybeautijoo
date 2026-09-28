@@ -23,17 +23,18 @@ export class PaymentsController {
   constructor(private readonly service: PaymentsService) {}
 
   @ApiBearerAuth()
-  @Roles('customer', 'admin')
+  @Roles('customer', 'admin', 'SUPER_ADMIN')
   @Post('initiate')
-  @ApiOperation({ summary: 'شروع پرداخت آنلاین (بر اساس PAYMENT_PROVIDER؛ mock فقط dev/test)' })
+  @ApiOperation({
+    summary: 'شروع پرداخت آنلاین (PAYMENT_PROVIDER=zarinpal | mock در dev)',
+  })
   initiate(@CurrentUser('id') userId: string, @Body() dto: InitiateDto) {
     return this.service.initiate(userId, dto.bookingId, dto.callbackUrl);
   }
 
   /**
    * Callback from gateway (provider-agnostic).
-   * Query shape depends on the active real provider (e.g. Authority/Status, ref, …).
-   * Mock callback only works outside production.
+   * Query: Authority/Status (Zarinpal) or ref.
    */
   @Public()
   @Post('callback')
