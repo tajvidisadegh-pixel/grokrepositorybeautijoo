@@ -110,6 +110,7 @@ export function BookingWizard({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [booking, setBooking] = useState<BookingRecord | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<string | null>(null);
+  const [showAddOns, setShowAddOns] = useState(false);
 
   const selected = useMemo(
     () => services.find((s) => s.serviceId === serviceId) || null,
