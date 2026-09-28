@@ -1,0 +1,23 @@
+name: Run booking lifecycle patch
+on:
+  push:
+    paths:
+      - '.github/workflows/run-booking-lifecycle-patch.yml'
+      - 'scripts/patch-booking-lifecycle.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-booking-lifecycle.py
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/run-booking-lifecycle-patch.yml
+          git add backend/src/bookings/bookings.service.ts frontend/src/app/panel/bookings/page.tsx frontend/src/components/booking/booking-wizard.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "feat(bookings): reject refund, dual cancel notify, cancel policy (#40-2)"
+          git push
