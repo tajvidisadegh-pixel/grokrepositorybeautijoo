@@ -1,0 +1,60 @@
+name: Fix gender TS
+on:
+  push:
+    paths: ['.github/workflows/fix-gender-ts.yml']
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/professionals/professionals.service.ts')
+          s = p.read_text()
+          old = """    if (params.gender) {
+      const g = params.gender.trim().toLowerCase();
+      if (['female', 'male', 'other'].includes(g)) {
+        where.user = {
+          ...(typeof where.user === 'object' && where.user !== null ? where.user : {}),
+          profile: { gender: g as 'female' | 'male' | 'other' },
+        };
+      }
+    }"""
+          new = """    if (params.gender) {
+      const g = params.gender.trim().toLowerCase();
+      if (g === 'female' || g === 'male' || g === 'other') {
+        where.user = {
+          profile: {
+            is: { gender: g },
+          },
+        };
+      }
+    }"""
+          if 'is: { gender: g }' in s:
+              print('already fixed')
+          elif old not in s:
+              raise SystemExit('block not found')
+          else:
+              p.write_text(s.replace(old, new, 1))
+              print('patched')
+          PY
+      - name: Verify build
+        working-directory: backend
+        run: |
+          npm install
+          npx prisma generate --schema=./prisma/schema.prisma
+          npx nest build
+          test -f dist/main.js || test -f dist/src/main.js
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/fix-gender-ts.yml
+          git add backend/src/professionals/professionals.service.ts
+          git add -A
+          git diff --cached --quiet || git commit -m "fix(search): Prisma gender filter typing for nest build"
+          git push
