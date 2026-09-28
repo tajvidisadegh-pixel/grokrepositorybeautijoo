@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
@@ -38,6 +39,7 @@ export default function PanelBookingsPage() {
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+  const searchParams = useSearchParams();
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
@@ -58,6 +60,18 @@ export default function PanelBookingsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Deep link: /panel/bookings?review=<bookingId>
+  useEffect(() => {
+    const rid = searchParams.get('review');
+    if (!rid || items.length === 0) return;
+    const b = items.find((x) => x.id === rid);
+    if (!b || b.status !== 'completed') return;
+    if (reviewedIds.has(rid) || b.review || b.hasReview) return;
+    setReviewFor(rid);
+    setRating(5);
+    setComment('');
+  }, [searchParams, items, reviewedIds]);
 
   async function submitReview(bookingId: string) {
     setSubmitting(true);
@@ -113,6 +127,38 @@ export default function PanelBookingsPage() {
         <h1 className="text-2xl font-bold">رزروهای من</h1>
         <p className="mt-1 text-sm text-gray">لیست واقعی از سرور</p>
       </div>
+      {(() => {
+        const pending = items.filter(
+          (b) =>
+            b.status === 'completed' &&
+            !reviewedIds.has(b.id) &&
+            !b.review &&
+            !b.hasReview,
+        );
+        if (pending.length === 0) return null;
+        return (
+          <div className="rounded-2xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm">
+            <p className="font-medium text-coral">
+              {pending.length.toLocaleString('fa-IR')} نوبت منتظر نظر شماست
+            </p>
+            <p className="mt-1 text-xs text-gray">
+              ثبت نظر به دیگران کمک می‌کند زیباگر مناسب را پیدا کنند.
+            </p>
+            <button
+              type="button"
+              className="mt-2 text-sm font-medium text-coral underline"
+              onClick={() => {
+                setReviewFor(pending[0].id);
+                setRating(5);
+                setComment('');
+              }}
+            >
+              ثبت نظر برای اولین مورد
+            </button>
+          </div>
+        );
+      })()}
+
       {reviewMsg && (
         <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{reviewMsg}</p>
       )}
@@ -208,7 +254,7 @@ export default function PanelBookingsPage() {
                           setComment('');
                         }}
                       >
-                        ثبت نظر
+                        ⭐ ثبت امتیاز و نظر
                       </Button>
                     )}
                     {b.status === 'completed' && alreadyReviewed && (

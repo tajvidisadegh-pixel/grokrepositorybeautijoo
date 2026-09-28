@@ -245,7 +245,11 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
         type: NotificationType.review_request,
         title: 'نظر شما مهم است',
         body: `نوبت شما با ${proName} تمام شده. لطفاً نظر خود را ثبت کنید.`,
-        data: { bookingId: b.id, professionalId: b.professionalId },
+        data: {
+          bookingId: b.id,
+          professionalId: b.professionalId,
+          href: `/panel/bookings?review=${b.id}`,
+        },
         sms: false,
       });
       if (result?.id) sent += 1;

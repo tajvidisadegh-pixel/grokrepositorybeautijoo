@@ -625,7 +625,7 @@ export class BookingsService {
         type: NotificationType.booking_completed,
         title: 'رزرو تکمیل شد',
         body: 'رزرو شما تکمیل شد. می‌توانید نظر بدهید.',
-        data: { bookingId: id },
+        data: { bookingId: id, href: `/panel/bookings?review=${id}` },
         sms: false,
       });
       return updated;
