@@ -1,0 +1,30 @@
+name: Finish reschedule UI
+on:
+  push:
+    paths:
+      - '.github/workflows/finish-reschedule.yml'
+      - 'scripts/finish-reschedule-ui.py'
+permissions:
+  contents: write
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/finish-reschedule-ui.py
+      - name: Build backend
+        working-directory: backend
+        run: |
+          npm install
+          npx prisma generate --schema=./prisma/schema.prisma
+          npx nest build
+          test -f dist/main.js || test -f dist/src/main.js
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/finish-reschedule.yml
+          git add backend/src/bookings/bookings.controller.ts frontend/src/app/panel/bookings/page.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "feat(bookings): expose reschedule endpoint + customer UI (#40)"
+          git push
