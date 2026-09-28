@@ -167,6 +167,18 @@ export class PaymentsService {
         },
       },
     });
+
+    // Finalize booking after successful payment (pending → confirmed)
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: payment.bookingId },
+    });
+    if (booking && (booking.status === 'pending' || booking.status === 'expired')) {
+      await this.prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: { status: 'confirmed' },
+      });
+    }
+
     return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };
   }
 
