@@ -446,4 +446,22 @@ export class AdminController {
       search,
     });
   }
+  /** Platform rules - SUPER_ADMIN only */
+  @Roles('SUPER_ADMIN')
+  @Get('settings')
+  @ApiOperation({ summary: 'Get platform settings (SUPER_ADMIN)' })
+  getSettings() {
+    return this.service.getPlatformSettings();
+  }
+
+  @Roles('SUPER_ADMIN')
+  @Put('settings')
+  @ApiOperation({ summary: 'Update platform settings section(s) (SUPER_ADMIN)' })
+  updateSettings(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.updatePlatformSettings(body || {}, actorId);
+  }
+
 }
