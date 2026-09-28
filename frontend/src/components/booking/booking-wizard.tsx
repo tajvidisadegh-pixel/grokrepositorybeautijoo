@@ -278,15 +278,19 @@ export function BookingWizard({
         const appUrl =
           process.env.NEXT_PUBLIC_APP_URL ||
           (typeof window !== 'undefined' ? window.location.origin : '');
-        const callbackUrl = `${appUrl}/booking/confirmation/${created.id}`;
+        const callbackUrl = `${appUrl}/payment/callback`;
         const pay = await initiatePayment(created.id, callbackUrl);
+        if (pay.redirectUrl) {
+          window.location.href = pay.redirectUrl;
+          return;
+        }
         setPaymentInfo(
-          pay.redirectUrl
-            ? 'درخواست پرداخت ثبت شد. در صورت فعال بودن درگاه به صفحه پرداخت هدایت می‌شوید.'
-            : 'رزرو ذخیره شد اما هنوز نهایی نیست — پرداخت از سرور تأیید نشده است.',
+          'رزرو ذخیره شد اما هنوز نهایی نیست — لینک درگاه دریافت نشد.',
         );
       } catch {
-        setPaymentInfo('رزرو ذخیره شد اما نهایی نیست. پرداخت آنلاین فعلاً در دسترس نیست یا نیاز به پیکربندی درگاه دارد.');
+        setPaymentInfo(
+          'رزرو ذخیره شد اما نهایی نیست. پرداخت آنلاین فعلاً در دسترس نیست یا نیاز به پیکربندی درگاه دارد.',
+        );
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
