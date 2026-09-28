@@ -58,6 +58,8 @@ export class ServiceFiltersController {
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
     @Query('radiusKm') radiusKm?: string,
+    @Query('verifiedOnly') verifiedOnly?: string,
+    @Query('gender') gender?: string,
   ) {
     return this.service.searchProfessionalsByFilter({
       q,
@@ -73,6 +75,11 @@ export class ServiceFiltersController {
       lat,
       lng,
       radiusKm,
+      verifiedOnly:
+        verifiedOnly === '1' ||
+        verifiedOnly === 'true' ||
+        verifiedOnly === 'yes',
+      gender,
     });
   }
 

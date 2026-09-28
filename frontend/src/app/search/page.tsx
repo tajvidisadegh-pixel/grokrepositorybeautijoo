@@ -19,6 +19,7 @@ type Props = {
     minRating?: string; minPrice?: string; maxPrice?: string;
     sort?: string; availableDate?: string;
     lat?: string; lng?: string; radiusKm?: string;
+    verifiedOnly?: string; gender?: string;
   }>;
 };
 
@@ -36,6 +37,8 @@ export default async function SearchPage({ searchParams }: Props) {
   const lat = sp.lat?.trim() || undefined;
   const lng = sp.lng?.trim() || undefined;
   const radiusKm = sp.radiusKm?.trim() || undefined;
+  const verifiedOnly = sp.verifiedOnly === '1' || sp.verifiedOnly === 'true';
+  const gender = sp.gender?.trim() || undefined;
 
   let categories: Awaited<ReturnType<typeof listFilterCategories>> = [];
   let result: Awaited<ReturnType<typeof searchProfessionals>> | null = null;
@@ -49,6 +52,8 @@ export default async function SearchPage({ searchParams }: Props) {
       minPrice: Number.isFinite(minPrice as number) ? minPrice : undefined,
       maxPrice: Number.isFinite(maxPrice as number) ? maxPrice : undefined,
       sort, availableDate, lat, lng, radiusKm,
+      verifiedOnly: verifiedOnly || undefined,
+      gender,
     });
   } catch (e) {
     errorMsg = e instanceof PublicApiError ? e.message : 'خطا در دریافت نتایج جستجو';
@@ -139,6 +144,26 @@ export default async function SearchPage({ searchParams }: Props) {
           <div>
             <label className="mb-1 block text-xs font-medium text-gray">تاریخ در دسترس بودن</label>
             <FormJalaliDate name="availableDate" defaultValue={availableDate || ''} className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray">جنسیت زیباگر</label>
+            <select name="gender" defaultValue={gender || ''} className={inputCls}>
+              <option value="">همه</option>
+              <option value="female">زن</option>
+              <option value="male">مرد</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <label className="flex h-11 cursor-pointer items-center gap-2 rounded-2xl border border-border px-3 text-sm">
+              <input
+                type="checkbox"
+                name="verifiedOnly"
+                value="true"
+                defaultChecked={verifiedOnly}
+                className="size-4 accent-coral"
+              />
+              فقط تأییدشده‌ها
+            </label>
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
             <NearMeFields defaultLat={lat} defaultLng={lng} defaultRadiusKm={radiusKm || '15'} />

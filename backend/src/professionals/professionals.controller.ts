@@ -62,6 +62,8 @@ export class ProfessionalsController {
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
     @Query('radiusKm') radiusKm?: string,
+    @Query('verifiedOnly') verifiedOnly?: string,
+    @Query('gender') gender?: string,
   ) {
     return this.service.search({
       q,
@@ -77,6 +79,11 @@ export class ProfessionalsController {
       lat,
       lng,
       radiusKm,
+      verifiedOnly:
+        verifiedOnly === '1' ||
+        verifiedOnly === 'true' ||
+        verifiedOnly === 'yes',
+      gender,
     });
   }
 

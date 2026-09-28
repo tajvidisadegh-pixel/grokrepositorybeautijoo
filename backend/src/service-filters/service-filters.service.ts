@@ -128,6 +128,8 @@ export class ServiceFiltersService {
     lat?: string;
     lng?: string;
     radiusKm?: string;
+    verifiedOnly?: boolean;
+    gender?: string;
   }) {
     if (!params.category) {
       return this.professionals.search(params);

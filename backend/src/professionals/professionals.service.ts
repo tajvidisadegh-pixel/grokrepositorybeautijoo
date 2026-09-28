@@ -58,6 +58,8 @@ export class ProfessionalsService {
     lat?: string | number;
     lng?: string | number;
     radiusKm?: string | number;
+    verifiedOnly?: boolean;
+    gender?: string;
   }) {
     const page = params.page || 1;
     const limit = Math.min(params.limit || 20, 50);
@@ -79,6 +81,8 @@ export class ProfessionalsService {
             lat: params.lat ?? '',
             lng: params.lng ?? '',
             radiusKm: params.radiusKm ?? '',
+            verifiedOnly: params.verifiedOnly ?? null,
+            gender: params.gender || '',
           })}`
         : null;
     if (cacheKey) {
@@ -164,6 +168,20 @@ export class ProfessionalsService {
 
     if (params.minRating != null && Number.isFinite(params.minRating)) {
       where.ratingAvg = { gte: params.minRating };
+    }
+
+    if (params.verifiedOnly) {
+      where.verifiedAt = { not: null };
+    }
+
+    if (params.gender) {
+      const g = params.gender.trim().toLowerCase();
+      if (['female', 'male', 'other'].includes(g)) {
+        where.user = {
+          ...(typeof where.user === 'object' && where.user !== null ? where.user : {}),
+          profile: { gender: g as 'female' | 'male' | 'other' },
+        };
+      }
     }
 
     // Soft availability: has working hour for that weekday (Tehran) and not fully time-off

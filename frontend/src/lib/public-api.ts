@@ -61,6 +61,8 @@ export type SearchParams = {
   lat?: number | string;
   lng?: number | string;
   radiusKm?: number | string;
+  verifiedOnly?: boolean;
+  gender?: string;
 };
 
 export function searchProfessionals(params: SearchParams = {}) {
@@ -78,6 +80,8 @@ export function searchProfessionals(params: SearchParams = {}) {
   if (params.lat != null && params.lat !== '') sp.set('lat', String(params.lat));
   if (params.lng != null && params.lng !== '') sp.set('lng', String(params.lng));
   if (params.radiusKm != null && params.radiusKm !== '') sp.set('radiusKm', String(params.radiusKm));
+  if (params.verifiedOnly) sp.set('verifiedOnly', 'true');
+  if (params.gender) sp.set('gender', params.gender);
   const qs = sp.toString();
   const path = params.filterCategory
     ? `/service-filters/professionals${qs ? `?${qs}` : ''}`
