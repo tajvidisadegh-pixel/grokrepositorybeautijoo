@@ -1,0 +1,23 @@
+name: Run search filters patch
+on:
+  push:
+    paths:
+      - '.github/workflows/run-search-filters-patch.yml'
+      - 'scripts/patch-search-filters.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-search-filters.py
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/run-search-filters-patch.yml
+          git add backend/src/professionals/professionals.service.ts backend/src/professionals/professionals.controller.ts backend/src/service-filters/service-filters.controller.ts backend/src/service-filters/service-filters.service.ts frontend/src/lib/public-api.ts frontend/src/app/search/page.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "feat(search): verifiedOnly + gender filters (#40-4)"
+          git push
