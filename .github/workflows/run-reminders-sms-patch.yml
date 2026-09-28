@@ -1,0 +1,23 @@
+name: Run reminders SMS patch
+on:
+  push:
+    paths:
+      - '.github/workflows/run-reminders-sms-patch.yml'
+      - 'scripts/patch-reminders-sms.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-reminders-sms.py
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/run-reminders-sms-patch.yml
+          git add backend/src/reminders/reminders.service.ts
+          git add -A
+          git diff --cached --quiet || git commit -m "feat(reminders): optional SMS + pro in-app reminder (#40-3)"
+          git push
