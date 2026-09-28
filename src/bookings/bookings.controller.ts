@@ -28,6 +28,11 @@ class CreateBookingDto {
   @IsOptional() @IsUUID() durationRuleId?: string;
 }
 
+class RescheduleDto {
+  @IsString()
+  startAt!: string;
+}
+
 class TransitionDto {
   @IsOptional()
   @IsString()
@@ -97,6 +102,17 @@ export class BookingsController {
     @CurrentUser('roles') roles: string[],
   ) {
     return this.service.getOne(id, userId, roles || []);
+  }
+
+
+  @Patch(':id/reschedule')
+  reschedule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('roles') roles: string[],
+    @Body() dto: RescheduleDto,
+  ) {
+    return this.service.reschedule(id, userId, roles || [], dto.startAt);
   }
 
   @Patch(':id/confirm')
