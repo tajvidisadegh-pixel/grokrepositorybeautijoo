@@ -464,4 +464,11 @@ export class AdminController {
     return this.service.updatePlatformSettings(body || {}, actorId);
   }
 
+  @RequirePermissions('admin.dashboard.read')
+  @Get('nav-badges')
+  @ApiOperation({ summary: 'Counts for admin sidebar badges' })
+  navBadges() {
+    return this.service.getNavBadges();
+  }
+
 }
