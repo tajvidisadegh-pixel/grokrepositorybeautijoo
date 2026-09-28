@@ -9,6 +9,7 @@ import { CompletionBar } from '@/components/profile/completion-bar';
 import {
   fetchProBookings,
   fetchMyProfessional,
+  fetchUnreadCount,
   type BookingListItem,
   type OwnProfessional,
 } from '@/lib/panel-api';
@@ -29,8 +30,6 @@ type ReviewRow = {
   professionalReply?: string | null;
   createdAt: string;
 };
-
-const WEEKDAY_FA = ['ی', 'د', 'س', 'چ', 'پ', 'ج', 'ش'];
 
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -54,6 +53,10 @@ function customerName(b: BookingListItem) {
   return b.customer?.profile?.displayName || b.customer?.phone || 'مشتری';
 }
 
+function customerKey(b: BookingListItem) {
+  return b.customer?.id || b.customer?.phone || customerName(b);
+}
+
 function statusDot(status?: string | null) {
   if (status === 'approved') return { label: 'فعال', className: 'bg-emerald-500' };
   if (status === 'pending_review') return { label: 'در انتظار بررسی', className: 'bg-amber-400' };
@@ -64,10 +67,22 @@ function statusDot(status?: string | null) {
 
 function weekdayLabel(d: Date) {
   try {
-    return new Intl.DateTimeFormat('fa-IR', { weekday: 'narrow', timeZone: 'Asia/Tehran' }).format(d);
+    return new Intl.DateTimeFormat('fa-IR', {
+      weekday: 'narrow',
+      timeZone: 'Asia/Tehran',
+    }).format(d);
   } catch {
-    return WEEKDAY_FA[d.getDay()] || '';
+    return '';
   }
+}
+
+function bookingStatusFa(status?: string | null) {
+  if (status === 'pending') return 'در انتظار';
+  if (status === 'confirmed') return 'تأیید شده';
+  if (status === 'completed') return 'انجام شده';
+  if (status === 'cancelled') return 'لغو شده';
+  if (status === 'rejected') return 'رد شده';
+  return status || '—';
 }
 
 export default function ZibagarDashboard() {
@@ -75,11 +90,13 @@ export default function ZibagarDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pro, setPro] = useState<OwnProfessional | null>(null);
-  const [bookings, setBookings] = useState<BookingListItem[]>([]);
+  const [weekBookings, setWeekBookings] = useState<BookingListItem[]>([]);
+  const [pendingBookings, setPendingBookings] = useState<BookingListItem[]>([]);
   const [periods, setPeriods] = useState<EarningsPeriods | null>(null);
   const [weekSeries, setWeekSeries] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [newReviews, setNewReviews] = useState(0);
   const [ratingAvg, setRatingAvg] = useState<number | null>(null);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,28 +107,35 @@ export default function ZibagarDashboard() {
       from.setDate(from.getDate() - 6);
       from.setHours(0, 0, 0, 0);
 
-      const [proRes, bookingRes, earningsRes, reviewsRes] = await Promise.all([
-        fetchMyProfessional().catch(() => null),
-        fetchProBookings(1, 50, {
-          from: from.toISOString(),
-          to: endOfDay(today).toISOString(),
-        }).catch(() => ({ items: [] as BookingListItem[] })),
-        apiClient
-          .get<{ periods?: EarningsPeriods }>('/professionals/me/earnings?page=1&limit=1')
-          .catch(() => null),
-        apiClient
-          .get<{ items?: ReviewRow[]; summary?: { ratingAvg?: number | string } }>(
-            '/reviews/professional?page=1&limit=20',
-          )
-          .catch(() => null),
-      ]);
+      const [proRes, weekRes, pendingRes, earningsRes, reviewsRes, unreadRes] =
+        await Promise.all([
+          fetchMyProfessional().catch(() => null),
+          fetchProBookings(1, 80, {
+            from: from.toISOString(),
+            to: endOfDay(today).toISOString(),
+          }).catch(() => ({ items: [] as BookingListItem[] })),
+          fetchProBookings(1, 30, { status: 'pending' }).catch(() => ({
+            items: [] as BookingListItem[],
+          })),
+          apiClient
+            .get<{ periods?: EarningsPeriods }>('/professionals/me/earnings?page=1&limit=1')
+            .catch(() => null),
+          apiClient
+            .get<{ items?: ReviewRow[]; summary?: { ratingAvg?: number | string } }>(
+              '/reviews/professional?page=1&limit=30',
+            )
+            .catch(() => null),
+          fetchUnreadCount().catch(() => ({ count: 0 })),
+        ]);
 
       setPro(proRes);
-      setBookings(bookingRes.items || []);
+      setWeekBookings(weekRes.items || []);
+      setPendingBookings(pendingRes.items || []);
       setPeriods(earningsRes?.periods || null);
+      setUnreadNotifs(Number(unreadRes?.count) || 0);
 
       const series = [0, 0, 0, 0, 0, 0, 0];
-      for (const b of bookingRes.items || []) {
+      for (const b of weekRes.items || []) {
         if (!b.startAt) continue;
         if (['cancelled', 'rejected', 'expired'].includes(b.status)) continue;
         const d = new Date(b.startAt);
@@ -147,7 +171,7 @@ export default function ZibagarDashboard() {
   const todayEnd = endOfDay(new Date()).getTime();
 
   const todayBookings = useMemo(() => {
-    return bookings
+    return weekBookings
       .filter((b) => {
         if (!b.startAt) return false;
         if (['cancelled', 'rejected', 'expired'].includes(b.status)) return false;
@@ -155,38 +179,49 @@ export default function ZibagarDashboard() {
         return t >= todayStart && t <= todayEnd;
       })
       .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
-  }, [bookings, todayStart, todayEnd]);
+  }, [weekBookings, todayStart, todayEnd]);
 
-  const pendingCount = useMemo(
-    () => bookings.filter((b) => b.status === 'pending').length,
-    [bookings],
-  );
+  const pendingCount = pendingBookings.length;
 
   const nextBooking = useMemo(() => {
     const now = Date.now();
-    return (
-      todayBookings.find((b) => new Date(b.startAt).getTime() >= now) ||
-      todayBookings[0] ||
-      null
-    );
-  }, [todayBookings]);
+    const upcoming = weekBookings
+      .filter((b) => {
+        if (!b.startAt) return false;
+        if (['cancelled', 'rejected', 'expired'].includes(b.status)) return false;
+        return new Date(b.startAt).getTime() >= now;
+      })
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    return upcoming[0] || null;
+  }, [weekBookings]);
 
   const weekBookingCount = useMemo(
     () => weekSeries.reduce((a, n) => a + n, 0),
     [weekSeries],
   );
 
+  const uniqueCustomersWeek = useMemo(() => {
+    const keys = new Set<string>();
+    for (const b of weekBookings) {
+      if (['cancelled', 'rejected', 'expired'].includes(b.status)) continue;
+      keys.add(customerKey(b));
+    }
+    return keys.size;
+  }, [weekBookings]);
+
   const maxSeries = Math.max(1, ...weekSeries);
   const statusInfo = statusDot(pro?.status);
   const published = pro?.status === 'approved';
   const percent = pro?.completion?.percent ?? 0;
   const complete = pro?.completion?.complete ?? false;
+  const attentionCount = pendingCount + newReviews + (unreadNotifs > 0 ? 1 : 0);
 
   if (loading) return <PanelLoading />;
   if (error) return <PanelError message={error} onRetry={load} />;
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="overflow-hidden rounded-2xl bg-coral px-5 py-5 text-white shadow-sm sm:rounded-3xl sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -197,17 +232,30 @@ export default function ZibagarDashboard() {
                 : 'امروز نوبتی در برنامه نیست'}
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-sm">
-            <span className={`inline-block h-2.5 w-2.5 rounded-full ${statusInfo.className}`} />
-            <span>پروفایل: {statusInfo.label}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-sm">
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${statusInfo.className}`} />
+              <span>پروفایل: {statusInfo.label}</span>
+            </div>
+            {published && pro?.slug && (
+              <Link
+                href={`/professionals/${pro.slug}`}
+                className="rounded-full bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30"
+              >
+                مشاهده صفحه عمومی
+              </Link>
+            )}
           </div>
         </div>
       </div>
 
+      {/* Profile completion */}
       {!published && (
         <Card className="space-y-3">
           <h2 className="font-semibold">
-            {complete || percent >= 100 ? 'آماده انتشار' : `تکمیل پروفایل — ${percent}%`}
+            {complete || percent >= 100
+              ? 'آماده انتشار'
+              : `تکمیل پروفایل — ${percent.toLocaleString('fa-IR')}٪`}
           </h2>
           <CompletionBar percent={percent} fields={pro?.completion?.fields} showFields={!complete} />
           <div className="flex flex-wrap gap-2">
@@ -225,6 +273,7 @@ export default function ZibagarDashboard() {
         </Card>
       )}
 
+      {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card className="space-y-1 text-center">
           <p className="text-2xl font-bold text-coral">
@@ -236,7 +285,7 @@ export default function ZibagarDashboard() {
           <p className="text-2xl font-bold text-amber-600">
             {pendingCount.toLocaleString('fa-IR')}
           </p>
-          <p className="text-xs text-gray">در انتظار</p>
+          <p className="text-xs text-gray">در انتظار تأیید</p>
         </Card>
         <Card className="space-y-1 text-center">
           <p className="text-2xl font-bold text-blue">
@@ -257,6 +306,7 @@ export default function ZibagarDashboard() {
         </Card>
       </div>
 
+      {/* Next + Attention */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="space-y-3">
           <h2 className="font-semibold">🔥 نوبت بعدی</h2>
@@ -268,22 +318,30 @@ export default function ZibagarDashboard() {
               <p className="text-sm">
                 {serviceName(nextBooking)} · {customerName(nextBooking)}
               </p>
+              <p className="text-xs text-gray">{bookingStatusFa(nextBooking.status)}</p>
               <Link href="/zibagar/bookings">
                 <Button size="sm">مشاهده نوبت</Button>
               </Link>
             </>
           ) : (
-            <p className="text-sm text-gray">نوبت فعالی برای امروز نیست.</p>
+            <p className="text-sm text-gray">نوبت فعالی در روزهای آینده نیست.</p>
           )}
         </Card>
 
         <Card className="space-y-3">
-          <h2 className="font-semibold">🔔 نیاز به توجه</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold">🔔 نیاز به توجه</h2>
+            {attentionCount > 0 && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                {attentionCount.toLocaleString('fa-IR')}
+              </span>
+            )}
+          </div>
           <ul className="space-y-2 text-sm">
             <li className="flex items-center justify-between gap-2">
               <span>{pendingCount.toLocaleString('fa-IR')} رزرو در انتظار</span>
               {pendingCount > 0 && (
-                <Link href="/zibagar/bookings" className="text-blue hover:underline">
+                <Link href="/zibagar/bookings?status=pending" className="text-blue hover:underline">
                   مشاهده
                 </Link>
               )}
@@ -292,26 +350,63 @@ export default function ZibagarDashboard() {
               <span>{newReviews.toLocaleString('fa-IR')} نظر بدون پاسخ</span>
               {newReviews > 0 && (
                 <Link href="/zibagar/reviews" className="text-blue hover:underline">
-                  مشاهده همه
+                  مشاهده
+                </Link>
+              )}
+            </li>
+            <li className="flex items-center justify-between gap-2">
+              <span>{unreadNotifs.toLocaleString('fa-IR')} اعلان خوانده‌نشده</span>
+              {unreadNotifs > 0 && (
+                <Link href="/zibagar/notifications" className="text-blue hover:underline">
+                  مشاهده
                 </Link>
               )}
             </li>
           </ul>
-          {(pendingCount > 0 || newReviews > 0) && (
-            <Link href={pendingCount > 0 ? '/zibagar/bookings' : '/zibagar/reviews'}>
-              <Button size="sm" variant="outline">
-                مشاهده همه
-              </Button>
-            </Link>
+          {attentionCount === 0 && (
+            <p className="text-sm text-emerald-700">همه‌چیز به‌روز است ✓</p>
           )}
         </Card>
       </div>
 
+      {/* Quick actions */}
+      <Card className="space-y-3">
+        <h2 className="font-semibold">⚡ دسترسی سریع</h2>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/zibagar/bookings">
+            <Button size="sm" variant="outline">
+              رزروها
+            </Button>
+          </Link>
+          <Link href="/zibagar/hours">
+            <Button size="sm" variant="outline">
+              ساعات کاری
+            </Button>
+          </Link>
+          <Link href="/zibagar/services">
+            <Button size="sm" variant="outline">
+              منوی قیمت
+            </Button>
+          </Link>
+          <Link href="/zibagar/portfolio">
+            <Button size="sm" variant="outline">
+              نمونه‌کار
+            </Button>
+          </Link>
+          <Link href="/zibagar/earnings">
+            <Button size="sm" variant="secondary">
+              درآمد
+            </Button>
+          </Link>
+        </div>
+      </Card>
+
+      {/* Today's schedule */}
       <Card className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">📅 برنامه امروز</h2>
           <Link href="/zibagar/bookings" className="text-sm text-blue hover:underline">
-            تقویم رزروها
+            همه رزروها
           </Link>
         </div>
         {todayBookings.length === 0 ? (
@@ -330,14 +425,16 @@ export default function ZibagarDashboard() {
                   <span className="font-medium">{serviceName(b)}</span>
                   <span className="text-gray">{customerName(b)}</span>
                 </div>
-                <span className="rounded-full bg-gray-light px-2 py-0.5 text-xs text-gray">
-                  {b.status === 'pending'
-                    ? 'در انتظار'
-                    : b.status === 'confirmed'
-                      ? 'تأیید شده'
-                      : b.status === 'completed'
-                        ? 'انجام شده'
-                        : b.status}
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    b.status === 'pending'
+                      ? 'bg-amber-50 text-amber-800'
+                      : b.status === 'confirmed'
+                        ? 'bg-emerald-50 text-emerald-800'
+                        : 'bg-gray-light text-gray'
+                  }`}
+                >
+                  {bookingStatusFa(b.status)}
                 </span>
               </li>
             ))}
@@ -345,10 +442,52 @@ export default function ZibagarDashboard() {
         )}
       </Card>
 
+      {/* Pending queue preview */}
+      {pendingCount > 0 && (
+        <Card className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">⏳ رزروهای در انتظار تأیید</h2>
+            <Link
+              href="/zibagar/bookings?status=pending"
+              className="text-sm text-blue hover:underline"
+            >
+              مدیریت همه
+            </Link>
+          </div>
+          <ul className="divide-y divide-border">
+            {pendingBookings.slice(0, 5).map((b) => (
+              <li
+                key={b.id}
+                className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
+              >
+                <div>
+                  <p className="font-medium">
+                    {serviceName(b)} · {customerName(b)}
+                  </p>
+                  <p className="text-xs text-gray">
+                    {formatDate(b.startAt, { style: 'short', includeTime: true })}
+                    {b.totalPrice != null && <> · {formatPrice(b.totalPrice)}</>}
+                  </p>
+                </div>
+                <Link href="/zibagar/bookings">
+                  <Button size="sm" variant="outline">
+                    بررسی
+                  </Button>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Week performance */}
       <Card className="space-y-4">
         <h2 className="font-semibold">📊 عملکرد این هفته</h2>
         <p className="text-sm text-gray">
           {weekBookingCount.toLocaleString('fa-IR')} نوبت
+          {uniqueCustomersWeek > 0 && (
+            <> · {uniqueCustomersWeek.toLocaleString('fa-IR')} مشتری</>
+          )}
           {periods?.week?.earned != null && <> · {formatPrice(periods.week.earned)} درآمد</>}
         </p>
         <div className="flex h-28 items-end gap-1.5 sm:gap-2">
@@ -361,9 +500,9 @@ export default function ZibagarDashboard() {
               <div key={i} className="flex flex-1 flex-col items-center gap-1">
                 <span className="text-[10px] tabular-nums text-gray">{n || ''}</span>
                 <div
-                  className="w-full max-w-[2rem] rounded-t-md bg-coral/80"
+                  className="w-full max-w-[2rem] rounded-t-md bg-coral/80 transition-all"
                   style={{ height: `${h}%` }}
-                  title={`${label}: ${n}`}
+                  title={`${label}: ${n} نوبت`}
                 />
                 <span className="text-[10px] text-gray">{label}</span>
               </div>
