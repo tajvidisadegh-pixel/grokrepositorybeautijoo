@@ -86,7 +86,11 @@ export default function PanelBookingsPage() {
     setCancellingId(b.id);
     setActionMsg(null);
     try {
-      await transitionBooking(b.id, 'cancel', 'لغو توسط مشتری');
+      const reason =
+        (typeof window !== 'undefined'
+          ? window.prompt('دلیل لغو (اختیاری):')
+          : null) || 'لغو توسط مشتری';
+      await transitionBooking(b.id, 'cancel', reason.trim() || 'لغو توسط مشتری');
       setActionMsg(
         paid
           ? 'رزرو لغو شد. در صورت پرداخت موفق، استرداد در حال پردازش است.'

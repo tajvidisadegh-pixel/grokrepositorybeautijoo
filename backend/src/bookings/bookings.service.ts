@@ -460,6 +460,32 @@ export class BookingsService {
       });
 
       if (action === 'reject') {
+        // Refund paid payments when a confirmed/pending booking is rejected
+        try {
+          const payment = await this.prisma.payment.findUnique({
+            where: { bookingId: id },
+          });
+          if (payment?.status === 'paid') {
+            await this.payments.refund(
+              payment.id,
+              reason ?? 'رد رزرو توسط زیباگر',
+              isAdmin ? userId : undefined,
+            );
+          } else if (
+            payment?.status === 'pending' ||
+            payment?.status === 'processing'
+          ) {
+            await this.prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: 'cancelled' },
+            });
+          }
+        } catch (err) {
+          this.logger.warn(
+            `reject refund failed booking=${id}: ${(err as Error)?.message}`,
+          );
+        }
+
         const body =
           reason?.trim()
             ? `رزرو شما توسط زیباگر رد شد. دلیل: ${reason.trim()}`
@@ -547,21 +573,36 @@ export class BookingsService {
         );
       }
 
-      const notifyUserId = isCustomer ? b.professional.userId : b.customerId;
-      await this.notifications.notify({
-        userId: notifyUserId,
-        type: NotificationType.booking_cancelled,
-        title: 'رزرو لغو شد',
-        body: reason?.trim()
-          ? `رزرو لغو شد. دلیل: ${reason.trim()}`
-          : 'رزرو لغو شد.',
-        data: {
-          bookingId: id,
-          reason: reason ?? null,
-          refundStatus: refundResult?.status ?? null,
-        },
-        sms: true,
-      });
+      const cancelBody = reason?.trim()
+        ? `رزرو لغو شد. دلیل: ${reason.trim()}`
+        : 'رزرو لغو شد.';
+      const cancelData = {
+        bookingId: id,
+        reason: reason ?? null,
+        refundStatus: refundResult?.status ?? null,
+      };
+
+      // Notify the other party; admin cancel notifies both sides
+      const targets = new Set<string>();
+      if (isAdmin) {
+        targets.add(b.customerId);
+        if (b.professional?.userId) targets.add(b.professional.userId);
+      } else if (isCustomer) {
+        if (b.professional?.userId) targets.add(b.professional.userId);
+      } else {
+        targets.add(b.customerId);
+      }
+
+      for (const uid of targets) {
+        await this.notifications.notify({
+          userId: uid,
+          type: NotificationType.booking_cancelled,
+          title: 'رزرو لغو شد',
+          body: cancelBody,
+          data: cancelData,
+          sms: true,
+        });
+      }
       return { ...updated, refund: refundResult };
     }
 
