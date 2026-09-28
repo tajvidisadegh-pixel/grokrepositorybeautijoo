@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { PanelShell, type PanelNavItem } from '@/components/panel/panel-shell';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
@@ -36,7 +37,7 @@ const BASE_ITEMS: NavDef[] = [
   { href: '/admin/audit', label: '\u0644\u0627\u06af \u0641\u0639\u0627\u0644\u06cc\u062a\u200c\u0647\u0627', anyOf: ['admin.audit.read'] },
 ];
 
-const PRIVILEGED = new Set(['SUPER_ADMIN']); // full nav only for super admin
+const PRIVILEGED = new Set(['SUPER_ADMIN']);
 const CHANNEL_ROLES = [
   'admin_customers',
   'admin_professionals',
@@ -48,6 +49,7 @@ const CHANNEL_ROLES = [
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const pathname = usePathname();
   const [badges, setBadges] = useState<NavBadges>({});
 
   const isFullAdmin = useMemo(
@@ -76,10 +78,20 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
+  }, [refresh, pathname]);
+
+  useEffect(() => {
     const t = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refresh();
-    }, 60_000);
-    return () => window.clearInterval(t);
+    }, 45_000);
+    const onFocus = () => {
+      void refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [refresh]);
 
   const items = useMemo(
