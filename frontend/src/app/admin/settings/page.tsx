@@ -49,7 +49,12 @@ export default function AdminSettingsPage() {
       setSettings(data);
       setDraft(data);
     } catch (e) {
-      setError(friendlyApiError(e));
+      const status = (e as { status?: number }).status;
+      if (status === 403) {
+        setError('فقط سوپرادمین می‌تواند تنظیمات پلتفرم را ببیند یا تغییر دهد.');
+      } else {
+        setError(friendlyApiError(e));
+      }
     } finally {
       setLoading(false);
     }
@@ -70,7 +75,12 @@ export default function AdminSettingsPage() {
       setDraft(next);
       setMsg('ذخیره شد');
     } catch (e) {
-      setError(friendlyApiError(e));
+      const status = (e as { status?: number }).status;
+      if (status === 403) {
+        setError('فقط سوپرادمین می‌تواند تنظیمات را ذخیره کند.');
+      } else {
+        setError(friendlyApiError(e));
+      }
     } finally {
       setSaving(false);
     }
@@ -85,8 +95,10 @@ export default function AdminSettingsPage() {
   return (
     <div className="space-y-6" dir="rtl">
       <div>
-        <h1 className="text-2xl font-bold">⚙️ تنظیمات</h1>
-        <p className="mt-1 text-sm text-gray">قوانین کلی پلتفرم — هر بخش جدا ذخیره می‌شود</p>
+        <h1 className="text-2xl font-bold">⚙️ تنظیمات پلتفرم</h1>
+        <p className="mt-1 text-sm text-gray">
+          قوانین کلی — فقط <strong>سوپرادمین</strong> · هر بخش جدا ذخیره می‌شود
+        </p>
       </div>
       {msg && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</p>}
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
