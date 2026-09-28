@@ -8,9 +8,11 @@ import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-b
 import {
   fetchProBookings,
   transitionBooking,
+  rescheduleBooking,
   reportBookingToAdmin,
   type BookingListItem,
 } from '@/lib/panel-api';
+import { fetchAvailability } from '@/lib/booking-api';
 import { persianBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate, formatTime24 } from '@/lib/utils';
@@ -75,6 +77,10 @@ export default function ZibagarBookingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleSlots, setRescheduleSlots] = useState<{ start: string }[]>([]);
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
@@ -112,6 +118,42 @@ export default function ZibagarBookingsPage() {
 
   function applyFilters() {
     setApplied({ q: q.trim(), status, from, to });
+  }
+
+
+  async function loadRescheduleSlots(b: BookingListItem, date: string) {
+    const proId = b.professional?.id;
+    if (!date || !proId) return;
+    setRescheduleLoading(true);
+    try {
+      const start = b.startAt ? new Date(b.startAt).getTime() : 0;
+      const end = b.endAt ? new Date(b.endAt).getTime() : start + 30 * 60_000;
+      const durationMin = Math.max(15, Math.round((end - start) / 60_000) || 30);
+      const avail = await fetchAvailability(proId, date, durationMin);
+      setRescheduleSlots(Array.isArray(avail?.slots) ? avail.slots : []);
+    } catch {
+      setRescheduleSlots([]);
+    } finally {
+      setRescheduleLoading(false);
+    }
+  }
+
+  async function applyReschedule(b: BookingListItem, slotStart: string) {
+    if (!rescheduleDate) return;
+    setRescheduleLoading(true);
+    setError(null);
+    try {
+      const hh = slotStart.length === 5 ? slotStart + ':00' : slotStart;
+      const startAt = `${rescheduleDate}T${hh}.000Z`;
+      await rescheduleBooking(b.id, startAt);
+      setRescheduleFor(null);
+      setRescheduleSlots([]);
+      await load();
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setRescheduleLoading(false);
+    }
   }
 
   async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete') {
@@ -401,6 +443,17 @@ export default function ZibagarBookingsPage() {
                             <>
                               <Button
                                 size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setRescheduleFor(b.id);
+                                  setRescheduleDate('');
+                                  setRescheduleSlots([]);
+                                }}
+                              >
+                                تغییر زمان
+                              </Button>
+                              <Button
+                                size="sm"
                                 variant="secondary"
                                 loading={busy === `${b.id}:reject`}
                                 onClick={() => act(b.id, 'reject')}
@@ -424,6 +477,47 @@ export default function ZibagarBookingsPage() {
                               </Button>
                             </>
                           )}
+
+                          {rescheduleFor === b.id && (
+                            <div className="mt-2 space-y-2 rounded-xl border border-border bg-gray-light/50 p-3">
+                              <p className="text-xs font-medium">زمان جدید برای این نوبت</p>
+                              <input
+                                type="date"
+                                className="h-9 w-full max-w-xs rounded-lg border border-border px-2 text-sm"
+                                value={rescheduleDate}
+                                min={new Date().toISOString().slice(0, 10)}
+                                onChange={(e) => {
+                                  const d = e.target.value;
+                                  setRescheduleDate(d);
+                                  void loadRescheduleSlots(b, d);
+                                }}
+                              />
+                              {rescheduleLoading && (
+                                <p className="text-xs text-gray">بارگذاری ساعات…</p>
+                              )}
+                              <div className="flex flex-wrap gap-1.5">
+                                {rescheduleSlots.map((sl) => (
+                                  <button
+                                    key={sl.start}
+                                    type="button"
+                                    disabled={rescheduleLoading}
+                                    className="rounded-lg border border-border bg-white px-2.5 py-1 text-xs hover:border-coral hover:text-coral"
+                                    onClick={() => void applyReschedule(b, sl.start)}
+                                  >
+                                    {sl.start}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                className="text-xs text-gray underline"
+                                onClick={() => setRescheduleFor(null)}
+                              >
+                                انصراف
+                              </button>
+                            </div>
+                          )}
+
                           {(b.status === 'completed' || b.status === 'expired') && (
                             <Button
                               size="sm"
