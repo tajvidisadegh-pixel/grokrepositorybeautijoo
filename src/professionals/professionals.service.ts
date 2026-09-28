@@ -176,10 +176,11 @@ export class ProfessionalsService {
 
     if (params.gender) {
       const g = params.gender.trim().toLowerCase();
-      if (['female', 'male', 'other'].includes(g)) {
+      if (g === 'female' || g === 'male' || g === 'other') {
         where.user = {
-          ...(typeof where.user === 'object' && where.user !== null ? where.user : {}),
-          profile: { gender: g as 'female' | 'male' | 'other' },
+          profile: {
+            is: { gender: g },
+          },
         };
       }
     }
