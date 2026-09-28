@@ -341,6 +341,44 @@ export default function PanelBookingsPage() {
                     </div>
                   )}
 
+                  
+                  {rescheduleFor === b.id && (
+                    <div className="mt-3 space-y-2 rounded-2xl border border-border bg-gray-light/40 p-3">
+                      <p className="text-sm font-medium">انتخاب زمان جدید</p>
+                      <input
+                        type="date"
+                        className="h-10 w-full rounded-xl border border-border px-3 text-sm"
+                        value={rescheduleDate}
+                        min={new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          setRescheduleDate(d);
+                          void loadRescheduleSlots(b, d);
+                        }}
+                      />
+                      {rescheduleLoading && <p className="text-xs text-gray">در حال بارگذاری ساعات…</p>}
+                      {!rescheduleLoading && rescheduleDate && rescheduleSlots.length === 0 && (
+                        <p className="text-xs text-gray">ساعت آزادی برای این روز نیست.</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {rescheduleSlots.map((sl) => (
+                          <button
+                            key={sl.start}
+                            type="button"
+                            disabled={rescheduleLoading}
+                            className="rounded-xl border border-border bg-white px-3 py-1.5 text-xs hover:border-coral hover:text-coral"
+                            onClick={() => void applyReschedule(b, sl.start)}
+                          >
+                            {sl.start}
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" className="text-xs text-gray underline" onClick={() => setRescheduleFor(null)}>
+                        انصراف
+                      </button>
+                    </div>
+                  )}
+
                   {reviewFor === b.id && (
                     <div className="mt-2 space-y-3 rounded-xl bg-gray-light p-3">
                       <div>
