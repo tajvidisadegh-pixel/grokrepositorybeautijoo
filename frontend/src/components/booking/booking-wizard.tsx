@@ -623,6 +623,10 @@ export function BookingWizard({
               <span className="text-coral">{formatPrice(displayPrice)}</span>
             </div>
             <p className="text-xs text-gray">هیچ هزینه پنهانی اضافه نمی‌شود.</p>
+<p className="rounded-xl bg-gray-light/60 px-3 py-2 text-xs text-gray">
+  سیاست لغو: تا حدود ۲ ساعت قبل از نوبت می‌توانید رزرو را لغو کنید. پس از پرداخت موفق،
+  با لغو به‌موقع درخواست استرداد ثبت می‌شود.
+</p>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">یادداشت (اختیاری)</label>
