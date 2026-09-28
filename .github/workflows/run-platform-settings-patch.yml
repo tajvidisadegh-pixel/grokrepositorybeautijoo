@@ -1,0 +1,26 @@
+name: Run platform settings patch
+on:
+  push:
+    paths:
+      - '.github/workflows/run-platform-settings-patch.yml'
+      - 'scripts/patch-platform-settings.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: python3 scripts/patch-platform-settings.py
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/run-platform-settings-patch.yml
+          rm -f .github/workflows/add-platform-settings.yml
+          git add backend/src/admin/admin.service.ts backend/src/admin/admin.controller.ts
+          git add -A
+          git status
+          git diff --cached --quiet || git commit -m "feat(admin): platform settings GET/PUT for SUPER_ADMIN (#38)"
+          git push
