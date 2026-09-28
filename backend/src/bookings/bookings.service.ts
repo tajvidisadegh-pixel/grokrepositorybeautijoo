@@ -417,6 +417,137 @@ export class BookingsService {
     return b;
   }
 
+
+  /**
+   * Move a pending/confirmed booking to a new startAt (same services/duration).
+   */
+  async reschedule(
+    id: string,
+    userId: string,
+    roles: string[],
+    startAtIso: string,
+  ) {
+    const b = await this.prisma.booking.findUnique({
+      where: { id },
+      include: {
+        customer: { select: { id: true } },
+        professional: { select: { id: true, userId: true, title: true } },
+        items: true,
+      },
+    });
+    if (!b) throw new NotFoundException();
+
+    const isAdmin = roles.some((r) => ['admin', 'SUPER_ADMIN'].includes(r));
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    const isPro = !!(pro && b.professionalId === pro.id);
+    const isCustomer = b.customerId === userId;
+    if (!isAdmin && !isCustomer && !isPro) throw new ForbiddenException();
+
+    const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+    if (!allowed.includes(b.status)) {
+      throw new BadRequestException('فقط رزرو در انتظار یا تأییدشده قابل تغییر زمان است');
+    }
+
+    if (isCustomer && !isAdmin) {
+      const minHours = parseInt(process.env.CANCEL_MIN_HOURS_BEFORE || '2', 10);
+      const hours = Number.isFinite(minHours) && minHours >= 0 ? minHours : 2;
+      const msLeft = b.startAt.getTime() - Date.now();
+      if (msLeft < hours * 3600_000) {
+        throw new BadRequestException(
+          hours === 0
+            ? 'امکان تغییر زمان این رزرو وجود ندارد.'
+            : `تغییر زمان فقط تا ${hours} ساعت قبل از نوبت امکان‌پذیر است.`,
+        );
+      }
+    }
+
+    const startAt = new Date(startAtIso);
+    if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now() + 60_000) {
+      throw new BadRequestException('زمان جدید باید در آینده باشد');
+    }
+
+    const durationMs = Math.max(15 * 60_000, b.endAt.getTime() - b.startAt.getTime());
+    const endAt = new Date(startAt.getTime() + durationMs);
+
+    const clash = await this.prisma.booking.findFirst({
+      where: {
+        id: { not: id },
+        professionalId: b.professionalId,
+        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+      select: { id: true },
+    });
+    if (clash) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+
+    try {
+      const dateStr = tehranDateStr(startAt);
+      const durationMin = Math.round(durationMs / 60_000);
+      const avail = await this.availability.getSlots(b.professionalId, dateStr, durationMin);
+      const slotList = Array.isArray(avail)
+        ? avail
+        : Array.isArray((avail as { slots?: unknown })?.slots)
+          ? (avail as { slots: { start?: string; available?: boolean }[] }).slots
+          : [];
+      const hhmm = tehranHHMM(startAt);
+      const ok = slotList.some(
+        (s) =>
+          s.available !== false &&
+          (s.start === hhmm || s.start === hhmm.slice(0, 5)),
+      );
+      if (!ok) {
+        throw new BadRequestException('زمان انتخاب‌شده در ساعات کاری زیباگر موجود نیست');
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException || err instanceof ConflictException) throw err;
+      this.logger.warn(`reschedule availability check skipped: ${(err as Error)?.message}`);
+    }
+
+    const previousStart = b.startAt;
+    const updated = await this.prisma.booking.update({
+      where: { id },
+      data: {
+        startAt,
+        endAt,
+        notes: b.notes
+          ? `${b.notes}\n[تغییر زمان از ${previousStart.toISOString()}]`
+          : `[تغییر زمان از ${previousStart.toISOString()}]`,
+      },
+    });
+
+    let when: string;
+    try {
+      when = new Intl.DateTimeFormat('fa-IR', {
+        timeZone: 'Asia/Tehran',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(startAt);
+    } catch {
+      when = startAt.toISOString();
+    }
+
+    const targets = new Set<string>();
+    targets.add(b.customerId);
+    if (b.professional?.userId) targets.add(b.professional.userId);
+    for (const uid of targets) {
+      if (uid === userId && !isAdmin) continue;
+      await this.notifications.notify({
+        userId: uid,
+        type: NotificationType.booking_confirmed,
+        title: 'زمان رزرو تغییر کرد',
+        body: `نوبت به ${when} منتقل شد.`,
+        data: {
+          bookingId: id,
+          startAt: startAt.toISOString(),
+          previousStart: previousStart.toISOString(),
+        },
+        sms: true,
+      });
+    }
+    return updated;
+  }
+
   async transition(
     id: string,
     userId: string,

@@ -169,6 +169,10 @@ export async function fetchProBookings(page = 1, limit = 20, filters?: ProBookin
   const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/professional?${params.toString()}`);
   return { items: unwrapList(res), raw: res };
 }
+export async function rescheduleBooking(id: string, startAt: string) {
+  return apiClient.patch(`/bookings/${id}/reschedule`, { startAt });
+}
+
 export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
   return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);
 }

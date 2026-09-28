@@ -9,8 +9,10 @@ import {
   fetchMyBookings,
   createReview,
   transitionBooking,
+  rescheduleBooking,
   type BookingListItem,
 } from '@/lib/panel-api';
+import { fetchAvailability } from '@/lib/booking-api';
 import { persianBookingStatus, persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatRelativeDate } from '@/lib/utils';
@@ -41,6 +43,10 @@ export default function PanelBookingsPage() {
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
   const searchParams = useSearchParams();
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleSlots, setRescheduleSlots] = useState<{ start: string }[]>([]);
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -88,6 +94,42 @@ export default function PanelBookingsPage() {
       setReviewMsg(friendlyApiError(e));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+
+  async function loadRescheduleSlots(b: BookingWithReview, date: string) {
+    if (!date || !b.professional?.id) return;
+    setRescheduleLoading(true);
+    try {
+      const start = b.startAt ? new Date(b.startAt).getTime() : 0;
+      const end = b.endAt ? new Date(b.endAt).getTime() : start + 30 * 60_000;
+      const durationMin = Math.max(15, Math.round((end - start) / 60_000) || 30);
+      const avail = await fetchAvailability(b.professional.id, date, durationMin);
+      setRescheduleSlots(Array.isArray(avail?.slots) ? avail.slots : []);
+    } catch {
+      setRescheduleSlots([]);
+    } finally {
+      setRescheduleLoading(false);
+    }
+  }
+
+  async function applyReschedule(b: BookingWithReview, slotStart: string) {
+    if (!rescheduleDate) return;
+    setRescheduleLoading(true);
+    setActionMsg(null);
+    try {
+      const hh = slotStart.length === 5 ? slotStart + ':00' : slotStart;
+      const startAt = `${rescheduleDate}T${hh}.000Z`;
+      await rescheduleBooking(b.id, startAt);
+      setActionMsg('زمان رزرو با موفقیت تغییر کرد.');
+      setRescheduleFor(null);
+      setRescheduleSlots([]);
+      await load();
+    } catch (e) {
+      setActionMsg(friendlyApiError(e));
+    } finally {
+      setRescheduleLoading(false);
     }
   }
 
@@ -261,6 +303,44 @@ export default function PanelBookingsPage() {
                       <span className="self-center text-xs text-gray">نظر ثبت شده</span>
                     )}
                   </div>
+                  
+                  {rescheduleFor === b.id && (
+                    <div className="mt-3 space-y-2 rounded-2xl border border-border bg-gray-light/40 p-3">
+                      <p className="text-sm font-medium">انتخاب زمان جدید</p>
+                      <input
+                        type="date"
+                        className="h-10 w-full rounded-xl border border-border px-3 text-sm"
+                        value={rescheduleDate}
+                        min={new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          setRescheduleDate(d);
+                          void loadRescheduleSlots(b, d);
+                        }}
+                      />
+                      {rescheduleLoading && <p className="text-xs text-gray">در حال بارگذاری ساعات…</p>}
+                      {!rescheduleLoading && rescheduleDate && rescheduleSlots.length === 0 && (
+                        <p className="text-xs text-gray">ساعت آزادی برای این روز نیست.</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {rescheduleSlots.map((sl) => (
+                          <button
+                            key={sl.start}
+                            type="button"
+                            disabled={rescheduleLoading}
+                            className="rounded-xl border border-border bg-white px-3 py-1.5 text-xs hover:border-coral hover:text-coral"
+                            onClick={() => void applyReschedule(b, sl.start)}
+                          >
+                            {sl.start}
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" className="text-xs text-gray underline" onClick={() => setRescheduleFor(null)}>
+                        انصراف
+                      </button>
+                    </div>
+                  )}
+
                   {reviewFor === b.id && (
                     <div className="mt-2 space-y-3 rounded-xl bg-gray-light p-3">
                       <div>
