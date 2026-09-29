@@ -37,6 +37,7 @@ export default function AdminAuditPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,7 +189,7 @@ export default function AdminAuditPage() {
               </thead>
               <tbody>
                 {items.map((log) => (
-                  <tr key={log.id} className="border-b border-border/60 last:border-0">
+                  <tr key={log.id} className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-gray-light/30" onClick={() => setSelectedLog(log)}>
                     <td className="px-3 py-2 whitespace-nowrap text-xs">
                       {formatDateTime(log.createdAt)}
                     </td>
@@ -239,6 +240,27 @@ export default function AdminAuditPage() {
             </div>
           )}
         </>
+      )}
+
+      {selectedLog && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={() => setSelectedLog(null)}>
+          <aside className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-xl" dir="rtl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div><h2 className="text-lg font-bold">جزئیات رویداد</h2><p className="mt-1 text-xs text-gray">{formatDateTime(selectedLog.createdAt)}</p></div>
+              <button type="button" className="text-sm underline" onClick={() => setSelectedLog(null)}>بستن</button>
+            </div>
+            <dl className="space-y-3 text-sm">
+              <div className="rounded-xl bg-gray-light/40 p-3"><dt className="text-xs text-gray">اکشن</dt><dd className="mt-1 font-mono" dir="ltr">{selectedLog.action}</dd></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><dt className="text-xs text-gray">نوع موجودیت</dt><dd className="mt-1">{selectedLog.entityType || '—'}</dd></div>
+                <div><dt className="text-xs text-gray">شناسه موجودیت</dt><dd className="mt-1 break-all font-mono text-xs" dir="ltr">{selectedLog.entityId || '—'}</dd></div>
+                <div><dt className="text-xs text-gray">عامل</dt><dd className="mt-1">{actorLabel(selectedLog)}</dd></div>
+                <div><dt className="text-xs text-gray">شناسه عامل</dt><dd className="mt-1 break-all font-mono text-xs" dir="ltr">{selectedLog.actorId || '—'}</dd></div>
+              </div>
+              <div><dt className="text-xs text-gray">داده رویداد</dt><dd className="mt-1 overflow-x-auto rounded-xl bg-gray-900 p-4 text-xs text-white" dir="ltr"><pre className="whitespace-pre-wrap">{JSON.stringify(selectedLog.meta ?? {}, null, 2)}</pre></dd></div>
+            </dl>
+          </aside>
+        </div>
       )}
     </div>
   );
