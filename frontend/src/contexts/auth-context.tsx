@@ -38,7 +38,7 @@ type AuthContextValue = {
   ) => Promise<void>;
   register: (
     phone: string,
-    password: string,
+    password: string | undefined,
     code: string,
     displayName?: string,
     role?: AccountType,
@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(
     async (
       phone: string,
-      password: string,
+      password: string | undefined,
       code: string,
       displayName?: string,
       role?: AccountType,
