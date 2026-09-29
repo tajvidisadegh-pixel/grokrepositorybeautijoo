@@ -13,7 +13,7 @@ const ITEMS = [
   { href: '/zibagar/earnings', label: 'درآمد', mobile: true },
   { href: '/zibagar/profile', label: 'پروفایل', mobile: true },
   { href: '/zibagar/hours', label: 'ساعات کاری' },
-  { href: '/zibagar/locations', label: 'مکان کار' },
+  { href: '/zibagar/locations', label: 'آدرس' },
   { href: '/zibagar/notifications', label: 'اعلان‌ها', mobile: true },
   { href: '/zibagar/support', label: 'پشتیبانی' },
   { href: '/zibagar/settings', label: 'تنظیمات' },
