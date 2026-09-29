@@ -189,6 +189,12 @@ export default function ZibagarPortfolioPage() {
     setMsg(null);
     try {
       const priceRaw = editPrice.trim();
+      const parsedPrice = priceRaw ? parsePriceInput(priceRaw) : null;
+      if (parsedPrice != null && parsedPrice > 0 && parsedPrice < 10000) {
+        setMsg('قیمت باید حداقل ۱۰٬۰۰۰ تومان باشد.');
+        setBusy(false);
+        return;
+      }
       const durRaw = editDuration.trim();
       const body = {
         title: editTitle.trim() || null,
