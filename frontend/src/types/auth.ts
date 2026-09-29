@@ -58,7 +58,8 @@ export type RegisterPayload = {
   phone: string;
   /** OTP code received via SMS (required) */
   code: string;
-  password: string;
+  /** Optional — OTP-only signup without password (issue #43) */
+  password?: string;
   displayName?: string;
   /** Public registration: only customer | professional (backend validates) */
   role?: AccountType;
