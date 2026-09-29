@@ -74,8 +74,8 @@ export function ServiceEditPanel(props: ServiceEditPanelProps) {
         <p className={`mb-1 text-sm font-semibold ${navy.title}`}>{serviceLabel(selectedPs)}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs text-gray-500">قیمت (تومان) — اختیاری</label>
-            <Input inputMode="numeric" value={price ? formatPriceDigits(price) : ''} onChange={(e) => setPrice(parsePriceInput(e.target.value))} />
+            <label className="mb-1 block text-xs text-gray-500">قیمت (تومان) — حداقل ۱۰٬۰۰۰</label>
+            <Input inputMode="numeric" min={10000} value={price ? formatPriceDigits(price) : ''} onChange={(e) => setPrice(parsePriceInput(e.target.value))} />
             {price > 0 && <span className="mt-1 block text-xs text-gray-500">{priceToWords(price)}</span>}
           </div>
           <div>
