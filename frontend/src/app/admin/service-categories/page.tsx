@@ -38,6 +38,8 @@ export default function AdminServiceCategoriesPage() {
   const [error, setError] = useState<string | null>(null);
   const [editCat, setEditCat] = useState<Category | null>(null);
   const [editSvc, setEditSvc] = useState<Service | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [childParentId, setChildParentId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -58,6 +60,43 @@ export default function AdminServiceCategoriesPage() {
       setServices([]);
     });
   }, [load]);
+
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string | null, Category[]>();
+    for (const c of categories) {
+      const key = c.parentId ?? null;
+      const list = map.get(key) || [];
+      list.push(c);
+      map.set(key, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, 'fa'));
+    return map;
+  }, [categories]);
+
+  const descendantIds = useMemo(() => {
+    const result = new Map<string, Set<string>>();
+    const visit = (id: string, set: Set<string>) => {
+      for (const child of childrenByParent.get(id) || []) {
+        if (set.has(child.id)) continue;
+        set.add(child.id);
+        visit(child.id, set);
+      }
+    };
+    for (const c of categories) {
+      const set = new Set<string>();
+      visit(c.id, set);
+      result.set(c.id, set);
+    }
+    return result;
+  }, [categories, childrenByParent]);
+
+  const toggleExpanded = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const filteredServices = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -81,6 +120,7 @@ export default function AdminServiceCategoriesPage() {
       });
       setName('');
       setParentId('');
+      if (parentId) setExpanded((prev) => new Set(prev).add(parentId));
       setMessage('دسته‌بندی ایجاد شد');
       await load();
     } catch (e) {
@@ -213,12 +253,15 @@ export default function AdminServiceCategoriesPage() {
 
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-[#E7F1FF] bg-white p-4">
-          <h2 className="font-semibold text-[#0B2C4A]">+ افزودن دسته‌بندی</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold text-[#0B2C4A]">+ {childParentId ? 'افزودن زیرمجموعه' : 'افزودن دسته‌بندی'}</h2>
+            {childParentId && <button type="button" className="text-xs text-gray-500 underline" onClick={() => { setChildParentId(null); setParentId(''); }}>لغو حالت زیرمجموعه</button>}
+          </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="نام دسته‌بندی"
+              placeholder={childParentId ? 'نام زیرمجموعه' : 'نام دسته‌بندی'}
             />
             <select
               value={parentId}
@@ -276,92 +319,75 @@ export default function AdminServiceCategoriesPage() {
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4">
-        <h2 className="font-semibold text-[#0B2C4A]">دسته‌بندی‌های موجود</h2>
-        <div className="mt-3 divide-y">
-          {categories.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-500">هنوز دسته‌بندی‌ای ساخته نشده است.</p>
-          ) : (
-            categories.map((c) => (
-              <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                {editCat?.id === c.id ? (
-                  <div className="flex w-full flex-wrap items-center gap-2">
-                    <Input
-                      value={editCat.name}
-                      onChange={(e) => setEditCat({ ...editCat, name: e.target.value })}
-                      className="max-w-xs"
-                    />
-                    <select
-                      value={editCat.parentId || ''}
-                      onChange={(e) =>
-                        setEditCat({ ...editCat, parentId: e.target.value || null })
-                      }
-                      className="h-10 rounded-xl border px-3 text-sm"
-                    >
-                      <option value="">بدون والد</option>
-                      {categories
-                        .filter((x) => x.id !== c.id)
-                        .map((x) => (
-                          <option key={x.id} value={x.id}>
-                            {x.name}
-                          </option>
-                        ))}
-                    </select>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold text-[#0B2C4A]">ساختار دسته‌بندی‌ها</h2>
+            <p className="mt-1 text-xs text-gray-500">دسته اصلی ← زیرمجموعه ← زیرمجموعه‌های بعدی. برای هر سطح می‌توانی مستقیم «زیرمجموعه» اضافه کنی.</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-lg border border-[#2D6CDF] px-3 py-1.5 text-xs text-[#2D6CDF]"
+            onClick={() => { setParentId(''); setChildParentId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          >
+            + دسته اصلی
+          </button>
+        </div>
+        <div className="mt-4 space-y-2">
+          {(childrenByParent.get(null) || []).map((root) => {
+            const renderNode = (cat: Category, depth = 0): React.ReactNode => {
+              const children = childrenByParent.get(cat.id) || [];
+              const isOpen = expanded.has(cat.id);
+              return (
+                <div key={cat.id} className="rounded-xl border border-gray-100 bg-gray-50/60">
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                     <button
-                      disabled={busy}
-                      onClick={() => void saveEditCategory()}
-                      className="rounded-lg bg-[#2D6CDF] px-3 py-1.5 text-xs text-white"
+                      type="button"
+                      aria-label={isOpen ? 'بستن زیرمجموعه‌ها' : 'باز کردن زیرمجموعه‌ها'}
+                      className="h-7 w-7 rounded-lg border bg-white text-sm"
+                      onClick={() => toggleExpanded(cat.id)}
                     >
-                      ذخیره
+                      {children.length ? (isOpen ? '−' : '+') : '•'}
                     </button>
-                    <button
-                      onClick={() => setEditCat(null)}
-                      className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs"
-                    >
-                      انصراف
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <p className="text-sm font-medium">
-                        {c.name}{' '}
-                        {!c.isActive && (
-                          <span className="text-xs text-red-500">(غیرفعال)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {c.parent?.name ? `زیرمجموعهٔ ${c.parent.name}` : 'دسته اصلی'} ·{' '}
-                        {c.slug}
-                        {c._count ? ` · ${c._count.services} تخصص` : ''}
-                      </p>
+                    <div className="min-w-0 flex-1" style={{ paddingRight: depth * 18 }}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-sm">{cat.name}</span>
+                        {!cat.isActive && <span className="text-xs text-red-500">(غیرفعال)</span>}
+                        {children.length > 0 && <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">{children.length} زیرمجموعه</span>}
+                      </div>
+                      <p className="text-[11px] text-gray-400">{cat.parent?.name ? `زیرمجموعهٔ ${cat.parent.name}` : 'دسته اصلی'} · {cat._count?.services ?? 0} تخصص · {cat.slug}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
+                        type="button"
                         disabled={busy}
-                        onClick={() => setEditCat({ ...c })}
-                        className="text-xs text-[#2D6CDF]"
+                        className="rounded-lg border border-[#FF6F61] px-2.5 py-1 text-xs text-[#FF6F61]"
+                        onClick={() => {
+                          setParentId(cat.id);
+                          setChildParentId(cat.id);
+                          setName('');
+                          setExpanded((prev) => new Set(prev).add(cat.id));
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
                       >
-                        ویرایش
+                        + زیرمجموعه
                       </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => void setCategoryActive(c.id, !c.isActive)}
-                        className="text-xs text-[#2D6CDF]"
-                      >
-                        {c.isActive ? 'غیرفعال' : 'فعال'}
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => void deleteCategory(c.id)}
-                        className="text-xs text-[#FF6F61]"
-                      >
-                        حذف
-                      </button>
+                      <button type="button" disabled={busy} onClick={() => setEditCat({ ...cat })} className="text-xs text-[#2D6CDF]">ویرایش</button>
+                      <button type="button" disabled={busy} onClick={() => void setCategoryActive(cat.id, !cat.isActive)} className="text-xs text-[#2D6CDF]">{cat.isActive ? 'غیرفعال' : 'فعال'}</button>
+                      <button type="button" disabled={busy} onClick={() => void deleteCategory(cat.id)} className="text-xs text-[#FF6F61]">حذف</button>
                     </div>
-                  </>
-                )}
-              </div>
-            ))
+                  </div>
+                  {isOpen && children.length > 0 && (
+                    <div className="space-y-2 border-t border-gray-100 p-2 pr-5">
+                      {children.map((child) => renderNode(child, depth + 1))}
+                    </div>
+                  )}
+                </div>
+              );
+            };
+            return renderNode(root);
+          })}
+          {(childrenByParent.get(null) || []).length === 0 && (
+            <p className="py-6 text-center text-sm text-gray-500">هنوز دسته‌بندی‌ای ساخته نشده است.</p>
           )}
         </div>
       </section>
