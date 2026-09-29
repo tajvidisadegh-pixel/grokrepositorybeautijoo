@@ -11,7 +11,6 @@ import { ServicePortfolioGallery } from '@/components/professionals/service-port
 import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
 import LocationMapView from '@/components/location/location-map-view'
 import { StickyBookBar } from '@/components/professionals/sticky-book-bar';
-import { TrustBadge } from '@/components/professionals/trust-badge';
 import { ShareProfileButton } from '@/components/professionals/share-profile-button';
 
 type Props = {
@@ -201,7 +200,6 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="text-xl font-bold text-blue sm:text-2xl">{name}</h1>
-                <div className="mt-1"><TrustBadge status={pro.status} verifiedAt={(pro as { verifiedAt?: string | null }).verifiedAt} size="md" /></div>
                 <div className="mt-2"><ShareProfileButton slug={pro.slug} name={name} /></div>
                 {pro.title && pro.title !== name && (
                   <p className="mt-1 text-sm text-gray">{pro.title}</p>
@@ -237,7 +235,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
             if (!salon.length) return null;
             return (
               <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-foreground">عکس‌های سالن</h2>
+                <h2 className="text-lg font-bold text-foreground">عکس‌های محل</h2>
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
                   {salon.map((m) => {
                     const url = m.publicUrl || (m as { url?: string }).url || '';

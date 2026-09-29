@@ -290,14 +290,14 @@ export default function ZibagarProfilePage() {
 
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-semibold">موقعیت</h3>
+              <h3 className="font-semibold">آدرس</h3>
               <Link href="/zibagar/locations" className="text-xs text-blue hover:underline">
                 ویرایش
               </Link>
             </div>
             <Card className="space-y-2">
               {locations.length === 0 ? (
-                <p className="text-sm text-gray">مکانی ثبت نشده.</p>
+                <p className="text-sm text-gray">آدرسی ثبت نشده.</p>
               ) : (
                 locations.map((l, i) => (
                   <p key={i} className="text-sm">

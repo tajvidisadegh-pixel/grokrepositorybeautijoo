@@ -56,7 +56,7 @@ export default function ZibagarLocationsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [salonMedia, setSalonMedia] = useState<Array<{ id: string; publicUrl?: string | null; url?: string | null; mimeType?: string | null }>>([]);
+  const [addressMedia, setAddressMedia] = useState<Array<{ id: string; publicUrl?: string | null; url?: string | null; mimeType?: string | null }>>([]);
   const [mediaBusy, setMediaBusy] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
@@ -106,8 +106,8 @@ export default function ZibagarLocationsPage() {
       try {
         const res = await apiClient.get<Array<{ id: string; publicUrl?: string; url?: string; mimeType?: string }> | { items?: Array<{ id: string; publicUrl?: string; url?: string; mimeType?: string }> }>('/professionals/me/media?kind=salon');
         const list = Array.isArray(res) ? res : res.items || [];
-        setSalonMedia(list.map((m) => ({ ...m, publicUrl: resolveMediaUrl(m.publicUrl || m.url) || m.publicUrl || m.url })));
-      } catch { setSalonMedia([]); }
+        setAddressMedia(list.map((m) => ({ ...m, publicUrl: resolveMediaUrl(m.publicUrl || m.url) || m.publicUrl || m.url })));
+      } catch { setAddressMedia([]); }
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -155,7 +155,7 @@ export default function ZibagarLocationsPage() {
     try {
       if (item?.id) {
         await apiClient.patch(`/professionals/me/locations/${item.id}`, payload);
-        setMsg('مکان کار به‌روز شد.');
+        setMsg('آدرس به‌روز شد.');
       } else {
         await addMyLocation(payload);
         setMsg('مکان کار ثبت شد.');
@@ -200,7 +200,7 @@ export default function ZibagarLocationsPage() {
   async function onSalonDelete(id: string) {
     if (!confirm('این رسانه سالن حذف شود؟')) return;
     setMediaBusy(true);
-    try { await deleteMyMedia(id); setSalonMedia((prev) => prev.filter((m) => m.id !== id)); setMsg('رسانه حذف شد.'); }
+    try { await deleteMyMedia(id); setAddressMedia((prev) => prev.filter((m) => m.id !== id)); setMsg('رسانه حذف شد.'); }
     catch (e) { setError(friendlyApiError(e)); }
     finally { setMediaBusy(false); }
   }
@@ -345,11 +345,11 @@ export default function ZibagarLocationsPage() {
             <Button size="sm" loading={mediaBusy} onClick={() => mediaInputRef.current?.click()}>افزودن عکس / فیلم</Button>
           </div>
         </div>
-        {salonMedia.length === 0 ? (
+        {addressMedia.length === 0 ? (
           <p className="text-sm text-gray">هنوز رسانه‌ای برای سالن ثبت نشده است.</p>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {salonMedia.map((m) => {
+            {addressMedia.map((m) => {
               const url = m.publicUrl || m.url || '';
               const video = (m.mimeType || '').startsWith('video/');
               return (

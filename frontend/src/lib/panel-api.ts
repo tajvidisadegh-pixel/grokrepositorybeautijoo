@@ -558,7 +558,7 @@ export async function adminSoftDeleteUser(id: string, reason?: string) {
 }
 
 /* ── Account settings (issue #10) ── */
-export type SessionItem = { id: string; createdAt: string; expiresAt: string; userAgent?: string | null; ip?: string | null };
+export type SessionItem = { id: string; createdAt: string; expiresAt: string | null; userAgent?: string | null; ip?: string | null };
 
 export async function changePassword(payload: { currentPassword: string; newPassword: string }) {
   return apiClient.post<{ message: string }>('/auth/change-password', payload ?? {});
