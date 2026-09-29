@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card';
 import { LogoMark } from '@/components/brand/logo';
 
 type RegisterRole = 'customer' | 'professional';
-type Step = 'phone' | 'code' | 'details';
+type Step = 'phone' | 'code';
 
 function RegisterForm() {
   const { register, requestOtp, isAuthenticated, hasRole } = useAuth();
@@ -22,7 +22,6 @@ function RegisterForm() {
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<RegisterRole>(
     asParam === 'professional' ? 'professional' : 'customer',
@@ -32,7 +31,6 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [expiresIn, setExpiresIn] = useState<number | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -78,6 +76,7 @@ function RegisterForm() {
     await sendOtp();
   }
 
+  /** After OTP: complete registration immediately (no password step — issue #43). */
   async function onCodeSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -85,22 +84,11 @@ function RegisterForm() {
       setError('کد تأیید را وارد کنید');
       return;
     }
-    setStep('details');
-    setInfo(null);
-  }
-
-  async function onDetailsSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (password.length < 8) {
-      setError('رمز عبور حداقل ۸ کاراکتر باشد');
-      return;
-    }
     setLoading(true);
     try {
       const me = await register(
         phone.trim(),
-        password,
+        undefined,
         code.trim(),
         displayName.trim() || undefined,
         role,
@@ -113,9 +101,6 @@ function RegisterForm() {
           ? err.message
           : 'ثبت‌نام ناموفق بود. دوباره تلاش کنید.';
       setError(msg);
-      if (msg.includes('کد') || msg.includes('منقضی') || msg.includes('تلاش')) {
-        setStep('code');
-      }
     } finally {
       setLoading(false);
     }
@@ -129,7 +114,6 @@ function RegisterForm() {
         <p className="mt-2 text-sm text-gray">
           {step === 'phone' && 'شماره موبایل خود را وارد کنید'}
           {step === 'code' && `کد تأیید ارسال‌شده به ${phone} را وارد کنید`}
-          {step === 'details' && 'رمز عبور و نام نمایشی را تکمیل کنید'}
         </p>
       </div>
 
@@ -177,6 +161,22 @@ function RegisterForm() {
                 autoComplete="tel"
               />
             </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                نام نمایشی <span className="font-normal text-gray">(اختیاری)</span>
+              </label>
+              <Input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder={
+                  role === 'professional' ? 'مثلاً متخصص پوست و مو' : 'مثلاً مریم رضایی'
+                }
+                autoComplete="name"
+              />
+              <p className="mt-1 text-xs text-gray">
+                می‌توانید بعداً در پروفایل هم تغییر دهید.
+              </p>
+            </div>
             {error && (
               <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
@@ -215,7 +215,7 @@ function RegisterForm() {
               <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
             <Button type="submit" className="w-full" loading={loading}>
-              ادامه
+              تأیید و ثبت‌نام
             </Button>
             <div className="flex flex-col gap-2">
               <Button
@@ -241,65 +241,6 @@ function RegisterForm() {
                 تغییر شماره
               </Button>
             </div>
-          </form>
-        )}
-
-        {step === 'details' && (
-          <form onSubmit={onDetailsSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">نام نمایشی</label>
-              <Input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={
-                  role === 'professional' ? 'مثلاً متخصص پوست و مو' : 'مثلاً مریم رضایی'
-                }
-                autoComplete="name"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">رمز عبور</label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  placeholder="حداقل ۸ کاراکتر"
-                  autoComplete="new-password"
-                  className="pl-16"
-                />
-                <button
-                  type="button"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray hover:text-foreground"
-                  onClick={() => setShowPassword((v) => !v)}
-                  tabIndex={-1}
-                >
-                  {showPassword ? 'مخفی' : 'نمایش'}
-                </button>
-              </div>
-            </div>
-            <p className="text-xs text-gray">
-              شماره: <span dir="ltr">{phone}</span>
-            </p>
-            {error && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-            )}
-            <Button type="submit" className="w-full" loading={loading}>
-              {role === 'professional' ? 'تکمیل ثبت‌نام زیباگر' : 'تکمیل ثبت‌نام'}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              onClick={() => {
-                setStep('code');
-                setError(null);
-              }}
-            >
-              بازگشت به کد تأیید
-            </Button>
           </form>
         )}
 
