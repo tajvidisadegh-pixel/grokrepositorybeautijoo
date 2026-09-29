@@ -70,6 +70,8 @@ export default function AdminMediaPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<MediaItem | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +88,7 @@ export default function AdminMediaPage() {
         apiClient.get<MediaStats>('/admin/media-stats').catch(() => null),
       ]);
       setItems(list.items || []);
+      setSelected(new Set());
       setMeta(list.meta || { page, limit: 24, total: list.items?.length || 0, totalPages: 1 });
       if (st) setStats(st);
     } catch (e) {
@@ -131,6 +134,22 @@ export default function AdminMediaPage() {
       setBusy(false);
     }
   };
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+  function toggleSelectAll() {
+    setSelected((prev) => prev.size === items.length && items.length > 0 ? new Set() : new Set(items.map((m) => m.id)));
+  }
+  async function removeSelected() {
+    const ids = Array.from(selected);
+    if (!ids.length || !confirm('حذف ' + ids.length + ' رسانه انتخاب‌شده؟')) return;
+    setBusy(true); setMsg(null);
+    try {
+      for (const id of ids) await apiClient.delete('/admin/media/' + id);
+      setSelected(new Set()); setMsg(ids.length + ' رسانه حذف شد'); await load();
+    } catch (e) { setMsg(friendlyApiError(e)); } finally { setBusy(false); }
+  }
 
   if (loading && items.length === 0) return <PanelLoading />;
   if (error && items.length === 0) return <PanelError message={error} onRetry={load} />;
@@ -201,9 +220,18 @@ export default function AdminMediaPage() {
         </div>
       </Card>
 
+      {selected.size > 0 && (
+        <Card className="flex flex-wrap items-center gap-2 border-red-200 bg-red-50 p-3">
+          <span className="text-sm font-medium">{selected.size} رسانه انتخاب شده</span>
+          <button type="button" className="rounded-lg bg-red-600 px-3 py-1.5 text-xs text-white" disabled={busy} onClick={() => void removeSelected()}>حذف گروهی</button>
+          <button type="button" className="rounded-lg border px-3 py-1.5 text-xs" onClick={() => setSelected(new Set())}>لغو انتخاب</button>
+        </Card>
+      )}
+
       {items.length === 0 ? (
         <PanelEmpty title="رسانه‌ای یافت نشد" />
       ) : (
+        <div className="mb-3 flex items-center gap-2 text-sm"><input aria-label="انتخاب همه رسانه‌های صفحه" type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleSelectAll} /><span>انتخاب همه این صفحه</span></div>
         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {items.map((m) => (
             <Card
@@ -211,10 +239,11 @@ export default function AdminMediaPage() {
               className="cursor-pointer overflow-hidden transition hover:shadow-md"
               onClick={() => setDetail(m)}
             >
-              <div className="aspect-video bg-gray-light">
+              <div className="relative aspect-video bg-gray-light">
+                <input aria-label="انتخاب رسانه" type="checkbox" checked={selected.has(m.id)} onChange={() => toggleSelect(m.id)} onClick={(e) => e.stopPropagation()} className="absolute right-2 top-2 z-10 size-5" />
                 {(m.mimeType || '').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(m.url) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.url} alt="" className="h-full w-full object-cover" />
+                  <img src={m.url} alt="" className="h-full w-full cursor-zoom-in object-cover" onDoubleClick={(e) => { e.stopPropagation(); setViewerIndex(items.findIndex((x) => x.id === m.id)); }} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-xs text-gray">{m.kind}</div>
                 )}
@@ -262,7 +291,7 @@ export default function AdminMediaPage() {
             <div className="mb-4 overflow-hidden rounded-xl border bg-gray-light">
               {(detail.mimeType || '').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(detail.url) ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={detail.url} alt="" className="max-h-64 w-full object-contain" />
+                <img src={detail.url} alt="" className="max-h-64 w-full cursor-zoom-in object-contain" onClick={() => setViewerIndex(items.findIndex((x) => x.id === detail.id))} />
               ) : (
                 <div className="flex h-40 items-center justify-center text-sm text-gray">{detail.mimeType || 'فایل'}</div>
               )}
@@ -315,6 +344,14 @@ export default function AdminMediaPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {viewerIndex != null && items[viewerIndex] && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setViewerIndex(null)}>
+          <button type="button" className="absolute right-4 top-4 rounded-full bg-white/10 px-4 py-2 text-2xl text-white" onClick={() => setViewerIndex(null)}>×</button>
+          <button type="button" className="absolute right-4 top-1/2 rounded-full bg-white/15 px-4 py-3 text-2xl text-white disabled:opacity-30" disabled={viewerIndex <= 0} onClick={(e) => { e.stopPropagation(); setViewerIndex((i) => i == null ? null : Math.max(0, i - 1)); }}>›</button>
+          <img src={items[viewerIndex].url} alt="" className="max-h-[90vh] max-w-[90vw] object-contain" onClick={(e) => e.stopPropagation()} />
+          <button type="button" className="absolute left-4 top-1/2 rounded-full bg-white/15 px-4 py-3 text-2xl text-white disabled:opacity-30" disabled={viewerIndex >= items.length - 1} onClick={(e) => { e.stopPropagation(); setViewerIndex((i) => i == null ? null : Math.min(items.length - 1, i + 1)); }}>‹</button>
         </div>
       )}
     </div>
