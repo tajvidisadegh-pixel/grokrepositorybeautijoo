@@ -25,6 +25,7 @@ export type CompletionResult = {
   fields: Array<{ key: CompletionFieldKey; label: string; done: boolean }>;
 };
 
+// Issue #44: public profile slugs are based on the professional's name, not phone number.
 const PERSIAN_SLUG_MAP: Record<string, string> = {
   'ا':'a','آ':'a','ب':'b','پ':'p','ت':'t','ث':'s','ج':'j','چ':'ch','ح':'h','خ':'kh',
   'د':'d','ذ':'z','ر':'r','ز':'z','ژ':'zh','س':'s','ش':'sh','ص':'s','ض':'z','ط':'t','ظ':'z',
