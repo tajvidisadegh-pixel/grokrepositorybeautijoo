@@ -318,11 +318,10 @@ export default async function ProfessionalProfilePage({ params }: Props) {
 
           {pro.locations && pro.locations.length > 0 && (
             <div className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
-              <h2 className="font-bold text-foreground">مکان کار</h2>
+              <h2 className="font-bold text-foreground">آدرس</h2>
               <ul className="mt-3 space-y-3 text-sm">
                 {pro.locations.map((pl) => (
                   <li key={pl.location.id}>
-                    <p className="font-medium">{pl.location.name}</p>
                     <p className="text-gray">
                       {pl.location.city}
                       {pl.location.province ? `، ${pl.location.province}` : ''}
