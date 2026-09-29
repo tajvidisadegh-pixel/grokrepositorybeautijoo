@@ -54,22 +54,18 @@ export class AuthService {
     const payload = { sub: userId, phone: phone ?? undefined };
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.get('jwt.accessSecret'),
-      expiresIn: this.config.get('jwt.accessTtl') || '15m',
     });
     const refreshToken = await this.jwt.signAsync(
       { ...payload, type: 'refresh', jti: randomUUID() },
       {
         secret: this.config.get('jwt.refreshSecret'),
-        expiresIn: this.config.get('jwt.refreshTtl') || '7d',
       },
     );
-    const refreshTtl = this.config.get<string>('jwt.refreshTtl') || '7d';
-    const expiresAt = new Date(Date.now() + ttlToMs(refreshTtl, 7 * 86_400_000));
+
     await this.prisma.refreshToken.create({
       data: {
         userId,
         tokenHash: this.hashToken(refreshToken),
-        expiresAt,
       },
     });
     return { accessToken, refreshToken };
@@ -266,7 +262,6 @@ export class AuthService {
         phone: dto.phone,
         purpose,
         usedAt: null,
-        expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -389,10 +384,6 @@ export class AuthService {
       }
       throw new UnauthorizedException('توکن منقضی یا باطل شده است');
     }
-    if (stored.expiresAt < new Date()) {
-      throw new UnauthorizedException('توکن منقضی یا باطل شده است');
-    }
-
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
@@ -614,13 +605,12 @@ export class AuthService {
       select: {
         id: true,
         createdAt: true,
-        expiresAt: true,
-      },
+        },
     });
     return tokens.map((t) => ({
       id: t.id,
       createdAt: t.createdAt.toISOString(),
-      expiresAt: t.expiresAt.toISOString(),
+      expiresAt: null,
     }));
   }
 
