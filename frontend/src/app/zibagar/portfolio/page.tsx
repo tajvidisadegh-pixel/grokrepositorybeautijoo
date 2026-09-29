@@ -8,7 +8,6 @@ import { friendlyApiError } from '@/lib/api-errors';
 import {
   resolveMediaUrl,
   isAllowedImageFile,
-  uploadMyMedia,
   fetchMyServices,
   type ProfessionalServiceItem,
 } from '@/lib/panel-api';
