@@ -23,6 +23,7 @@ import {
 } from '@/lib/public-api';
 import { ProfessionalCard } from '@/components/professionals/professional-card';
 import { siteName } from '@/lib/seo';
+import { HomeNearMeButton } from '@/components/search/home-near-me-button';
 
 export const metadata: Metadata = {
   title: { absolute: `${siteName()} | رزرو آنلاین خدمات زیبایی` },
@@ -341,12 +342,7 @@ export default async function HomePage() {
                 <span className="font-medium">📍 نزدیک من</span>
                 <span className="text-gray"> — زیباگرهای اطراف موقعیت شما</span>
               </p>
-              <Link
-                href="/search?sort=distance"
-                className="inline-flex h-10 items-center rounded-2xl bg-coral px-4 text-sm font-medium text-white hover:bg-coral-dark"
-              >
-                جستجوی نزدیک
-              </Link>
+              <HomeNearMeButton />
             </div>
           </section>
         );
