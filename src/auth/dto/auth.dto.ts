@@ -21,10 +21,15 @@ export class RegisterDto {
   @Length(4, 8)
   code!: string;
 
-  @ApiProperty({ example: 'SecurePass1' })
+  /** Optional — OTP-only accounts can register without a password (issue #43). */
+  @ApiPropertyOptional({
+    example: 'SecurePass1',
+    description: 'اختیاری؛ در صورت ارسال حداقل ۸ کاراکتر. حساب‌های فقط-OTP بدون رمز هم مجازند.',
+  })
+  @IsOptional()
   @IsString()
-  @MinLength(8)
-  password!: string;
+  @MinLength(8, { message: 'رمز عبور حداقل ۸ کاراکتر باشد' })
+  password?: string;
 
   @ApiPropertyOptional({ example: 'مریم رضایی' })
   @IsOptional()
