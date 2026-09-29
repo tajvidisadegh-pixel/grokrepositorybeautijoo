@@ -14,6 +14,7 @@ import {
   type SessionItem,
 } from '@/lib/panel-api';
 import { formatDateTime } from '@/lib/utils';
+import { Eye, EyeOff } from 'lucide-react';
 
 const NOTIF_KEY = 'bj_notif_prefs';
 
@@ -54,6 +55,10 @@ export default function PanelSettingsPage() {
   const [pwMsg, setPwMsg] = useState<string | null>(null);
   const [pwErr, setPwErr] = useState<string | null>(null);
   const [pwLoading, setPwLoading] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
 
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [sessLoading, setSessLoading] = useState(true);
@@ -206,41 +211,56 @@ export default function PanelSettingsPage() {
         <form onSubmit={onChangePassword} className="space-y-3 max-w-md">
           <div>
             <label className="block text-sm mb-1">رمز فعلی</label>
-            <input
-              type="password"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-              dir="ltr"
-            />
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 pl-10 text-sm"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+                dir="ltr"
+              />
+              <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-gray" onClick={() => setShowCurrentPassword((v) => !v)} aria-label={showCurrentPassword ? 'مخفی کردن رمز' : 'نمایش رمز'} title={showCurrentPassword ? 'مخفی کردن رمز' : 'نمایش رمز'}>
+                {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-sm mb-1">رمز جدید</label>
-            <input
-              type="password"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-              required
-              dir="ltr"
-            />
+            <div className="relative">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 pl-10 text-sm"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+                dir="ltr"
+              />
+              <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-gray" onClick={() => setShowNewPassword((v) => !v)} aria-label={showNewPassword ? 'مخفی کردن رمز' : 'نمایش رمز'} title={showNewPassword ? 'مخفی کردن رمز' : 'نمایش رمز'}>
+                {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-sm mb-1">تکرار رمز جدید</label>
-            <input
-              type="password"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-              required
-              dir="ltr"
-            />
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 pl-10 text-sm"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+                dir="ltr"
+              />
+              <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-gray" onClick={() => setShowConfirmPassword((v) => !v)} aria-label={showConfirmPassword ? 'مخفی کردن رمز' : 'نمایش رمز'} title={showConfirmPassword ? 'مخفی کردن رمز' : 'نمایش رمز'}>
+                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
           {pwErr && <p className="text-sm text-red-600">{pwErr}</p>}
           {pwMsg && <p className="text-sm text-green-600">{pwMsg}</p>}
@@ -323,14 +343,19 @@ export default function PanelSettingsPage() {
         <form onSubmit={onDeleteAccount} className="space-y-3 max-w-md">
           <div>
             <label className="block text-sm mb-1">رمز عبور برای تأیید</label>
-            <input
-              type="password"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              autoComplete="current-password"
-              dir="ltr"
-            />
+            <div className="relative">
+              <input
+                type={showDeletePassword ? 'text' : 'password'}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 pl-10 text-sm"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                autoComplete="current-password"
+                dir="ltr"
+              />
+              <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-gray" onClick={() => setShowDeletePassword((v) => !v)} aria-label={showDeletePassword ? 'مخفی کردن رمز' : 'نمایش رمز'} title={showDeletePassword ? 'مخفی کردن رمز' : 'نمایش رمز'}>
+                {showDeletePassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input

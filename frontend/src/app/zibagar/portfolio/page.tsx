@@ -8,10 +8,10 @@ import { friendlyApiError } from '@/lib/api-errors';
 import {
   resolveMediaUrl,
   isAllowedImageFile,
-  uploadMyMedia,
   fetchMyServices,
   type ProfessionalServiceItem,
 } from '@/lib/panel-api';
+import { uploadMyMedia } from '@/lib/media-upload';
 import { formatPrice, parsePriceInput } from '@/lib/utils';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -67,6 +67,7 @@ export default function ZibagarPortfolioPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editServiceId, setEditServiceId] = useState('');
@@ -131,15 +132,17 @@ export default function ZibagarPortfolioPage() {
       }
     }
     setBusy(true);
+    setUploadProgress(0);
     setMsg(null);
     try {
-      await uploadMyMedia(file, 'portfolio');
+      await uploadMyMedia(file, 'portfolio', undefined, setUploadProgress);
       setMsg(video ? 'ویدیو آپلود شد.' : 'تصویر آپلود شد.');
       await load();
     } catch (e) {
       setMsg(friendlyApiError(e));
     } finally {
       setBusy(false);
+      setUploadProgress(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   }
@@ -190,7 +193,7 @@ export default function ZibagarPortfolioPage() {
     try {
       const priceRaw = editPrice.trim();
       const parsedPrice = priceRaw ? parsePriceInput(priceRaw) : null;
-      if (parsedPrice != null && parsedPrice > 0 && parsedPrice < 10000) {
+      if (priceRaw && (parsedPrice == null || parsedPrice < 10000)) {
         setMsg('قیمت باید حداقل ۱۰٬۰۰۰ تومان باشد.');
         setBusy(false);
         return;
@@ -199,7 +202,7 @@ export default function ZibagarPortfolioPage() {
       const body = {
         title: editTitle.trim() || null,
         professionalServiceId: editServiceId || null,
-        price: priceRaw ? parsePriceInput(priceRaw) : null,
+        price: priceRaw ? parsedPrice : null,
         durationMin: durRaw ? Math.floor(Number(durRaw.replace(/[^\d]/g, ''))) || null : null,
       };
       if (body.durationMin != null && (body.durationMin < 1 || body.durationMin > 1440)) {
@@ -246,6 +249,18 @@ export default function ZibagarPortfolioPage() {
           </Button>
         </div>
       </div>
+
+      {uploadProgress != null && (
+        <div className="rounded-xl border border-blue/20 bg-blue/5 px-3 py-3">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span>در حال آپلود…</span>
+            <span dir="ltr">{uploadProgress}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-gray-light">
+            <div className="h-full rounded-full bg-blue transition-all" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        </div>
+      )}
 
       {msg && <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{msg}</p>}
 

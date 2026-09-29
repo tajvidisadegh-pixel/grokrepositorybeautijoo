@@ -78,6 +78,7 @@ export default function ZibagarServicesPage() {
   const [addSearch, setAddSearch] = useState('');
 
   const [showCreateSpecialty, setShowCreateSpecialty] = useState(false);
+  const [showCatalogPicker, setShowCatalogPicker] = useState(false);
   const [newSpecName, setNewSpecName] = useState('');
   const [newSpecPrice, setNewSpecPrice] = useState(0);
   const [newSpecDuration, setNewSpecDuration] = useState(60);
@@ -502,34 +503,62 @@ export default function ZibagarServicesPage() {
             
           </div>
 
-          {/* Catalog root picker — selection only (#30); backend create APIs retained */}
-          <div className={`space-y-3 rounded-2xl border ${navy.border} bg-white p-4`}>
-            <p className={`text-sm font-semibold ${navy.title}`}>افزودن تخصص از کاتالوگ</p>
-            {roots.filter((r) => !selectedRootIds.includes(r.id)).length === 0 ? (
-              <p className="text-xs text-gray-500">
-                {roots.length === 0
-                  ? 'کاتالوگ خالی است — سوپرادمین باید دسته‌بندی‌ها را در پنل ادمین تعریف کند.'
-                  : 'همه تخصص‌های کاتالوگ به لیست شما اضافه شده‌اند.'}
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {roots.filter((r) => !selectedRootIds.includes(r.id)).map((r) => (
-                  <li key={r.id}>
-                    <button type="button" disabled={busy} onClick={() => void addRootSpecialty(r.id)}
-                      className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-[#F9FAFB] px-3 py-2.5 text-right text-sm hover:border-[#0B2C4A]/30 disabled:opacity-50">
-                      <span className="font-medium text-[#0B2C4A]">{r.name}</span>
-                      <span className="text-xs text-[#2D6CDF]">+ انتخاب</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setShowCatalogPicker(true)}
+            className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 text-right shadow-sm hover:border-[#2D6CDF]/40 disabled:opacity-50"
+          >
+            <span>
+              <span className="block text-sm font-semibold text-[#0B2C4A]">افزودن تخصص جدید</span>
+              <span className="mt-1 block text-xs text-gray-500">انتخاب تخصص از فهرست</span>
+            </span>
+            <span className="rounded-full bg-[#E7F1FF] px-3 py-1.5 text-xs font-medium text-[#2D6CDF]">افزودن</span>
+          </button>
+
+          {showCatalogPicker && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                  <div>
+                    <h2 className="font-bold text-[#0B2C4A]">افزودن تخصص جدید</h2>
+                    <p className="mt-0.5 text-xs text-gray-500">یک مورد را انتخاب کنید</p>
+                  </div>
+                  <button type="button" className="text-sm text-gray-500" onClick={() => setShowCatalogPicker(false)}>بستن</button>
+                </div>
+                <div className="max-h-[65vh] overflow-y-auto p-4">
+                  {roots.filter((r) => !selectedRootIds.includes(r.id)).length === 0 ? (
+                    <p className="py-8 text-center text-sm text-gray-500">
+                      {roots.length === 0
+                        ? 'هنوز تخصصی در کاتالوگ تعریف نشده است.'
+                        : 'همه تخصص‌های کاتالوگ انتخاب شده‌اند.'}
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {roots.filter((r) => !selectedRootIds.includes(r.id)).map((r) => (
+                        <li key={r.id}>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={async () => { await addRootSpecialty(r.id); setShowCatalogPicker(false); }}
+                            className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-[#F9FAFB] px-3 py-3 text-right text-sm hover:border-[#2D6CDF]/30 disabled:opacity-50"
+                          >
+                            <span className="font-medium text-[#0B2C4A]">{r.name}</span>
+                            <span className="text-xs text-[#2D6CDF]">انتخاب</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {mine.length === 0 && myRoots.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
               <p className={`text-sm font-medium ${navy.title}`}>هنوز تخصصی انتخاب نکرده‌اید</p>
-              <p className="mt-1 text-xs text-gray-500">از لیست بالا یک تخصص کاتالوگ را انتخاب کنید.</p>
+              <p className="mt-1 text-xs text-gray-500">روی «افزودن تخصص جدید» بزنید و از فهرست انتخاب کنید.</p>
             </div>
           ) : mine.length > 0 ? (
             <div className={`overflow-hidden rounded-2xl border ${navy.border} bg-white`}>
