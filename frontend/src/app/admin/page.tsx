@@ -186,15 +186,17 @@ export default function AdminDashboardPage() {
       <Card className="border-amber-200 bg-amber-50/50">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="font-bold text-foreground">بررسی شود</h2><p className="mt-1 text-xs text-gray">مواردی که نیاز به اقدام یا بررسی مدیریت دارند.</p></div>
-          <span className="rounded-full bg-white px-3 py-1 text-xs text-gray">{fmt(reviewQueue.professionals + reviewQueue.bookings + reviewQueue.reviews + reviewQueue.support + reviewQueue.media)} مورد</span>
+          <span className="rounded-full bg-white px-3 py-1 text-xs text-gray">{fmt(reviewQueue.professionals + reviewQueue.bookings + reviewQueue.reviews + reviewQueue.support + reviewQueue.media + (data?.pending.pendingPayments ?? 0) + (data?.pending.failedPayments ?? 0))} مورد</span>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
           {[
             { label: 'زیباگر در انتظار بررسی', value: reviewQueue.professionals, href: '/admin/professionals' },
             { label: 'رزرو در انتظار اقدام', value: reviewQueue.bookings, href: '/admin/bookings' },
             { label: 'نظر در انتظار بررسی', value: reviewQueue.reviews, href: '/admin/reviews' },
             { label: 'تیکت پشتیبانی', value: reviewQueue.support, href: '/admin/support' },
             { label: 'رسانه در انتظار بررسی', value: reviewQueue.media, href: '/admin/media' },
+            { label: 'پرداخت در انتظار اقدام', value: data.pending.pendingPayments, href: '/admin/finance' },
+            { label: 'پرداخت ناموفق', value: data.pending.failedPayments, href: '/admin/finance' },
           ].map((item) => (
             <Link key={item.label} href={item.href} className="rounded-xl border border-amber-100 bg-white px-3 py-3 transition hover:border-coral/40">
               <p className="text-xs text-gray">{item.label}</p>
