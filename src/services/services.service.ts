@@ -175,8 +175,8 @@ export class ServicesService {
     if (data.durationMin == null || data.durationMin < 5) {
       throw new BadRequestException('مدت باید حداقل ۵ دقیقه باشد');
     }
-    if (data.price == null || data.price < 0) {
-      throw new BadRequestException('قیمت نامعتبر است');
+    if (data.price == null || data.price < 10000) {
+      throw new BadRequestException('قیمت باید حداقل ۱۰٬۰۰۰ تومان باشد');
     }
 
     return this.prisma.professionalService.upsert({
@@ -230,7 +230,7 @@ export class ServicesService {
     if (data.durationMin != null && data.durationMin < 5) {
       throw new BadRequestException('مدت باید حداقل ۵ دقیقه باشد');
     }
-    if (data.price != null && data.price < 0) {
+    if (data.price != null && data.price < 10000) {
       throw new BadRequestException('قیمت نامعتبر است');
     }
     return this.prisma.professionalService.update({
@@ -352,8 +352,8 @@ export class ServicesService {
     await this.requireOwnPs(userId, professionalServiceId);
     const name = data.name?.trim();
     if (!name) throw new BadRequestException('نام افزودنی الزامی است');
-    if (data.price == null || data.price < 0) {
-      throw new BadRequestException('قیمت افزودنی نامعتبر است');
+    if (data.price == null || data.price < 10000) {
+      throw new BadRequestException('قیمت افزودنی باید حداقل ۱۰٬۰۰۰ تومان باشد');
     }
     const extraDurationMin = data.extraDurationMin ?? 0;
     if (extraDurationMin < 0) {
