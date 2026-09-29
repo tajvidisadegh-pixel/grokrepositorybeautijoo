@@ -618,10 +618,9 @@ export class ProfessionalsService {
       }
       const city = loc.city || '';
       const province = loc.province || null;
+      const enteredAddress = typeof loc.address === 'string' ? loc.address.trim() : '';
       const publicAddress =
-        typeof loc.address === 'string' && loc.address.includes('محدوده')
-          ? loc.address
-          : `محدوده ${city}${province ? `، ${province}` : ''}`;
+        enteredAddress || `محدوده ${city}${province ? `، ${province}` : ''}`;
       return {
         ...pl,
         location: {
