@@ -6,6 +6,7 @@ import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-b
 import { MiniBarChart, MiniStackedBarChart } from '@/components/panel/mini-chart';
 import { fetchAdminDashboard, type AdminDashboard, type AdminWindowStats } from '@/lib/admin-dashboard-api';
 import { friendlyApiError } from '@/lib/api-errors';
+import { apiClient } from '@/lib/api';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { persianBookingStatus, persianProfessionalStatus } from '@/lib/persian-status';
 
@@ -119,6 +120,7 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [windowKey, setWindowKey] = useState<WindowKey>('last7Days');
+  const [reviewQueue, setReviewQueue] = useState({ professionals: 0, bookings: 0, reviews: 0, support: 0, media: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -126,8 +128,14 @@ export default function AdminDashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetchAdminDashboard();
-        if (!cancelled) setData(normalizeDashboard(res));
+        const [res, badges] = await Promise.all([
+          fetchAdminDashboard(),
+          apiClient.get<{ professionals?: number; bookings?: number; reviews?: number; support?: number; media?: number }>('/admin/nav-badges').catch(() => null),
+        ]);
+        if (!cancelled) {
+          setData(normalizeDashboard(res));
+          if (badges) setReviewQueue({ professionals: badges.professionals ?? 0, bookings: badges.bookings ?? 0, reviews: badges.reviews ?? 0, support: badges.support ?? 0, media: badges.media ?? 0 });
+        }
       } catch (e) {
         if (!cancelled) setError(friendlyApiError(e));
       } finally {
@@ -174,6 +182,27 @@ export default function AdminDashboardPage() {
           description="به محض ثبت‌نام کاربران، زیباگرها و رزروها، این داشبورد پر می‌شود."
         />
       )}
+
+      <Card className="border-amber-200 bg-amber-50/50">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="font-bold text-foreground">بررسی شود</h2><p className="mt-1 text-xs text-gray">مواردی که نیاز به اقدام یا بررسی مدیریت دارند.</p></div>
+          <span className="rounded-full bg-white px-3 py-1 text-xs text-gray">{fmt(reviewQueue.professionals + reviewQueue.bookings + reviewQueue.reviews + reviewQueue.support + reviewQueue.media)} مورد</span>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            { label: 'زیباگر در انتظار بررسی', value: reviewQueue.professionals, href: '/admin/professionals' },
+            { label: 'رزرو در انتظار اقدام', value: reviewQueue.bookings, href: '/admin/bookings' },
+            { label: 'نظر در انتظار بررسی', value: reviewQueue.reviews, href: '/admin/reviews' },
+            { label: 'تیکت پشتیبانی', value: reviewQueue.support, href: '/admin/support' },
+            { label: 'رسانه در انتظار بررسی', value: reviewQueue.media, href: '/admin/media' },
+          ].map((item) => (
+            <Link key={item.label} href={item.href} className="rounded-xl border border-amber-100 bg-white px-3 py-3 transition hover:border-coral/40">
+              <p className="text-xs text-gray">{item.label}</p>
+              <p className={`mt-1 text-xl font-bold ${item.value > 0 ? 'text-coral' : 'text-foreground'}`}>{fmt(item.value)}</p>
+            </Link>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="کل کاربران" value={fmt(overview.totalUsers)} href="/admin/users" />
