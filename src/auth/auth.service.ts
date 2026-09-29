@@ -15,17 +15,6 @@ import { AccountType, ProfessionalStatus, UserStatus } from '@prisma/client';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto, UpdateProfileDto, ChangePasswordDto, DeleteAccountDto } from './dto/auth.dto';
 import { userAuthCache } from './user-auth-cache';
 
-function ttlToMs(ttl: string | undefined, fallbackMs: number): number {
-  if (!ttl) return fallbackMs;
-  const m = /^(\d+)([smhd])$/i.exec(ttl.trim());
-  if (!m) return fallbackMs;
-  const n = parseInt(m[1], 10);
-  const unit = m[2].toLowerCase();
-  const mult =
-    unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000;
-  return n * mult;
-}
-
 const PRIVILEGED_ROLES = new Set(['SUPER_ADMIN', 'admin']);
 
 @Injectable()
