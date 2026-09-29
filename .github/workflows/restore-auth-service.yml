@@ -1,13 +1,11 @@
 name: Restore auth.service
-
 on:
   push:
     paths:
       - '.github/workflows/restore-auth-service.yml'
-
+      - 'scripts/restore-auth-service.py'
 permissions:
   contents: write
-
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -15,33 +13,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Restore auth.service.ts from good commit and patch
+      - run: python3 scripts/restore-auth-service.py
+      - name: Commit
         run: |
-          set -e
-          git show c3d0c362b126e16ff6682515be80021094a18f82:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
-          python3 -c "
-          path = 'backend/src/auth/auth.service.ts'
-          c = open(path).read()
-          old = '    const passwordHash = await argon2.hash(dto.password);'
-          new = '''    // Password is optional (issue #43) - OTP-only accounts have null passwordHash
-    const passwordHash =
-      dto.password && dto.password.length >= 8
-        ? await argon2.hash(dto.password)
-        : null;'''
-          assert old in c, 'expected line not found'
-          open(path, 'w').write(c.replace(old, new, 1))
-          print('patched ok', len(c))
-          "
-
-      - name: Commit and push
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add backend/src/auth/auth.service.ts
-          if git diff --staged --quiet; then
-            echo 'no changes'
-            exit 0
-          fi
-          git commit -m 'fix(auth): restore full auth.service + passwordless register (issue #43)'
+          git diff --cached --quiet || git commit -m "fix(auth): restore full auth.service + passwordless register (issue #43)"
           git push
