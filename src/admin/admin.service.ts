@@ -413,6 +413,71 @@ export class AdminService {
     return updated;
   }
 
+  async createProfessionalByAdmin(
+    phone: string,
+    title: string,
+    displayName?: string,
+    actorId?: string,
+  ) {
+    const normalizedPhone = String(phone || '').trim();
+    const normalizedTitle = String(title || '').trim();
+    if (!normalizedPhone || !normalizedTitle) {
+      throw new BadRequestException('موبایل و نام زیباگر الزامی است');
+    }
+    const existing = await this.prisma.user.findUnique({
+      where: { phone_accountType: { phone: normalizedPhone, accountType: 'professional' } },
+      select: { id: true },
+    });
+    if (existing) throw new BadRequestException('برای این شماره قبلاً حساب زیباگر ساخته شده است');
+
+    const base = normalizedTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06ff]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 120) || 'professional';
+    let slug = base;
+    for (let i = 2; ; i += 1) {
+      const found = await this.prisma.professional.findUnique({ where: { slug }, select: { id: true } });
+      if (!found) break;
+      slug = `${base}-${i}`;
+    }
+
+    const role = await this.prisma.role.findFirst({ where: { name: 'professional' } });
+    if (!role) throw new BadRequestException('نقش professional در سیستم ثبت نشده است');
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          phone: normalizedPhone,
+          accountType: 'professional',
+          status: 'active',
+          profile: {
+            create: { displayName: String(displayName || normalizedTitle).trim() || normalizedTitle },
+          },
+          professional: {
+            create: {
+              title: normalizedTitle,
+              slug,
+              status: 'pending_review',
+            },
+          },
+        },
+        include: { profile: true, professional: true },
+      });
+      await tx.userRole.create({
+        data: { userId: created.id, roleId: role.id, assignedBy: actorId || null },
+      });
+      return created;
+    });
+
+    await this.audit(actorId, 'professional.admin_create', 'professional', user.professional!.id, null, {
+      userId: user.id,
+      phone: normalizedPhone,
+      title: normalizedTitle,
+    });
+    return user;
+  }
+
   async listProfessionals(q: any) {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
