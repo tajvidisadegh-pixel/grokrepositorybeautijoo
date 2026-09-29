@@ -1070,9 +1070,23 @@ export class AdminService {
   }
 
   async deleteMedia(id: string, actorId?: string) {
-    const existing = await this.prisma.mediaAsset.findUnique({ where: { id } });
+    const existing = await this.prisma.mediaAsset.findUnique({
+      where: { id },
+      include: { professional: { select: { userId: true } } },
+    });
     if (!existing) throw new NotFoundException('Media not found');
     await this.prisma.mediaAsset.delete({ where: { id } });
+    if (existing.professional?.userId) {
+      await this.prisma.notification.create({
+        data: {
+          userId: existing.professional.userId,
+          type: NotificationType.system,
+          title: 'رسانه حذف شد',
+          body: 'یکی از رسانه‌های شما توسط مدیریت حذف شد.',
+          data: { mediaId: id, reason: 'admin_delete' } as any,
+        },
+      });
+    }
     await this.audit(actorId, 'media.delete', 'media_asset', id, existing, null);
     return { success: true, id };
   }
