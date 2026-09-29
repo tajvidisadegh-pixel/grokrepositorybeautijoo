@@ -56,7 +56,7 @@ export default function ZibagarLocationsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [salonMedia, setSalonMedia] = useState<Array<{ id: string; publicUrl?: string | null; url?: string | null; mimeType?: string | null }>>([]);
+  const [addressMedia, setAddressMedia] = useState<Array<{ id: string; publicUrl?: string | null; url?: string | null; mimeType?: string | null }>>([]);
   const [mediaBusy, setMediaBusy] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
@@ -155,7 +155,7 @@ export default function ZibagarLocationsPage() {
     try {
       if (item?.id) {
         await apiClient.patch(`/professionals/me/locations/${item.id}`, payload);
-        setMsg('مکان کار به‌روز شد.');
+        setMsg('آدرس به‌روز شد.');
       } else {
         await addMyLocation(payload);
         setMsg('مکان کار ثبت شد.');
@@ -345,7 +345,7 @@ export default function ZibagarLocationsPage() {
             <Button size="sm" loading={mediaBusy} onClick={() => mediaInputRef.current?.click()}>افزودن عکس / فیلم</Button>
           </div>
         </div>
-        {salonMedia.length === 0 ? (
+        {addressMedia.length === 0 ? (
           <p className="text-sm text-gray">هنوز رسانه‌ای برای سالن ثبت نشده است.</p>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-2">
