@@ -58,6 +58,7 @@ export default function ZibagarLocationsPage() {
   const [deleting, setDeleting] = useState(false);
   const [addressMedia, setAddressMedia] = useState<Array<{ id: string; publicUrl?: string | null; url?: string | null; mimeType?: string | null }>>([]);
   const [mediaBusy, setMediaBusy] = useState(false);
+  const [mediaProgress, setMediaProgress] = useState<number | null>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -158,7 +159,7 @@ export default function ZibagarLocationsPage() {
         setMsg('آدرس به‌روز شد.');
       } else {
         await addMyLocation(payload);
-        setMsg('مکان کار ثبت شد.');
+        setMsg('آدرس ثبت شد.');
       }
       await load();
     } catch (e) {
@@ -170,7 +171,7 @@ export default function ZibagarLocationsPage() {
 
   async function onDelete() {
     if (!item?.id) return;
-    if (!confirm('مکان کار حذف شود؟ رزروهای قبلی حفظ می‌مانند.')) return;
+    if (!confirm('آدرس حذف شود؟ رزروهای قبلی حفظ می‌مانند.')) return;
     setDeleting(true);
     setError(null);
     try {
@@ -187,18 +188,22 @@ export default function ZibagarLocationsPage() {
   }
 
 
-  async function onSalonUpload(file: File) {
+  async function onAddressUpload(file: File) {
     const isVideo = (file.type || '').startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name);
     if (!isVideo && !isAllowedImageFile(file)) { setMsg('فقط تصویر یا ویدیو مجاز است.'); return; }
     if (!isVideo && isAllowedImageFile(file) && file.size > 10 * 1024 * 1024) { setMsg('حجم تصویر حداکثر ۱۰ مگابایت است.'); return; }
     if (isVideo && file.size > 500 * 1024 * 1024) { setMsg('حجم ویدیو حداکثر ۵۰۰ مگابایت است.'); return; }
-    setMediaBusy(true); setMsg(null); setError(null);
-    try { await uploadMyMedia(file, 'salon'); setMsg('رسانه سالن اضافه شد.'); await load(); }
+    setMediaBusy(true); setMediaProgress(0); setMsg(null); setError(null);
+    try {
+      await uploadMyMedia(file, 'salon', undefined, setMediaProgress);
+      setMsg('عکس / فیلم آدرس اضافه شد.');
+      await load();
+    }
     catch (e) { setError(friendlyApiError(e)); }
-    finally { setMediaBusy(false); if (mediaInputRef.current) mediaInputRef.current.value = ''; }
+    finally { setMediaBusy(false); setMediaProgress(null); if (mediaInputRef.current) mediaInputRef.current.value = ''; }
   }
   async function onSalonDelete(id: string) {
-    if (!confirm('این رسانه سالن حذف شود؟')) return;
+    if (!confirm('این عکس / فیلم آدرس حذف شود؟')) return;
     setMediaBusy(true);
     try { await deleteMyMedia(id); setAddressMedia((prev) => prev.filter((m) => m.id !== id)); setMsg('رسانه حذف شد.'); }
     catch (e) { setError(friendlyApiError(e)); }
@@ -211,7 +216,7 @@ export default function ZibagarLocationsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4 pb-16">
       <div>
-        <h1 className="text-2xl font-bold">مکان کار</h1>
+        <h1 className="text-2xl font-bold">آدرس</h1>
         <p className="mt-1 text-sm text-gray">
           هر زیباگر فقط یک مکان پایه دارد. نقشه و مسیریابی مشتری با «نشان» انجام می‌شود.
           می‌توانید آدرس دقیق یا محدوده تقریبی را برای حفظ حریم خصوصی انتخاب کنید.
@@ -337,16 +342,22 @@ export default function ZibagarLocationsPage() {
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold">عکس و فیلم سالن</h2>
-            <p className="mt-1 text-sm text-gray">جدا از نمونه‌کار خدمات</p>
+            <h2 className="text-lg font-bold">عکس و فیلم آدرس</h2>
+            <p className="mt-1 text-sm text-gray">برای نمایش محل فعالیت؛ جدا از نمونه‌کار خدمات</p>
           </div>
           <div>
-            <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onSalonUpload(f); }} />
+            <input ref={mediaInputRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onAddressUpload(f); }} />
             <Button size="sm" loading={mediaBusy} onClick={() => mediaInputRef.current?.click()}>افزودن عکس / فیلم</Button>
           </div>
         </div>
+        {mediaProgress != null && (
+          <div className="rounded-xl border border-blue/20 bg-blue/5 px-3 py-3">
+            <div className="mb-1 flex items-center justify-between text-xs"><span>در حال آپلود…</span><span dir="ltr">{mediaProgress}%</span></div>
+            <div className="h-2 overflow-hidden rounded-full bg-gray-light"><div className="h-full rounded-full bg-blue transition-all" style={{ width: `${mediaProgress}%` }} /></div>
+          </div>
+        )}
         {addressMedia.length === 0 ? (
-          <p className="text-sm text-gray">هنوز رسانه‌ای برای سالن ثبت نشده است.</p>
+          <p className="text-sm text-gray">هنوز عکس یا فیلمی برای آدرس ثبت نشده است.</p>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-2">
             {addressMedia.map((m) => {
