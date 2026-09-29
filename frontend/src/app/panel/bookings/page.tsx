@@ -389,14 +389,15 @@ export default function PanelBookingsPage() {
                               key={n}
                               type="button"
                               onClick={() => setRating(n)}
-                              className={`h-9 w-9 rounded-lg text-lg ${
+                              className={`flex h-9 min-w-10 items-center justify-center gap-0.5 rounded-lg border px-1.5 text-sm font-semibold ${
                                 n <= rating
-                                  ? 'bg-coral text-white'
-                                  : 'bg-white text-gray border border-border'
+                                  ? 'border-coral bg-coral text-white'
+                                  : 'border-border bg-white text-gray'
                               }`}
                               aria-label={`${n} ستاره`}
                             >
-                              ★
+                              <span className="text-base leading-none">★</span>
+                              <span className="text-[11px] leading-none">{n}</span>
                             </button>
                           ))}
                         </div>
