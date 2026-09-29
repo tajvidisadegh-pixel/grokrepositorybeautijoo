@@ -331,7 +331,6 @@ export function BookingWizard({
         <span className="text-foreground">رزرو</span>
       </nav>
       <h1 className="text-2xl font-bold text-blue">رزرو با {professional.name}</h1>
-      <p className="mt-1 text-sm text-gray">زمان‌ها فقط از سرور — بدون داده ساختگی</p>
 
       <ol className="mt-6 flex flex-wrap gap-2 text-xs font-medium">
         {(['service', 'datetime', 'summary', 'done'] as const).map((key, i) => (
@@ -538,7 +537,7 @@ export function BookingWizard({
                     onClick={() => free && setSlotStart(s.start)}
                     className={`rounded-xl border py-2 text-sm transition ${
                       !free
-                        ? 'cursor-not-allowed border-gray-mid bg-gray-light text-gray line-through opacity-60'
+                        ? 'cursor-not-allowed border-red-300 bg-red-50 text-red-700 line-through opacity-90'
                         : slotStart === s.start
                           ? 'border-coral bg-coral text-white'
                           : 'border-border hover:border-coral-light'
@@ -550,7 +549,7 @@ export function BookingWizard({
               })}
             </div>
             {slots.some((s) => s.available === false) && (
-              <p className="mt-2 text-xs text-gray">ساعت‌های خاکستری پر یا مسدود هستند و قابل انتخاب نیستند.</p>
+              <p className="mt-2 text-xs text-red-600">ساعت‌های قرمز پر یا مسدود هستند و قابل انتخاب نیستند.</p>
             )}
           </div>
           <Button className="w-full" disabled={!slotStart} onClick={goSummary}>
