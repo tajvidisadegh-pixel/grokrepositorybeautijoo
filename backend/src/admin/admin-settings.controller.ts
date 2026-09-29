@@ -9,41 +9,12 @@ import {
   mergePlatformSettings,
   type PlatformSettingsV1,
 } from './platform-settings.defaults';
-import { BookingStatus, MediaStatus, ProfessionalStatus } from '@prisma/client';
 
 @ApiTags('admin-settings')
 @ApiBearerAuth()
 @Controller('admin')
 export class AdminSettingsController {
   constructor(private readonly prisma: PrismaService) {}
-
-  /** Unread / unreviewed counts for admin sidebar badges (issue #35). */
-  @RequirePermissions('admin.dashboard.read')
-  @Get('nav-badges')
-  @ApiOperation({ summary: 'Pending counts for admin nav badges' })
-  async navBadges() {
-    const [professionals, bookings, reviews, support, media] = await Promise.all([
-      this.prisma.professional.count({
-        where: { status: ProfessionalStatus.pending_review },
-      }),
-      this.prisma.booking.count({
-        where: { status: BookingStatus.pending },
-      }),
-      this.prisma.review.count({ where: { isPublished: false } }),
-      this.prisma.supportTicket.count({
-        where: { status: { in: ['open', 'pending'] } },
-      }),
-      this.prisma.mediaAsset.count({ where: { status: MediaStatus.draft } }),
-    ]);
-    return {
-      professionals,
-      bookings,
-      reviews,
-      support,
-      media,
-      notifications: 0,
-    };
-  }
 
   @RequirePermissions('admin.settings.read')
   @Get('settings')
