@@ -61,7 +61,7 @@ export function ServicePortfolioGallery({
   return (
     <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
       <h2 className="text-lg font-bold">نمونه‌کار خدمات</h2>
-      <p className="mt-1 text-xs text-gray">جدا از عکس‌های سالن — به‌صورت افقی مرور کنید</p>
+      <p className="mt-1 text-xs text-gray">جدا از عکس‌های محل — به‌صورت افقی مرور کنید</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
