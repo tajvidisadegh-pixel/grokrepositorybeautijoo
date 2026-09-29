@@ -46,6 +46,11 @@ export default function AdminProfessionalsPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createPhone, setCreatePhone] = useState('');
+  const [createTitle, setCreateTitle] = useState('');
+  const [createName, setCreateName] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -82,6 +87,29 @@ export default function AdminProfessionalsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function createProfessional() {
+    if (!createPhone.trim() || !createTitle.trim()) {
+      setError('موبایل و نام زیباگر الزامی است');
+      return;
+    }
+    setCreateBusy(true); setError(null); setMsg(null);
+    try {
+      await apiClient.post('/admin/professionals', {
+        phone: createPhone.trim(),
+        title: createTitle.trim(),
+        displayName: createName.trim() || createTitle.trim(),
+      });
+      setCreateOpen(false);
+      setCreatePhone(''); setCreateTitle(''); setCreateName('');
+      setMsg('حساب زیباگر ساخته شد و برای بررسی قرار گرفت.');
+      await load();
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setCreateBusy(false);
+    }
+  }
 
   async function onStatus(id: string, next: string) {
     setBusyId(id);
@@ -166,7 +194,10 @@ export default function AdminProfessionalsPage() {
     <div className="space-y-6" dir="rtl">
       <div>
         <h1 className="text-2xl font-bold">زیباگرها</h1>
-        <p className="mt-1 text-sm text-gray">مدیریت، فیلتر و صف بررسی زیباگرها</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="mt-1 text-sm text-gray">مدیریت، فیلتر و صف بررسی زیباگرها</p>
+          <Button size="sm" onClick={() => setCreateOpen(true)}>+ افزودن زیباگر</Button>
+        </div>
       </div>
 
       {queue && (
@@ -288,6 +319,21 @@ export default function AdminProfessionalsPage() {
           <Button size="sm" variant="outline" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>بعدی</Button>
         </div>
       )}
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !createBusy && setCreateOpen(false)}>
+          <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} dir="rtl">
+            <div>
+              <h2 className="text-lg font-bold">افزودن زیباگر توسط سوپرادمین</h2>
+              <p className="mt-1 text-xs text-gray">حساب با وضعیت «در انتظار بررسی» ساخته می‌شود؛ بعداً می‌توانی پروفایل و خدماتش را تکمیل کنی.</p>
+            </div>
+            <label className="block text-xs"><span className="mb-1 block">موبایل *</span><input className="w-full rounded-lg border px-3 py-2" dir="ltr" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder="09xxxxxxxxx" /></label>
+            <label className="block text-xs"><span className="mb-1 block">نام/عنوان زیباگر *</span><input className="w-full rounded-lg border px-3 py-2" value={createTitle} onChange={(e) => setCreateTitle(e.target.value)} placeholder="مثلاً مریم احمدی" /></label>
+            <label className="block text-xs"><span className="mb-1 block">نام نمایشی (اختیاری)</span><input className="w-full rounded-lg border px-3 py-2" value={createName} onChange={(e) => setCreateName(e.target.value)} /></label>
+            <div className="flex justify-end gap-2"><Button variant="outline" disabled={createBusy} onClick={() => setCreateOpen(false)}>انصراف</Button><Button loading={createBusy} onClick={() => void createProfessional()}>ساخت حساب</Button></div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
