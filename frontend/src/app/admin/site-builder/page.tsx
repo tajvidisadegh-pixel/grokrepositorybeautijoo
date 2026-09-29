@@ -23,6 +23,9 @@ type Hero = {
   titleSize?: 'sm' | 'md' | 'lg' | 'xl';
   subtitleSize?: 'sm' | 'md' | 'lg';
   searchPlaceholder?: string;
+  contentPosition?: 'top' | 'center' | 'bottom';
+  searchAlign?: 'right' | 'center' | 'left';
+  backgroundColor?: string;
 };
 
 type Texts = {
@@ -613,6 +616,13 @@ export default function AdminSiteBuilderPage() {
                 <Range label={`حداقل ارتفاع بنر: ${hero.minHeight ?? 420}px`} value={Number(hero.minHeight ?? 420)} min={280} max={700} onChange={(v) => patchHero({ minHeight: v })} />
                 <Select label="تراز متن (موقعیت)" value={hero.textAlign || 'center'} onChange={(v) => patchHero({ textAlign: v as Hero['textAlign'] })} options={[{ value: 'center', label: 'وسط' }, { value: 'right', label: 'راست' }, { value: 'left', label: 'چپ' }]} />
                 <Select label="رنگ متن" value={hero.textColor || 'auto'} onChange={(v) => patchHero({ textColor: v as Hero['textColor'] })} options={[{ value: 'auto', label: 'خودکار (روشن روی تصویر)' }, { value: 'light', label: 'روشن (سفید)' }, { value: 'dark', label: 'تیره' }]} />
+                <Select label="جایگاه محتوای بنر" value={hero.contentPosition || 'center'} onChange={(v) => patchHero({ contentPosition: v as Hero['contentPosition'] })} options={[{ value: 'top', label: 'بالا' }, { value: 'center', label: 'وسط' }, { value: 'bottom', label: 'پایین' }]} />
+                <Select label="تراز جعبه جستجو" value={hero.searchAlign || 'center'} onChange={(v) => patchHero({ searchAlign: v as Hero['searchAlign'] })} options={[{ value: 'right', label: 'راست' }, { value: 'center', label: 'وسط' }, { value: 'left', label: 'چپ' }]} />
+                <label className="block text-xs">
+                  <span className="mb-1 block font-medium text-[#1d2327]">رنگ پس‌زمینه بدون تصویر</span>
+                  <input type="color" value={hero.backgroundColor || '#F7F9FC'} onChange={(e) => patchHero({ backgroundColor: e.target.value })} className="h-9 w-full cursor-pointer rounded border border-[#8c8f94] bg-white p-1" />
+                </label>
+
                 <Select label="اندازه عنوان" value={hero.titleSize || 'lg'} onChange={(v) => patchHero({ titleSize: v as Hero['titleSize'] })} options={[{ value: 'sm', label: 'کوچک' }, { value: 'md', label: 'متوسط' }, { value: 'lg', label: 'بزرگ' }, { value: 'xl', label: 'خیلی بزرگ' }]} />
                 <Select label="اندازه زیرعنوان" value={hero.subtitleSize || 'md'} onChange={(v) => patchHero({ subtitleSize: v as Hero['subtitleSize'] })} options={[{ value: 'sm', label: 'کوچک' }, { value: 'md', label: 'متوسط' }, { value: 'lg', label: 'بزرگ' }]} />
               </>
@@ -648,10 +658,30 @@ export default function AdminSiteBuilderPage() {
 
             {selected === 'layout' && (
               <>
-                <p className="text-xs text-[#646970]">ترتیب بخش‌ها را با دکمه‌های بالا/پایین تنظیم کنید. غیرفعال کردن بخش آن را از صفحه حذف می‌کند.</p>
+                <p className="text-xs text-[#646970]">بخش‌ها را با کشیدن و رها کردن جابه‌جا کنید؛ دکمه‌های بالا/پایین هم برای جابه‌جایی دقیق باقی مانده‌اند. غیرفعال کردن بخش آن را از صفحه حذف می‌کند.</p>
                 <div className="space-y-2">
                   {sections.map((s, i) => (
-                    <div key={s.id} className="flex items-center justify-between rounded-lg border border-[#dcdcde] bg-[#f6f7f7] px-2 py-2">
+                    <div
+                      key={s.id}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', s.id); e.dataTransfer.effectAllowed = 'move'; }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const draggedId = e.dataTransfer.getData('text/plain');
+                        const from = sections.findIndex((x) => x.id === draggedId);
+                        if (from >= 0 && from !== i) {
+                          markDirty();
+                          setSections((prev) => {
+                            const next = prev.slice();
+                            const [item] = next.splice(from, 1);
+                            next.splice(i, 0, item);
+                            return next.map((x, index) => ({ ...x, sortOrder: index }));
+                          });
+                        }
+                      }}
+                      className="flex cursor-grab items-center justify-between rounded-lg border border-[#dcdcde] bg-[#f6f7f7] px-2 py-2 active:cursor-grabbing"
+                    >
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-[#646970]">#{i + 1}</span>
                         <span className="text-sm font-medium text-[#1d2327]">{s.label}</span>

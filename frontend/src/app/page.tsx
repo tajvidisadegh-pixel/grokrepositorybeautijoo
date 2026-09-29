@@ -62,6 +62,9 @@ type HeroCfg = NonNullable<PublishedSiteConfig['content']['hero']> & {
   titleSize?: 'sm' | 'md' | 'lg' | 'xl';
   subtitleSize?: 'sm' | 'md' | 'lg';
   searchPlaceholder?: string;
+  contentPosition?: 'top' | 'center' | 'bottom';
+  searchAlign?: 'right' | 'center' | 'left';
+  backgroundColor?: string;
 };
 
 const DEFAULT_CONTENT: PublishedSiteConfig['content'] & { hero?: HeroCfg } = {
@@ -286,7 +289,16 @@ export default async function HomePage() {
               <div className="absolute inset-0 bg-gradient-to-b from-blue-soft via-white to-coral-soft/30" />
             )}
 
-            <div className="relative mx-auto flex max-w-6xl flex-col justify-center px-4 py-12 sm:py-16 md:py-20">
+            <div
+              className={`relative mx-auto flex max-w-6xl flex-col px-4 py-12 sm:py-16 md:py-20 ${
+                hero.contentPosition === 'top'
+                  ? 'justify-start'
+                  : hero.contentPosition === 'bottom'
+                    ? 'justify-end'
+                    : 'justify-center'
+              }`}
+              style={!hasBanner || layout !== 'image-background' ? { backgroundColor: hero.backgroundColor || undefined } : undefined}
+            >
               <div className={`mx-auto flex w-full max-w-2xl flex-col ${align}`}>
                 {hero.badge ? (
                   <p className={`mb-3 text-xs font-semibold tracking-wide sm:text-sm ${badgeCls}`}>
@@ -309,7 +321,11 @@ export default async function HomePage() {
                     action={hero.ctaLink || '/search'}
                     method="get"
                     className={`mt-6 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3 ${
-                      hero.textAlign === 'center' ? 'mx-auto max-w-xl' : 'max-w-xl'
+                      hero.searchAlign === 'right'
+                        ? 'mr-0 ml-auto max-w-xl'
+                        : hero.searchAlign === 'left'
+                          ? 'ml-0 mr-auto max-w-xl'
+                          : 'mx-auto max-w-xl'
                     }`}
                   >
                     <div className="relative flex-1">
