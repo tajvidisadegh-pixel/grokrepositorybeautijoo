@@ -97,6 +97,21 @@ class RolesDto {
   roles: string[];
 }
 
+class CreateProfessionalDto {
+  @ApiProperty({ description: 'Professional mobile number' })
+  @IsString()
+  phone!: string;
+
+  @ApiProperty({ description: 'Professional display/title name' })
+  @IsString()
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  displayName?: string;
+}
+
 class BulkDeleteUsersDto {
   @IsArray()
   @ArrayMinSize(1)
@@ -227,6 +242,16 @@ export class AdminController {
   @Delete('professionals/:id')
   hardDeleteProfessional(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.hardDeleteProfessional(id, actorId);
+  }
+
+  @Roles('SUPER_ADMIN')
+  @Post('professionals')
+  @ApiOperation({ summary: 'Create professional account from admin panel' })
+  createProfessional(
+    @Body() dto: CreateProfessionalDto,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    return this.service.createProfessionalByAdmin(dto.phone, dto.title, dto.displayName, actorId);
   }
 
   @Get('professionals')
