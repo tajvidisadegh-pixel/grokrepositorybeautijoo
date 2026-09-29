@@ -158,7 +158,7 @@ export default function AdminNotificationsPage() {
             setComposeOpen(true);
           }}
         >
-          ارسال اعلان جدید
+          {composeOpen ? 'بستن فرم ارسال' : 'ارسال اعلان جدید'}
         </button>
       </div>
 
@@ -211,6 +211,16 @@ export default function AdminNotificationsPage() {
         >
           جستجو
         </button>
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold">تاریخچه کمپین‌ها</h2>
+            <p className="text-xs text-gray">هر کمپین را باز کن تا وضعیت گیرندگان و ناموفق‌ها را ببینی.</p>
+          </div>
+          <span className="rounded-full bg-gray-light px-3 py-1 text-xs">{meta.total} کمپین</span>
+        </div>
       </Card>
 
       {items.length === 0 ? (
@@ -280,69 +290,63 @@ export default function AdminNotificationsPage() {
       )}
 
       {composeOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComposeOpen(false)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} dir="rtl">
-            <h3 className="mb-4 text-lg font-bold">ارسال اعلان جدید</h3>
+        <Card className="border-emerald-200 bg-emerald-50/40 p-5">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">ارسال اعلان جدید</h2>
+              <p className="mt-1 text-xs text-gray">ابتدا گروه گیرندگان را انتخاب کن، سپس متن را وارد و ارسال را تأیید کن.</p>
+            </div>
+            <button type="button" className="text-xs underline" onClick={() => setComposeOpen(false)}>بستن</button>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray">گروه گیرندگان</label>
+              <select
+                className="w-full rounded-lg border bg-white px-3 py-2 text-sm"
+                value={notifyTarget}
+                onChange={(e) => setNotifyTarget(e.target.value as typeof notifyTarget)}
+              >
+                <option value="customers">همه مشتریان</option>
+                <option value="never_notified">مشتریانی که هرگز اعلان نگرفته‌اند</option>
+                <option value="has_paid">مشتریان دارای پرداخت</option>
+              </select>
+              <p className="mt-2 text-[11px] leading-5 text-gray">
+                {notifyTarget === 'customers'
+                  ? 'برای همه مشتریان واجد شرایط ارسال می‌شود.'
+                  : notifyTarget === 'never_notified'
+                    ? 'فقط مشتریانی که قبلاً اعلان نگرفته‌اند.'
+                    : 'فقط مشتریانی که سابقه پرداخت دارند.'}
+              </p>
+            </div>
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs text-gray">گیرندگان</label>
-                <select
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
-                  value={notifyTarget}
-                  onChange={(e) => setNotifyTarget(e.target.value as typeof notifyTarget)}
-                >
-                  <option value="customers">همه مشتریان</option>
-                  <option value="never_notified">مشتریانی که هرگز اعلان نگرفته‌اند</option>
-                  <option value="has_paid">مشتریان دارای پرداخت</option>
-                </select>
+                <label className="mb-1 block text-xs font-medium text-gray">عنوان</label>
+                <input className="w-full rounded-lg border bg-white px-3 py-2 text-sm" value={notifyTitle} onChange={(e) => setNotifyTitle(e.target.value)} placeholder="مثلاً: تخفیف ویژه این هفته" />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray">عنوان</label>
-                <input
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
-                  value={notifyTitle}
-                  onChange={(e) => setNotifyTitle(e.target.value)}
-                  placeholder="عنوان اعلان"
-                />
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray">متن اعلان</label>
+                  <span className="text-[11px] text-gray">{notifyBody.length} کاراکتر</span>
+                </div>
+                <textarea className="w-full rounded-lg border bg-white px-3 py-2 text-sm" rows={4} value={notifyBody} onChange={(e) => setNotifyBody(e.target.value)} placeholder="متن اعلان را واضح و کوتاه بنویس..." />
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-gray">متن</label>
-                <textarea
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
-                  rows={4}
-                  value={notifyBody}
-                  onChange={(e) => setNotifyBody(e.target.value)}
-                  placeholder="متن اعلان..."
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={notifySms} onChange={(e) => setNotifySms(e.target.checked)} />
-                ارسال پیامک هم
-              </label>
-              <div className="flex flex-col gap-2 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={notifySms} onChange={(e) => setNotifySms(e.target.checked)} />
+                  ارسال پیامک هم
+                </label>
                 <button
                   type="button"
-                  className="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
                   disabled={busy}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void sendNewNotification();
-                  }}
+                  onClick={() => void sendNewNotification()}
                 >
                   {busy ? 'در حال ارسال...' : 'تأیید و ارسال اعلان'}
-                </button>
-                <button
-                  type="button"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  onClick={() => setComposeOpen(false)}
-                >
-                  انصراف
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {activeCampaign && (
