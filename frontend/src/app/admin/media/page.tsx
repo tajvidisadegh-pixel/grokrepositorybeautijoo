@@ -231,6 +231,7 @@ export default function AdminMediaPage() {
       {items.length === 0 ? (
         <PanelEmpty title="رسانه‌ای یافت نشد" />
       ) : (
+        <>
         <div className="mb-3 flex items-center gap-2 text-sm"><input aria-label="انتخاب همه رسانه‌های صفحه" type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleSelectAll} /><span>انتخاب همه این صفحه</span></div>
         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {items.map((m) => (
@@ -263,6 +264,7 @@ export default function AdminMediaPage() {
             </Card>
           ))}
         </div>
+        </>
       )}
 
       {meta.totalPages > 1 && (
