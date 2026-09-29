@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 
+
 const STATUSES = [
   { value: '', label: 'همه وضعیت‌ها' },
   { value: 'draft', label: 'پیش‌نویس' },
@@ -43,6 +44,8 @@ export default function AdminProfessionalsPage() {
   const [page, setPage] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -66,6 +69,7 @@ export default function AdminProfessionalsPage() {
         fetchAdminProfessionalsQueue().catch(() => null),
       ]);
       setItems(list.items);
+      setSelected(new Set());
       setMeta(list.meta);
       setQueue(q);
     } catch (e) {
@@ -109,6 +113,35 @@ export default function AdminProfessionalsPage() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) => prev.size === items.length && items.length > 0 ? new Set() : new Set(items.map((p) => p.id)));
+  }
+
+  async function bulkAction(kind: 'approve' | 'delete') {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    if (kind === 'delete' && !window.confirm(`حذف کامل ${ids.length} زیباگر انتخاب‌شده؟`)) return;
+    setBulkBusy(true); setError(null); setMsg(null);
+    try {
+      for (const id of ids) {
+        if (kind === 'approve') await adminSetProfessionalStatus(id, 'approved');
+        else await apiClient.delete(`/admin/professionals/${id}`);
+      }
+      setMsg(kind === 'approve' ? `${ids.length} زیباگر تأیید شد` : `${ids.length} زیباگر حذف شد`);
+      setSelected(new Set());
+      await load();
+    } catch (e) { setError(friendlyApiError(e)); }
+    finally { setBulkBusy(false); }
   }
 
   async function onDelete(id: string) {
@@ -184,6 +217,15 @@ export default function AdminProfessionalsPage() {
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {msg && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700">{msg}</p>}
 
+      {selected.size > 0 && (
+        <Card className="flex flex-wrap items-center gap-2 border-coral/30 bg-coral-soft/30 p-3">
+          <span className="text-sm font-medium">{selected.size} زیباگر انتخاب شده</span>
+          <Button size="sm" loading={bulkBusy} onClick={() => void bulkAction('approve')}>تأیید گروهی</Button>
+          <Button size="sm" variant="outline" loading={bulkBusy} onClick={() => void bulkAction('delete')}>حذف گروهی</Button>
+          <Button size="sm" variant="secondary" onClick={() => setSelected(new Set())}>لغو انتخاب</Button>
+        </Card>
+      )}
+
       {loading ? <PanelLoading /> : items.length === 0 ? (
         <PanelEmpty title="زیباگری یافت نشد" />
       ) : (
@@ -191,6 +233,7 @@ export default function AdminProfessionalsPage() {
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="border-b bg-gray-50 text-right text-xs text-gray-600">
+                <th className="px-3 py-2 font-medium"><input aria-label="انتخاب همه" type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleSelectAll} /></th>
                 <th className="px-3 py-2 font-medium">نام / عنوان</th>
                 <th className="px-3 py-2 font-medium">موبایل</th>
                 <th className="px-3 py-2 font-medium">شهر</th>
