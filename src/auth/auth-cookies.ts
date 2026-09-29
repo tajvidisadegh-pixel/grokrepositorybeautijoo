@@ -2,9 +2,6 @@ import { Request, Response } from 'express';
 
 export const REFRESH_COOKIE_NAME = 'bj_refresh';
 
-/** Max-Age for refresh cookie (7 days default). */
-export const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
 export function isProdEnv(): boolean {
   return (process.env.NODE_ENV || '').toLowerCase() === 'production';
 }
@@ -57,7 +54,6 @@ function cookieDomain(): string | undefined {
 export function setRefreshCookie(
   res: Response,
   refreshToken: string,
-  maxAgeMs = REFRESH_COOKIE_MAX_AGE_MS,
 ): void {
   const prod = isProdEnv();
   const secure =
@@ -68,7 +64,6 @@ export function setRefreshCookie(
   const parts = [
     `${REFRESH_COOKIE_NAME}=${encodeURIComponent(refreshToken)}`,
     'Path=/',
-    `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
     'HttpOnly',
     forceSecure ? 'Secure' : '',
     `SameSite=${sameSite}`,
