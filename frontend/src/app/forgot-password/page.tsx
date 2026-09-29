@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { LogoMark } from '@/components/brand/logo';
 import type { AccountType } from '@/types/auth';
+import { Eye, EyeOff } from 'lucide-react';
 
 type Step = 'phone' | 'code' | 'done';
 
@@ -190,10 +191,12 @@ function ForgotPasswordForm() {
                 />
                 <button
                   type="button"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray"
                   onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'مخفی کردن رمز عبور' : 'نمایش رمز عبور'}
+                  title={showPassword ? 'مخفی کردن رمز عبور' : 'نمایش رمز عبور'}
                 >
-                  {showPassword ? 'مخفی' : 'نمایش'}
+                  {showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
                 </button>
               </div>
             </div>
