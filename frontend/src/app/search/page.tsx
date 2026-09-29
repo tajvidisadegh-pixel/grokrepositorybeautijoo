@@ -18,7 +18,7 @@ type Props = {
     q?: string; city?: string; category?: string; page?: string;
     minRating?: string; minPrice?: string; maxPrice?: string;
     sort?: string; availableDate?: string;
-    lat?: string; lng?: string; radiusKm?: string;
+    lat?: string; lng?: string;
     verifiedOnly?: string; gender?: string;
   }>;
 };
@@ -36,7 +36,8 @@ export default async function SearchPage({ searchParams }: Props) {
   const availableDate = sp.availableDate?.trim() || undefined;
   const lat = sp.lat?.trim() || undefined;
   const lng = sp.lng?.trim() || undefined;
-  const radiusKm = sp.radiusKm?.trim() || undefined;
+  // Near-me uses a fixed technical maximum; the customer no longer chooses a radius.
+  const radiusKm = lat && lng ? '200' : undefined;
   const verifiedOnly = sp.verifiedOnly === '1' || sp.verifiedOnly === 'true';
   const gender = sp.gender?.trim() || undefined;
 
@@ -73,7 +74,7 @@ export default async function SearchPage({ searchParams }: Props) {
     if (availableDate) params.set('availableDate', availableDate);
     if (lat) params.set('lat', lat);
     if (lng) params.set('lng', lng);
-    if (radiusKm) params.set('radiusKm', radiusKm);
+    if (lat && lng) params.set('radiusKm', '200');
     if (p > 1) params.set('page', String(p));
     const qs = params.toString();
     return `/search${qs ? `?${qs}` : ''}`;
@@ -166,7 +167,7 @@ export default async function SearchPage({ searchParams }: Props) {
             </label>
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
-            <NearMeFields defaultLat={lat} defaultLng={lng} defaultRadiusKm={radiusKm || '15'} />
+            <NearMeFields defaultLat={lat} defaultLng={lng} />
           </div>
         </div>
 
