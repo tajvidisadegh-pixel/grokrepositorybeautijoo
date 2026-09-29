@@ -274,7 +274,7 @@ export default function PanelSettingsPage() {
                     {s.id.slice(0, 8)}…
                   </div>
                   <div className="text-xs text-gray">ایجاد: {formatDateTime(s.createdAt)}</div>
-                  <div className="text-xs text-gray">انقضا: {formatDateTime(s.expiresAt)}</div>
+                  <div className="text-xs text-gray">انقضا: بدون انقضا</div>
                 </div>
                 <Button variant="secondary" size="sm" onClick={() => onRevoke(s.id)}>
                   لغو
