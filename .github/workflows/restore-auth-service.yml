@@ -1,7 +1,9 @@
 name: Restore auth.service
 
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-auth-service.yml'
 
 permissions:
   contents: write
@@ -35,7 +37,7 @@ jobs:
       - name: Commit and push
         run: |
           git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add backend/src/auth/auth.service.ts
           if git diff --staged --quiet; then
             echo 'no changes'
