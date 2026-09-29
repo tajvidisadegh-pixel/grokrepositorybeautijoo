@@ -85,7 +85,6 @@ export function NearMeFields({ defaultLat, defaultLng }: Props) {
               پاک
             </button>
           )}
-        </div>
       </div>
       {status && <p className="text-xs text-gray">{status}</p>}
       {lat && lng && (
