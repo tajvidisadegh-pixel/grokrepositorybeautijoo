@@ -5,14 +5,13 @@ import { useEffect, useState } from 'react';
 type Props = {
   defaultLat?: string;
   defaultLng?: string;
-  defaultRadiusKm?: string;
 };
 
 /**
- * Hidden lat/lng + radius + geolocation for near-me search (issue #38 / near-me).
- * After location is granted, form can be submitted with sort=distance.
+ * Hidden coordinates + geolocation for one-click near-me search.
+ * After location is granted, the search is submitted automatically and sorted by distance.
  */
-export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props) {
+export function NearMeFields({ defaultLat, defaultLng }: Props) {
   const [lat, setLat] = useState(defaultLat || '');
   const [lng, setLng] = useState(defaultLng || '');
   const [status, setStatus] = useState<string | null>(null);
@@ -63,22 +62,8 @@ export function NearMeFields({ defaultLat, defaultLng, defaultRadiusKm }: Props)
     <div className="space-y-2">
       <input type="hidden" name="lat" value={lat} readOnly />
       <input type="hidden" name="lng" value={lng} readOnly />
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray">شعاع فاصله (کیلومتر)</label>
-          <select
-            name="radiusKm"
-            defaultValue={defaultRadiusKm || '15'}
-            className="h-11 w-full rounded-2xl border border-border bg-white px-3 text-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
-          >
-            <option value="5">۵ کیلومتر</option>
-            <option value="10">۱۰ کیلومتر</option>
-            <option value="15">۱۵ کیلومتر</option>
-            <option value="25">۲۵ کیلومتر</option>
-            <option value="50">۵۰ کیلومتر</option>
-          </select>
-        </div>
-        <div className="flex items-end gap-2">
+      <input type="hidden" name="radiusKm" value="200" readOnly />
+      <div className="flex items-end gap-2">
           <button
             type="button"
             onClick={requestNearMe}
