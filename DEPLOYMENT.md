@@ -122,6 +122,7 @@ Workflow: `.github/workflows/sync-backend-deploy-branch.yml`
 - `NEXT_PUBLIC_API_URL`
 - `NEXT_PUBLIC_APP_URL`
 - `NEXT_PUBLIC_APP_NAME`
+- `NEXT_PUBLIC_NESHAN_API_KEY` (optional — Neshan map tiles; issue #33 / #42)
 
 They must be set to production values **before** `next build`. Changing them later on the host does not update the already-built client bundle.
 
@@ -213,6 +214,8 @@ cd frontend
 export NEXT_PUBLIC_API_URL="https://api.beautijoo.ir/api/v1"
 export NEXT_PUBLIC_APP_URL="https://beautijoo.ir"
 export NEXT_PUBLIC_APP_NAME="Beautijoo"
+# optional — Neshan tiles (platform.neshan.org)
+# export NEXT_PUBLIC_NESHAN_API_KEY="..."
 npm ci
 npm run build
 ```
@@ -238,3 +241,82 @@ npm run build
 - Deployment history or current live SHAs
 
 Those require direct Liara access and remain out of scope for repository documentation until verified.
+
+---
+
+## 9. Technical ops checklist (issue #42)
+
+Short reminders for deploy-time confusion around maps, migrations, roles, and payments. **No application rewrite required** — mostly env + one-time ops.
+
+### 9.1 Neshan map API key (frontend)
+
+For **in-page Neshan tiles** (not only external routing links):
+
+1. Create a web API key at [platform.neshan.org](https://platform.neshan.org).
+2. Set on the **frontend** host / Liara **before build**:
+
+```bash
+NEXT_PUBLIC_NESHAN_API_KEY=your_key_here
+```
+
+3. **Rebuild / redeploy** the frontend (build-time inlining).
+
+Without the key: «مسیریابی با نشان» / «مشاهده در نشان» still work via neshan.org links; in-page map may use temporary OSM tiles.
+
+See also: `frontend/src/lib/neshan.ts`, `frontend/.env.example`.
+
+### 9.2 Database migrate after backend deploy
+
+Backend `npm start` already runs:
+
+```text
+prisma-migrate-deploy → seed-roles → seed-catalog → dist/main.js
+```
+
+If start does **not** use that script, run once on production DB:
+
+```bash
+cd backend
+npx prisma migrate deploy
+```
+
+Without migrate: new columns/enums (e.g. salon media, social_links) can fail at runtime.
+
+### 9.3 Seed admin channel roles (related to #37)
+
+If channel roles (`admin_customers`, …) are missing on the server:
+
+```bash
+cd backend
+node prisma/seed-roles.cjs
+```
+
+(Also part of normal `npm start`.)
+
+### 9.4 Online payment — Zarinpal (backend)
+
+Already implemented in code. Configure on **backend** Liara env:
+
+```bash
+PAYMENT_PROVIDER=zarinpal
+ZARINPAL_MERCHANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ZARINPAL_SANDBOX=true          # test: true | production: false or omit
+# optional refunds:
+# ZARINPAL_ACCESS_TOKEN=
+```
+
+- Production without `PAYMENT_PROVIDER=zarinpal` → online payment **disabled** (safe).
+- Non-production empty → **mock** payment.
+
+Flow: booking confirmation → `POST /payments/initiate` → gateway → `/payment/callback`.
+
+Templates: `backend/.env.example`.
+
+### 9.5 Operator checklist (issue #42)
+
+- [ ] `NEXT_PUBLIC_NESHAN_API_KEY` on frontend (optional; rebuild after set)
+- [ ] Confirm backend start log shows migrate deploy (or run manually)
+- [ ] If needed: `node prisma/seed-roles.cjs`
+- [ ] Zarinpal env if online payment should be live
+- [ ] Smoke: professional workplace map + public profile + Neshan routing button
+- [ ] Smoke: booking → pay (sandbox) → callback
