@@ -7,6 +7,7 @@ export function persianBookingStatus(status: string): string {
     cancelled: 'لغو شده',
     completed: 'انجام شده',
     expired: 'منقضی شده',
+    no_show: 'عدم حضور',
     NO_SHOW: 'عدم حضور',
   };
   return map[status] || map[status.toLowerCase()] || status;
