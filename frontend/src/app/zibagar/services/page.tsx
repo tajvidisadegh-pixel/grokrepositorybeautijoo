@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
-import { PanelLoading, PanelError } from '@/components/panel/state-blocks';
+import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
 import {
   fetchMyServices,
   fetchCategories,
@@ -556,10 +556,11 @@ export default function ZibagarServicesPage() {
           )}
 
           {mine.length === 0 && myRoots.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
-              <p className={`text-sm font-medium ${navy.title}`}>هنوز تخصصی انتخاب نکرده‌اید</p>
-              <p className="mt-1 text-xs text-gray-500">روی «افزودن تخصص جدید» بزنید و از فهرست انتخاب کنید.</p>
-            </div>
+            <PanelEmpty
+              title="هنوز تخصصی انتخاب نکرده‌اید"
+              description="روی «افزودن تخصص جدید» بزنید و از فهرست انتخاب کنید."
+              icon="✂️"
+            />
           ) : mine.length > 0 ? (
             <div className={`overflow-hidden rounded-2xl border ${navy.border} bg-white`}>
               <div className="overflow-x-auto">

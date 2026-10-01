@@ -234,7 +234,11 @@ export default function AdminBookingsPage() {
       </Card>
 
       {items.length === 0 ? (
-        <PanelEmpty title="رزروی یافت نشد" />
+        <PanelEmpty
+        title="رزروی یافت نشد"
+        description="با فیلتر فعلی رزروی نیست. فیلتر را پاک کنید یا بعداً دوباره ببینید."
+        icon="📋"
+      />
       ) : (
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[900px] text-sm">

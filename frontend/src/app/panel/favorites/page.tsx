@@ -27,7 +27,7 @@ export default function PanelFavoritesPage() {
     } catch (e) { setError(friendlyApiError(e)); }
     finally { setBusyId(null); }
   }
-  if (loading) return <PanelLoading />;
+  if (loading) return <PanelLoading grid cards={6} />;
   if (error) return <PanelError message={error} onRetry={load} />;
   return (
     <div className="space-y-6">

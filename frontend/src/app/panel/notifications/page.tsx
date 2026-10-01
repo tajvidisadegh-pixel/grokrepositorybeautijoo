@@ -111,7 +111,11 @@ export default function PanelNotificationsPage() {
         )}
       </div>
       {items.length === 0 ? (
-        <PanelEmpty title="اعلانی نیست" />
+        <PanelEmpty
+          title="اعلانی نیست"
+          description="وقتی رزرو، پرداخت یا پیام جدیدی باشد اینجا می‌بینید."
+          icon="🔔"
+        />
       ) : (
         <ul className="space-y-3">
           {items.map((n) => {

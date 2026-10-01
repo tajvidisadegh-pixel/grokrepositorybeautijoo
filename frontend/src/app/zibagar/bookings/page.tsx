@@ -366,7 +366,11 @@ export default function ZibagarBookingsPage() {
       )}
 
       {viewMode === 'list' && (items.length === 0 ? (
-        <PanelEmpty title="رزروی یافت نشد" />
+        <PanelEmpty
+        title="رزروی یافت نشد"
+        description="هنوز نوبتی برای شما ثبت نشده یا با فیلتر فعلی نتیجه‌ای نیست."
+        icon="📅"
+      />
       ) : (
         <div className="space-y-8">
           {grouped.map(([dayLabel, list]) => (

@@ -192,7 +192,19 @@ export default async function SearchPage({ searchParams }: Props) {
         {!errorMsg && result && result.items.length === 0 && (
           <EmptyState
             title={lat && lng ? 'زیباگری در محدوده انتخاب‌شده پیدا نشد' : 'نتیجه‌ای یافت نشد'}
-            description={lat && lng ? 'شعاع را بزرگ‌تر کنید یا فیلترها را کم کنید.' : undefined}
+            description={
+              lat && lng
+                ? 'شعاع را بزرگ‌تر کنید یا فیلترها را کم کنید.'
+                : 'عبارت یا فیلتر دیگری امتحان کنید، یا همه زیباگران را ببینید.'
+            }
+            action={
+              <Link
+                href="/professionals"
+                className="inline-flex rounded-xl bg-coral px-4 py-2 text-sm font-medium text-white hover:bg-coral-dark"
+              >
+                مشاهده همه زیباگران
+              </Link>
+            }
           />
         )}
         {!errorMsg && result && result.items.length > 0 && (

@@ -59,7 +59,16 @@ export default function PanelReviewsPage() {
 
       {items.length === 0 ? (
         <Card className="space-y-3 p-6">
-          <PanelEmpty title="هنوز نظری ثبت نکرده‌اید" />
+          <PanelEmpty
+            title="هنوز نظری ثبت نکرده‌اید"
+            description="پس از تکمیل نوبت می‌توانید از صفحه رزروها امتیاز بدهید."
+            icon="⭐"
+            action={
+              <Link href="/panel/bookings">
+                <Button size="sm">مشاهده رزروها</Button>
+              </Link>
+            }
+          />
           <p className="text-center text-sm text-gray">
             پس از تکمیل رزرو می‌توانید از صفحه رزروها نظر ثبت کنید.
           </p>

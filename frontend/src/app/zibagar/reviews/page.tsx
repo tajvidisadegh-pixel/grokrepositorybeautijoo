@@ -98,7 +98,7 @@ export default function ZibagarReviewsPage() {
       {msg && <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{msg}</p>}
 
       {items.length === 0 ? (
-        <PanelEmpty title="هنوز نظری ثبت نشده" description="پس از تکمیل رزروها، نظرات اینجا نمایش داده می‌شوند." />
+        <PanelEmpty title="هنوز نظری ثبت نشده" description="پس از تکمیل رزروها، نظرات اینجا نمایش داده می‌شوند." icon="⭐" />
       ) : (
         <ul className="space-y-3">
           {items.map((r) => {

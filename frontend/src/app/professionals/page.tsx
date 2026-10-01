@@ -64,7 +64,18 @@ export default async function ProfessionalsPage({ searchParams }: Props) {
       <div className="mt-8">
         {errorMsg && <ApiErrorState message={errorMsg} />}
         {!errorMsg && result && result.items.length === 0 && (
-          <EmptyState title="زیباگری یافت نشد" />
+          <EmptyState
+            title="زیباگری یافت نشد"
+            description="با این فیلتر نتیجه‌ای نیست. جستجوی پیشرفته را امتحان کنید."
+            action={
+              <Link
+                href="/search"
+                className="inline-flex rounded-xl bg-coral px-4 py-2 text-sm font-medium text-white hover:bg-coral-dark"
+              >
+                جستجوی پیشرفته
+              </Link>
+            }
+          />
         )}
         {!errorMsg && result && result.items.length > 0 && (
           <>
