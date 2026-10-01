@@ -153,6 +153,18 @@ export class BookingsController {
     return this.service.transition(id, userId, roles || [], 'complete');
   }
 
+  /** Professional marks customer as no-show (after appointment start) */
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Patch(':id/no-show')
+  noShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('roles') roles: string[],
+    @Body() dto: TransitionDto,
+  ) {
+    return this.service.transition(id, userId, roles || [], 'no_show', dto.reason);
+  }
+
   /** Professional (or admin) reports a booking issue to SUPER_ADMIN */
   @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Post(':id/report')
