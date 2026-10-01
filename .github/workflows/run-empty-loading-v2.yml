@@ -1,0 +1,23 @@
+name: Empty loading v2
+on:
+  push:
+    paths:
+      - '.github/workflows/run-empty-loading-v2.yml'
+      - 'scripts/patch-empty-loading-40.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-empty-loading-40.py
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/run-empty-loading-v2.yml
+          git add frontend/src/app/admin/service-categories/page.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "fix(ui): PanelEmpty/Loading on admin service-categories (#40)"
+          git push
