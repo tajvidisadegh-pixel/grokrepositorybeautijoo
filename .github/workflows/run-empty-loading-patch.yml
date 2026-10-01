@@ -1,0 +1,23 @@
+name: Empty loading patch
+on:
+  push:
+    paths:
+      - '.github/workflows/run-empty-loading-patch.yml'
+      - 'scripts/patch-empty-loading.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch-empty-loading.py
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/run-empty-loading-patch.yml
+          git add frontend/src/app
+          git add -A
+          git diff --cached --quiet || git commit -m "feat(ui): richer empty states + route loading skeletons (#40)"
+          git push
