@@ -1,0 +1,144 @@
+name: Restore item3 bookings
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-item3.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
+      - name: Restore known-good + patch no-show
+        run: |
+          set -e
+          GOOD=80e35204183daa512c59d03137e5be06bfc62647
+          for f in \
+            backend/src/bookings/bookings.service.ts \
+            frontend/src/app/zibagar/bookings/page.tsx \
+            frontend/src/lib/panel-api.ts; do
+            if git cat-file -e "$GOOD:$f" 2>/dev/null; then
+              git show "$GOOD:$f" > "$f"
+              echo restored $f $(wc -c < "$f")
+            else
+              echo missing $f in $GOOD
+              exit 1
+            fi
+          done
+          python3 << 'PY'
+          from pathlib import Path
+
+          # --- service ---
+          p = Path('backend/src/bookings/bookings.service.ts')
+          s = p.read_text()
+          s = s.replace(
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete',",
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show',",
+              1,
+          )
+          old = """    throw new BadRequestException('عملیات نامعتبر');
+  }
+
+  async reportIssue"""
+          new = """    if (action === 'no_show') {
+      if (!isAdmin && !isPro) throw new ForbiddenException();
+      if (b.status !== BookingStatus.confirmed && b.status !== BookingStatus.pending) {
+        throw new BadRequestException('فقط رزرو در انتظار یا تأییدشده قابل علامت‌گذاری عدم حضور است');
+      }
+      if (b.startAt.getTime() > Date.now()) {
+        throw new BadRequestException('علامت عدم حضور فقط پس از زمان شروع نوبت مجاز است');
+      }
+      const note = (reason || 'عدم حضور مشتری').trim();
+      const updated = await this.prisma.booking.update({
+        where: { id },
+        data: {
+          status: BookingStatus.cancelled,
+          cancelledAt: new Date(),
+          cancelReason: note,
+          notes: b.notes ? `${b.notes}\n[عدم حضور] ${note}` : `[عدم حضور] ${note}`,
+        },
+      });
+      await this.notifications.notify({
+        userId: b.customerId,
+        type: NotificationType.booking_cancelled,
+        title: 'عدم حضور در نوبت',
+        body: 'زیباگر این نوبت را به‌عنوان عدم حضور ثبت کرد.',
+        data: { bookingId: id, reason: note, noShow: true },
+        sms: false,
+      });
+      return updated;
+    }
+
+    throw new BadRequestException('عملیات نامعتبر');
+  }
+
+  async reportIssue"""
+          if old not in s:
+              raise SystemExit('service throw block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          print('service ok', len(s))
+
+          # --- panel-api ---
+          p = Path('frontend/src/lib/panel-api.ts')
+          s = p.read_text()
+          s = s.replace(
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete'",
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show'",
+          )
+          p.write_text(s)
+          print('api ok', len(s))
+
+          # --- zibagar bookings ---
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          s = p.read_text()
+          s = s.replace(
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete'",
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show'",
+          )
+          old = """      if (action === 'reject') {
+        reason = window.prompt('دلیل رد (اختیاری):') || undefined;
+      }"""
+          new = """      if (action === 'reject') {
+        reason = window.prompt('دلیل رد (اختیاری):') || undefined;
+      }
+      if (action === 'no-show') {
+        reason = window.prompt('توضیح عدم حضور (اختیاری):') || 'عدم حضور مشتری';
+      }"""
+          if old in s:
+              s = s.replace(old, new, 1)
+          marker = """                              <Button
+                                size="sm"
+                                loading={busy === `${b.id}:complete`}
+                                onClick={() => act(b.id, 'complete')}
+                              >
+                                تکمیل
+                              </Button>"""
+          insertion = marker + """
+                              {b.status === 'confirmed' && new Date(b.startAt).getTime() <= Date.now() && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  loading={busy === `${b.id}:no-show`}
+                                  onClick={() => act(b.id, 'no-show')}
+                                >
+                                  عدم حضور
+                                </Button>
+                              )}"""
+          if marker in s and "act(b.id, 'no-show')" not in s:
+              s = s.replace(marker, insertion, 1)
+          p.write_text(s)
+          print('zibagar ok', len(s), 'no-show btn', "act(b.id, 'no-show')" in s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/restore-item3.yml
+          git add backend/src/bookings/bookings.service.ts frontend/src/app/zibagar/bookings/page.tsx frontend/src/lib/panel-api.ts
+          git add -A
+          git diff --cached --quiet || git commit -m "feat(bookings): restore + no-show for item3 lifecycle (#40)"
+          git push
