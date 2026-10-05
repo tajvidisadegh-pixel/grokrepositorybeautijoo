@@ -1,0 +1,60 @@
+name: Restore notif v2
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-notif-v2.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write notifications from API-known good + CTA
+        env:
+          NOTIF_B64: ""
+        run: |
+          set -e
+          # Fetch known-good blob from GitHub contents API (public)
+          python3 << 'PY'
+          import json, urllib.request, base64
+          from pathlib import Path
+          url = 'https://api.github.com/repos/tajvidisadegh-pixel/grokrepositorybeautijoo/contents/frontend/src/app/panel/notifications/page.tsx?ref=8352345ebf15c66782236d082681a784ec4c6e2c'
+          req = urllib.request.Request(url, headers={'User-Agent': 'beautijoo-ci', 'Accept': 'application/vnd.github+json'})
+          d = json.loads(urllib.request.urlopen(req, timeout=30).read())
+          s = base64.b64decode(d['content']).decode()
+          old = '<PanelEmpty title="اعلانی نیست" />'
+          new = '''<PanelEmpty
+          title="اعلانی نیست"
+          description="وقتی رزرو، پرداخت یا پیام جدیدی باشد اینجا می‌بینید."
+          icon="🔔"
+          action={
+            <Link href="/panel/bookings">
+              <Button size="sm" variant="outline">مشاهده رزروها</Button>
+            </Link>
+          }
+        />'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          if "from 'next/link'" not in s:
+              s = s.replace("'use client';\n", "'use client';\nimport Link from 'next/link';\n", 1)
+          if "from '@/components/ui/button'" not in s:
+              s = s.replace(
+                  "import { Card } from '@/components/ui/card';",
+                  "import { Card } from '@/components/ui/card';\nimport { Button } from '@/components/ui/button';",
+                  1,
+              )
+          p = Path('frontend/src/app/panel/notifications/page.tsx')
+          p.write_text(s)
+          print('wrote', len(s))
+          assert len(s) > 500
+          PY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/restore-notif-v2.yml
+          git add frontend/src/app/panel/notifications/page.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "fix(ui): restore notifications + empty CTA (#40)"
+          git push
