@@ -1,0 +1,52 @@
+name: Fix placeholders
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-placeholders.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore three files from good SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          GOOD=80e35204183daa512c59d03137e5be06bfc62647
+          API="https://api.github.com/repos/tajvidisadegh-pixel/grokrepositorybeautijoo/contents"
+          restore() {
+            local path="$1"
+            local out="$1"
+            mkdir -p "$(dirname "$out")"
+            curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github.raw" \
+              "$API/$path?ref=$GOOD" -o "$out"
+            local sz=$(wc -c < "$out")
+            echo "$path size=$sz"
+            test "$sz" -gt 1000
+          }
+          restore backend/src/bookings/bookings.service.ts
+          restore frontend/src/app/zibagar/bookings/page.tsx
+          restore frontend/src/lib/panel-api.ts
+          grep -q Injectable backend/src/bookings/bookings.service.ts
+          grep -q transitionBooking frontend/src/lib/panel-api.ts
+          grep -q 'use client' frontend/src/app/zibagar/bookings/page.tsx
+      - name: Commit and push
+        run: |
+          set -eux
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/fix-placeholders.yml
+          rm -f .github/workflows/emergency-restore.yml
+          rm -f .github/workflows/patch-noshow.yml
+          rm -f .github/workflows/restore-item3.yml
+          rm -f scripts/restore-svc.b64
+          git add -A
+          git status
+          git commit -m "fix: restore bookings.service, zibagar bookings, panel-api"
+          git push
