@@ -1,0 +1,90 @@
+name: Fix empty-state pages
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-empty-states.yml'
+      - 'scripts/fix-jsx-classname.py'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+      - name: Fix JSX className typos
+        run: python3 scripts/fix-jsx-classname.py
+      - name: Restore notifications if empty
+        run: |
+          f=frontend/src/app/panel/notifications/page.tsx
+          sz=$(wc -c < "$f" || echo 0)
+          if [ "$sz" -lt 100 ]; then
+            echo "notifications empty ($sz) — restoring from previous commit"
+            git show HEAD~3:frontend/src/app/panel/notifications/page.tsx > "$f" 2>/dev/null \
+              || git log --all --full-history -- "$f" -1 --pretty=format: --name-only \
+              || true
+            # try several parents
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if git cat-file -e HEAD~$i:frontend/src/app/panel/notifications/page.tsx 2>/dev/null; then
+                content=$(git show HEAD~$i:frontend/src/app/panel/notifications/page.tsx)
+                clen=${#content}
+                if [ "$clen" -gt 500 ]; then
+                  echo "$content" > "$f"
+                  echo "restored from HEAD~$i len=$clen"
+                  break
+                fi
+              fi
+            done
+          else
+            echo "notifications ok size=$sz"
+          fi
+          # ensure CTA if restored without it
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/panel/notifications/page.tsx')
+          s = p.read_text() if p.exists() else ''
+          if len(s) < 100:
+              raise SystemExit('notifications still empty')
+          if 'اعلانی نیست' in s and 'مشاهده رزروها' not in s:
+              old = '''        <PanelEmpty
+          title="اعلانی نیست"
+          description="وقتی رزرو، پرداخت یا پیام جدیدی باشد اینجا می‌بینید."
+          icon="🔔"
+        />'''
+              new = '''        <PanelEmpty
+          title="اعلانی نیست"
+          description="وقتی رزرو، پرداخت یا پیام جدیدی باشد اینجا می‌بینید."
+          icon="🔔"
+          action={
+            <Link href="/panel/bookings">
+              <Button size="sm" variant="outline">مشاهده رزروها</Button>
+            </Link>
+          }
+        />'''
+              if old in s:
+                  s = s.replace(old, new, 1)
+                  if "from 'next/link'" not in s:
+                      s = s.replace("'use client';\n", "'use client';\nimport Link from 'next/link';\n", 1)
+                  if "from '@/components/ui/button'" not in s:
+                      s = s.replace(
+                          "import { Card } from '@/components/ui/card';",
+                          "import { Card } from '@/components/ui/card';\nimport { Button } from '@/components/ui/button';",
+                          1,
+                      )
+                  p.write_text(s)
+                  print('CTA added')
+              else:
+                  print('empty block pattern mismatch')
+          else:
+              print('notifications CTA ok or already present')
+          PY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/fix-empty-states.yml
+          git add frontend/src/app/categories/[slug]/page.tsx frontend/src/app/locations/[city]/page.tsx frontend/src/app/panel/notifications/page.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "fix(ui): className JSX + restore notifications empty CTA (#40)"
+          git push
