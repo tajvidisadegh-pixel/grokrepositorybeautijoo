@@ -1,0 +1,58 @@
+name: Restore notifications
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-notifications.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore + empty CTA
+        run: |
+          set -e
+          f=frontend/src/app/panel/notifications/page.tsx
+          git show 8352345ebf15c66782236d082681a784ec4c6e2c:"$f" > "$f"
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/panel/notifications/page.tsx')
+          s = p.read_text()
+          assert len(s) > 500
+          old = '<PanelEmpty title="اعلانی نیست" />'
+          new = '''<PanelEmpty
+          title="اعلانی نیست"
+          description="وقتی رزرو، پرداخت یا پیام جدیدی باشد اینجا می‌بینید."
+          icon="🔔"
+          action={
+            <Link href="/panel/bookings">
+              <Button size="sm" variant="outline">مشاهده رزروها</Button>
+            </Link>
+          }
+        />'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          if "from 'next/link'" not in s:
+              s = s.replace("'use client';\n", "'use client';\nimport Link from 'next/link';\n", 1)
+          if "from '@/components/ui/button'" not in s:
+              s = s.replace(
+                  "import { Card } from '@/components/ui/card';",
+                  "import { Card } from '@/components/ui/card';\nimport { Button } from '@/components/ui/button';",
+                  1,
+              )
+          p.write_text(s)
+          print('ok', len(s))
+          PY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/restore-notifications.yml
+          rm -f scripts/restore-notifications.py
+          git add frontend/src/app/panel/notifications/page.tsx
+          git add -A
+          git diff --cached --quiet || git commit -m "fix(ui): restore panel notifications + empty CTA (#40)"
+          git push
