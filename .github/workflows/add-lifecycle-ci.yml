@@ -1,42 +1,8 @@
-name: Add lifecycle e2e to CI
+name: disabled-add-lifecycle
 on:
-  push:
-    paths: ['.github/workflows/add-lifecycle-ci.yml']
-permissions:
-  contents: write
+  workflow_dispatch:
 jobs:
-  patch:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          python3 << 'PY'
-          from pathlib import Path
-          p = Path('.github/workflows/ci.yml')
-          s = p.read_text()
-          if 'bookings/lifecycle' in s:
-              print('already in ci')
-          else:
-              old = '''      - name: E2E Bookings race
-        run: npm run test:e2e -- --testPathPattern=bookings/race
-
-      - name: E2E Public professionals smoke'''
-              new = '''      - name: E2E Bookings race
-        run: npm run test:e2e -- --testPathPattern=bookings/race
-
-      - name: E2E Bookings lifecycle (pay→complete→review)
-        run: npm run test:e2e -- --testPathPattern=bookings/lifecycle
-
-      - name: E2E Public professionals smoke'''
-              if old not in s:
-                  raise SystemExit('ci needle missing')
-              p.write_text(s.replace(old, new, 1))
-              print('ci updated')
-          PY
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          rm -f .github/workflows/add-lifecycle-ci.yml
-          git add .github/workflows/ci.yml
-          git add -A
-          git diff --cached --quiet || git commit -m "ci: run bookings lifecycle e2e in pipeline (#40)"
-          git push
+      - run: echo disabled

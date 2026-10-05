@@ -1,23 +1,8 @@
-name: Restore auth.service
+name: disabled-restore-auth
 on:
-  push:
-    paths:
-      - '.github/workflows/restore-auth-service.yml'
-      - 'scripts/restore-auth-service.py'
-permissions:
-  contents: write
+  workflow_dispatch:
 jobs:
-  restore:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: python3 scripts/restore-auth-service.py
-      - name: Commit
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add backend/src/auth/auth.service.ts
-          git diff --cached --quiet || git commit -m "fix(auth): restore full auth.service + passwordless register (issue #43)"
-          git push
+      - run: echo disabled
