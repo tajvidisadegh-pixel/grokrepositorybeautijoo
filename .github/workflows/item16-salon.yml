@@ -1,0 +1,69 @@
+name: item16-salon
+on:
+  push:
+    paths:
+      - '.github/workflows/item16-salon.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -eux
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          s = p.read_text()
+          if 'SalonMediaGallery' in s:
+              print('already')
+          else:
+              s = s.replace(
+                  "import { ServicePortfolioGallery } from '@/components/professionals/service-portfolio-gallery';",
+                  "import { ServicePortfolioGallery } from '@/components/professionals/service-portfolio-gallery';\nimport { SalonMediaGallery } from '@/components/professionals/salon-media-gallery';",
+                  1,
+              )
+              # Replace salon IIFE section with component
+              pattern = r"\{\(\(\) => \{[\s\S]*?const salon = \(pro\.mediaAssets \|\| \[\]\)\.filter\([\s\S]*?return \([\s\S]*?<section className=\"rounded-3xl border border-border/90[\s\S]*?</section>\s*\);\s*\}\)\(\)\}"
+              m = re.search(pattern, s)
+              if not m:
+                  # simpler: find start
+                  start = s.find('const salon = (pro.mediaAssets')
+                  if start < 0:
+                      raise SystemExit('salon not found')
+                  # back to {(() => {
+                  start = s.rfind('{(() => {', 0, start)
+                  end = s.find('})()}', start) + len('})()}')
+                  replacement = '''{(pro.mediaAssets || []).filter(
+            (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+          ).length > 0 && (
+            <SalonMediaGallery
+              media={(pro.mediaAssets || []).filter(
+                (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+              )}
+            />
+          )}'''
+                  s = s[:start] + replacement + s[end:]
+              else:
+                  s = s[:m.start()] + '''{(pro.mediaAssets || []).filter(
+            (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+          ).length > 0 && (
+            <SalonMediaGallery
+              media={(pro.mediaAssets || []).filter(
+                (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+              )}
+            />
+          )}''' + s[m.end():]
+              p.write_text(s)
+              print('wired', 'SalonMediaGallery' in s)
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item16-salon.yml
+          git add 'frontend/src/app/professionals/[slug]/page.tsx'
+          git add -A
+          git commit -m "feat(pro): salon gallery uses lightbox (#40 item 16)" || echo nothing
+          git push
