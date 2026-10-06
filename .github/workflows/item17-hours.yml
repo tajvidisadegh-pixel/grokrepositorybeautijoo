@@ -1,0 +1,157 @@
+name: item17-hours
+on:
+  push:
+    paths:
+      - '.github/workflows/item17-hours.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch backend + profile
+        run: |
+          set -eux
+          python3 << 'PY'
+          from pathlib import Path
+
+          # Backend list include
+          bp = Path('backend/src/professionals/professionals.service.ts')
+          bs = bp.read_text()
+          old = '''    include = {
+      user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+      locations: { include: { location: true }, where: { isPrimary: true }, take: 1 },
+      professionalServices: {
+        where: { isActive: true },
+        take: 5,
+        orderBy: { price: 'asc' as const },
+        include: { service: { select: { name: true, slug: true } } },
+      },
+    };'''
+          new = '''    include = {
+      user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+      locations: { include: { location: true }, where: { isPrimary: true }, take: 1 },
+      professionalServices: {
+        where: { isActive: true },
+        take: 5,
+        orderBy: { price: 'asc' as const },
+        include: { service: { select: { name: true, slug: true } } },
+      },
+      // Today open/closed on cards (#40 item 17)
+      workingHours: {
+        where: { isActive: true },
+        select: { dayOfWeek: true, startTime: true, endTime: true, isActive: true },
+      },
+    };'''
+          if 'workingHours: {' in bs and 'Today open/closed' in bs:
+              print('backend already')
+          elif old not in bs:
+              raise SystemExit('backend include block not found')
+          else:
+              bs = bs.replace(old, new, 1)
+              bp.write_text(bs)
+              print('backend patched')
+
+          # Types
+          tp = Path('frontend/src/types/public.ts')
+          ts = tp.read_text()
+          if 'workingHours?:' in ts and 'ProfessionalListItem' in ts:
+              # check inside list item
+              idx = ts.find('export type ProfessionalListItem')
+              chunk = ts[idx:idx+900]
+              if 'workingHours' not in chunk:
+                  ts = ts.replace(
+                      '''  professionalServices?: Array<{
+    id?: string;
+    durationMin?: number;
+    price?: number;''',
+                      '''  /** Active weekly hours for open-now badge (list/search) */
+  workingHours?: Array<{
+    dayOfWeek: string;
+    startTime: string;
+    endTime: string;
+    isActive?: boolean;
+  }>;
+  professionalServices?: Array<{
+    id?: string;
+    durationMin?: number;
+    price?: number;''',
+                      1,
+                  )
+                  tp.write_text(ts)
+                  print('types patched')
+              else:
+                  print('types ok')
+          else:
+              # insert after distanceApproximate line if present
+              marker = 'distanceApproximate?: boolean;'
+              if marker in ts and 'workingHours?: Array' not in ts[ts.find('ProfessionalListItem'):ts.find('ProfessionalListItem')+1200]:
+                  ts = ts.replace(
+                      marker,
+                      marker + '''\n  workingHours?: Array<{
+    dayOfWeek: string;
+    startTime: string;
+    endTime: string;
+    isActive?: boolean;
+  }>;''',
+                      1,
+                  )
+                  tp.write_text(ts)
+                  print('types patched via distance')
+
+          # Profile page - add OpenStatusBadge near hoursLine
+          pp = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          ps = pp.read_text()
+          if 'OpenStatusBadge' in ps:
+              print('profile already')
+          else:
+              if "import { ShareProfileButton }" in ps:
+                  ps = ps.replace(
+                      "import { ShareProfileButton } from '@/components/professionals/share-profile-button';",
+                      "import { ShareProfileButton } from '@/components/professionals/share-profile-button';\nimport { OpenStatusBadge } from '@/components/professionals/open-status-badge';",
+                      1,
+                  )
+              elif "from '@/components/professionals/sticky-book-bar'" in ps:
+                  ps = ps.replace(
+                      "import { StickyBookBar } from '@/components/professionals/sticky-book-bar';",
+                      "import { StickyBookBar } from '@/components/professionals/sticky-book-bar';\nimport { OpenStatusBadge } from '@/components/professionals/open-status-badge';",
+                      1,
+                  )
+              # after hoursLine const, inject badge display near name section - find hoursLine usage
+              if 'ساعات کاری: {hoursLine}' in ps:
+                  ps = ps.replace(
+                      'ساعات کاری: {hoursLine}',
+                      '''<span className="inline-flex flex-wrap items-center gap-2">
+                <OpenStatusBadge hours={pro.workingHours || []} showRange size="md" />
+                {hoursLine ? <span className="text-gray">· {hoursLine}</span> : null}
+              </span>''',
+                      1,
+                  )
+              else:
+                  # insert after name block - look for hoursLine &&
+                  pass
+              # also under header name if possible
+              if '<OpenStatusBadge' not in ps and 'const hoursLine' in ps:
+                  ps = ps.replace(
+                      'const hoursLine = summarizeWorkingHours(pro.workingHours || []);',
+                      '''const hoursLine = summarizeWorkingHours(pro.workingHours || []);
+  const openBadge = (
+    <OpenStatusBadge hours={pro.workingHours || []} showRange size="md" />
+  );''',
+                      1,
+                  )
+              pp.write_text(ps)
+              print('profile', 'OpenStatusBadge' in ps)
+
+          print('done')
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item17-hours.yml
+          git add backend/src/professionals/professionals.service.ts frontend/src/types/public.ts 'frontend/src/app/professionals/[slug]/page.tsx'
+          git add -A
+          git status
+          git commit -m "feat: workingHours in search + open badge on pro profile (#40 item 17)" || echo nothing
+          git push
