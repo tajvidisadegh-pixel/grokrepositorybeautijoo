@@ -9,7 +9,7 @@ const ITEMS = [
   { href: '/panel/reviews', label: 'نظرات' },
   { href: '/panel/notifications', label: 'اعلان‌ها', mobile: true },
   { href: '/panel/profile', label: 'پروفایل', mobile: true },
-  { href: '/panel/settings', label: 'تنظیمات', mobile: true },
+  { href: '/panel/settings', label: 'تنظیمات' },
 ];
 
 export default function PanelLayout({ children }: { children: ReactNode }) {

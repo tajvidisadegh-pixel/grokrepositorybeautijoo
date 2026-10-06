@@ -7,14 +7,14 @@ import { RequireAuth } from '@/components/auth/require-auth';
 const ITEMS = [
   { href: '/zibagar', label: 'داشبورد', mobile: true },
   { href: '/zibagar/bookings', label: 'رزروها', mobile: true },
+  { href: '/zibagar/notifications', label: 'اعلان‌ها', mobile: true },
+  { href: '/zibagar/profile', label: 'پروفایل', mobile: true },
   { href: '/zibagar/reviews', label: 'نظرات' },
   { href: '/zibagar/services', label: 'تخصص‌ها و منو قیمت' },
   { href: '/zibagar/portfolio', label: 'نمونه‌کار' },
-  { href: '/zibagar/earnings', label: 'درآمد', mobile: true },
-  { href: '/zibagar/profile', label: 'پروفایل', mobile: true },
+  { href: '/zibagar/earnings', label: 'درآمد' },
   { href: '/zibagar/hours', label: 'ساعات کاری' },
   { href: '/zibagar/locations', label: 'آدرس' },
-  { href: '/zibagar/notifications', label: 'اعلان‌ها', mobile: true },
   { href: '/zibagar/support', label: 'پشتیبانی' },
   { href: '/zibagar/settings', label: 'تنظیمات' },
 ];
