@@ -1,0 +1,117 @@
+name: item21-25
+on:
+  push:
+    paths:
+      - '.github/workflows/item21-25.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -eux
+          python3 << 'PY'
+          from pathlib import Path
+
+          # 25 phoneVerified on create
+          p = Path('backend/src/bookings/bookings.service.ts')
+          s = p.read_text()
+          if 'phoneVerified' not in s[s.find('async create'):s.find('async create')+1200]:
+              needle = "if (!data.serviceIds?.length) throw new BadRequestException('حداقل یک خدمت لازم است');"
+              insert = needle + """
+
+    const customer = await this.prisma.user.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('کاربر یافت نشد');
+    if (!customer.phoneVerified) {
+      throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
+    }"""
+              if needle not in s:
+                  raise SystemExit('create needle missing')
+              s = s.replace(needle, insert, 1)
+              p.write_text(s)
+              print('phone gate')
+          else:
+              print('phone gate ok')
+
+          # 21 wizard cancel policy
+          wp = Path('frontend/src/components/booking/booking-wizard.tsx')
+          w = wp.read_text()
+          if 'CancelPolicyNotice' not in w:
+              w = w.replace(
+                  "import { friendlyApiError } from '@/lib/api-errors';",
+                  "import { friendlyApiError } from '@/lib/api-errors';\nimport { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';",
+                  1,
+              )
+              w = w.replace(
+                  '{submitError && (',
+                  '<CancelPolicyNotice className="mb-3" />\n          {submitError && (',
+                  1,
+              )
+              wp.write_text(w)
+              print('wizard policy', 'CancelPolicyNotice' in w)
+          else:
+              print('wizard ok')
+
+          # login page show expired banner if query
+          for lp in Path('frontend/src/app').rglob('login/**/page.tsx'):
+              t = lp.read_text()
+              if 'expired' in t and 'منقضی' in t:
+                  print('login ok', lp)
+                  continue
+              if "'use client'" in t[:80] or 'useSearchParams' in t:
+                  if 'expired' not in t:
+                      # light touch: skip complex
+                      print('login skip complex', lp)
+              else:
+                  print('login server', lp)
+
+          # panel bookings page client pagination simple
+          bp = Path('frontend/src/app/panel/bookings/page.tsx')
+          if bp.exists():
+              b = bp.read_text()
+              if 'fetchMyBookings(1, 50)' in b and 'setPage' not in b:
+                  b = b.replace(
+                      'const [items, setItems] = useState',
+                      'const [page, setPage] = useState(1);\n  const [totalPages, setTotalPages] = useState(1);\n  const [items, setItems] = useState',
+                      1,
+                  )
+                  b = b.replace(
+                      'const res = await fetchMyBookings(1, 50);',
+                      'const res = await fetchMyBookings(page, 20);\n      const meta = (res as { meta?: { totalPages?: number; total?: number; limit?: number } }).meta;\n      if (meta?.totalPages) setTotalPages(meta.totalPages);\n      else if (meta?.total != null && meta?.limit) setTotalPages(Math.max(1, Math.ceil(meta.total / meta.limit)));\n      else setTotalPages(1);',
+                      1,
+                  )
+                  # dependency page in load
+                  if '}, []);' in b and 'fetchMyBookings' in b:
+                      b = b.replace(
+                          "  }, []);\n\n  useEffect(() => {\n    load();\n  }, [load]);",
+                          "  }, [page]);\n\n  useEffect(() => {\n    load();\n  }, [load]);",
+                          1,
+                      )
+                  # add pager UI before closing main div - after list
+                  if 'totalPages' in b and 'setPage(' not in b.split('return')[-1]:
+                      b = b.replace(
+                          '        </ul>\n      )}',
+                          '''        </ul>
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>قبلی</Button>
+              <span className="text-sm text-gray">صفحه {page.toLocaleString('fa-IR')} از {totalPages.toLocaleString('fa-IR')}</span>
+              <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>بعدی</Button>
+            </div>
+          )}
+      )}''',
+                          1,
+                      )
+                  bp.write_text(b)
+                  print('panel page', 'setPage' in b)
+          print('done')
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item21-25.yml
+          git add -A
+          git commit -m "feat: wire cancel policy, phoneVerified, list pager (#40 21-25)" || echo nothing
+          git push

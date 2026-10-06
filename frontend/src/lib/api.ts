@@ -45,6 +45,26 @@ function extractMessage(data: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Clear session and send user to login (issue #40 item 24). */
+function handleSessionExpired() {
+  if (typeof window === 'undefined') return;
+  clearTokens();
+  try {
+    sessionStorage.setItem(
+      'bj_auth_msg',
+      'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.',
+    );
+  } catch {
+    /* ignore */
+  }
+  const path = window.location.pathname + window.location.search;
+  if (path.startsWith('/login') || path.startsWith('/otp') || path.startsWith('/register')) {
+    return;
+  }
+  const next = encodeURIComponent(path || '/');
+  window.location.assign(`/login?expired=1&next=${next}`);
+}
+
 async function rawFetch(
   path: string,
   opts: RequestOptions = {},
@@ -73,7 +93,6 @@ async function rawFetch(
     body: body !== undefined ? JSON.stringify(body) : undefined,
     cache,
     next,
-    // Required for httpOnly refresh cookie on cross-origin API
     credentials: 'include',
   });
 }
@@ -84,7 +103,6 @@ async function tryRefresh(): Promise<string | null> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
     try {
-      // Cookie is sent automatically; no refresh token in body
       const res = await rawFetch('/auth/refresh', {
         method: 'POST',
         body: {},
@@ -133,6 +151,9 @@ export async function api<T = unknown>(
     const newAccess = await tryRefresh();
     if (newAccess) {
       res = await rawFetch(path, { ...opts, token: newAccess });
+    } else if (!path.includes('/auth/')) {
+      handleSessionExpired();
+      throw new ApiError(401, 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
     }
   }
 
@@ -147,12 +168,27 @@ export async function api<T = unknown>(
   }
 
   if (!res.ok) {
+    if (
+      res.status === 401 &&
+      typeof window !== 'undefined' &&
+      !opts.skipRefresh &&
+      !path.includes('/auth/')
+    ) {
+      handleSessionExpired();
+    }
     const msg = extractMessage(data, res.statusText);
     const correlationId =
       typeof data === 'object' && data && 'correlationId' in data
         ? String((data as { correlationId: string }).correlationId)
         : undefined;
-    throw new ApiError(res.status, msg, data, correlationId);
+    throw new ApiError(
+      res.status,
+      res.status === 401
+        ? 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'
+        : msg,
+      data,
+      correlationId,
+    );
   }
 
   return data as T;
