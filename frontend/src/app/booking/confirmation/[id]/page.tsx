@@ -8,6 +8,7 @@ import { getBooking, initiatePayment, persianBookingStatus } from '@/lib/booking
 import { persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { AddToCalendarActions } from '@/components/booking/add-to-calendar';
 import { Card } from '@/components/ui/card';
 import { RequireAuth } from '@/components/auth/require-auth';
 import type { BookingRecord } from '@/types/booking';
@@ -75,67 +76,48 @@ function ConfirmationBody() {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <p className="text-red-700">{error}</p>
-        <Link href="/" className="mt-4 inline-block text-coral hover:underline">
-          صفحه اصلی
+        <Link href="/" className="mt-4 inline-block text-sm text-coral underline">
+          بازگشت
         </Link>
       </div>
     );
   }
 
-  if (!booking) return null;
+  if (!booking) {
+    return (
+      <div className="py-16 text-center text-gray">رزرو یافت نشد</div>
+    );
+  }
 
   const proName =
     booking.professional?.user?.profile?.displayName ||
     booking.professional?.title ||
     'زیباگر';
-
-  const payStatus = booking.payment?.status || '';
-  const isPaid = payStatus === 'paid';
-  const payFailed = payStatus === 'failed' || payStatus === 'cancelled';
   const canPay =
-    !isPaid &&
-    (booking.status === 'pending' || booking.status === 'confirmed') &&
-    (!payStatus || payStatus === 'pending' || payStatus === 'processing' || payFailed);
-
-  const payHint = searchParams.get('pay');
+    !booking.payment ||
+    booking.payment.status === 'pending' ||
+    booking.payment.status === 'failed';
+  const payHint = searchParams.get('paid');
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-10">
-      <h1 className="text-2xl font-bold">
-        {isPaid
-          ? 'رزرو شما با موفقیت ثبت شد'
-          : payFailed
-            ? 'پرداخت انجام نشد'
-            : 'بررسی و وضعیت رزرو'}
-      </h1>
-      {payHint === 'paid' && !isPaid && (
-        <p className="mt-2 text-sm text-amber-800">
-          درگاه نتیجه را گزارش کرد؛ در حال همگام‌سازی با سرور — صفحه را تازه کنید.
+    <div className="mx-auto max-w-lg px-4 py-10" dir="rtl">
+      <h1 className="text-2xl font-bold text-foreground">تأیید رزرو</h1>
+      <p className="mt-1 text-sm text-gray">
+        وضعیت: {persianBookingStatus(booking.status)}
+      </p>
+      {payHint === '1' && (
+        <p className="mt-3 rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">
+          پرداخت با موفقیت ثبت شد.
         </p>
       )}
-      {isPaid && (
-        <p className="mt-2 text-sm text-emerald-700">
-          پرداخت از سرور تأیید شده و رزرو شما نهایی است.
-        </p>
+      {payMsg && (
+        <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">{payMsg}</p>
       )}
-      {payFailed && (
-        <p className="mt-2 text-sm text-red-700">
-          پرداخت انجام نشد. می‌توانید دوباره از دکمه زیر اقدام کنید.
-        </p>
+      {error && (
+        <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
-      {!isPaid && !payFailed && (
-        <p className="mt-2 text-sm text-amber-800">
-          برای نهایی شدن رزرو، پرداخت آنلاین را انجام دهید.
-        </p>
-      )}
-      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
-      {payMsg && <p className="mt-2 text-sm text-gray">{payMsg}</p>}
 
       <Card className="mt-6 space-y-3 text-sm">
-        <div className="flex justify-between gap-2">
-          <span className="text-gray">وضعیت رزرو</span>
-          <span className="font-bold">{persianBookingStatus(booking.status)}</span>
-        </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">زیباگر</span>
           <span>{proName}</span>
@@ -169,6 +151,23 @@ function ConfirmationBody() {
           </span>
         </div>
       </Card>
+
+      {(booking.status === 'confirmed' || booking.status === 'pending') && (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-medium text-gray">افزودن به تقویم و کپی جزئیات</p>
+          <AddToCalendarActions
+            booking={{
+              id: booking.id,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+              totalPrice: booking.totalPrice,
+              status: booking.status,
+            }}
+            proName={proName}
+            serviceNames={(booking.items || []).map((it) => it.service?.name).filter(Boolean) as string[]}
+          />
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap gap-3">
         {canPay && (

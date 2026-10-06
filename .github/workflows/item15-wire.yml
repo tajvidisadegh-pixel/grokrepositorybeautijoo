@@ -1,67 +1,8 @@
-name: item15-wire
+name: disabled-item15
 on:
-  push:
-    paths:
-      - '.github/workflows/item15-wire.yml'
-permissions:
-  contents: write
+  workflow_dispatch:
 jobs:
-  run:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          set -eux
-          python3 << 'PY'
-          from pathlib import Path
-          p = Path('frontend/src/app/panel/bookings/page.tsx')
-          s = p.read_text()
-          if 'AddToCalendarActions' in s:
-              print('already wired')
-          else:
-              s = s.replace(
-                  "import { formatPrice, formatRelativeDate } from '@/lib/utils';",
-                  "import { formatPrice, formatRelativeDate } from '@/lib/utils';\nimport { AddToCalendarActions } from '@/components/booking/add-to-calendar';",
-                  1,
-              )
-              # Insert after price line inside card — after totalPrice block
-              needle = '''                  {b.totalPrice != null && (
-                    <p className="text-sm text-gray">{formatPrice(b.totalPrice)}</p>
-                  )}'''
-              insert = '''                  {b.totalPrice != null && (
-                    <p className="text-sm text-gray">{formatPrice(b.totalPrice)}</p>
-                  )}
-                  {(b.status === 'confirmed' || b.status === 'pending') && (
-                    <AddToCalendarActions
-                      booking={{
-                        id: b.id,
-                        startAt: b.startAt,
-                        endAt: b.endAt,
-                        totalPrice: b.totalPrice,
-                        status: b.status,
-                      }}
-                      proName={proName}
-                      serviceNames={(
-                        b.items?.map((it) => it.service?.name).filter(Boolean) as string[] | undefined
-                      ) || b.services?.map((s) => s.name).filter(Boolean) as string[] | undefined || []}
-                      locationLabel={
-                        b.location
-                          ? [b.location.name, b.location.city].filter(Boolean).join(' — ')
-                          : undefined
-                      }
-                    />
-                  )}'''
-              if needle not in s:
-                  raise SystemExit('price block not found')
-              s = s.replace(needle, insert, 1)
-              p.write_text(s)
-              print('wired', 'AddToCalendarActions' in s)
-          PY
-      - run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          rm -f .github/workflows/item15-wire.yml
-          git add frontend/src/app/panel/bookings/page.tsx
-          git add -A
-          git commit -m "feat(panel): show add-to-calendar on active bookings (#40 item 15)" || echo nothing
-          git push
+      - run: echo disabled
