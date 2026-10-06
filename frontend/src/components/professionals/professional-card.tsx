@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ProfessionalListItem } from '@/types/public';
 import { cn, formatDistanceFromYou } from '@/lib/utils';
 import { TrustBadge } from '@/components/professionals/trust-badge';
+import { OpenStatusBadge } from '@/components/professionals/open-status-badge';
 
 type Props = {
   pro: ProfessionalListItem;
@@ -18,6 +19,7 @@ export function ProfessionalCard({ pro, className }: Props) {
     pro.ratingAvg != null ? Number(pro.ratingAvg).toFixed(1) : null;
   const count = pro.ratingCount ?? 0;
   const verifiedAt = (pro as { verifiedAt?: string | null }).verifiedAt;
+  const hours = (pro as { workingHours?: { dayOfWeek: string; startTime: string; endTime: string; isActive?: boolean }[] }).workingHours;
 
   return (
     <Link
@@ -74,6 +76,11 @@ export function ProfessionalCard({ pro, className }: Props) {
               </span>
             )}
           </div>
+          {hours && hours.length > 0 && (
+            <div className="mt-1.5">
+              <OpenStatusBadge hours={hours} showRange size="sm" />
+            </div>
+          )}
           {services.length > 0 && (
             <p className="mt-1.5 line-clamp-1 text-xs text-gray-muted sm:mt-2">
               {services.slice(0, 3).join(' · ')}
