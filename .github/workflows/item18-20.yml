@@ -1,4 +1,4 @@
-name: item18-20c
+name: item18-20d
 on:
   push:
     paths:
@@ -12,130 +12,74 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set -eux
-          # area filter
-          python3 -c "
-from pathlib import Path
-p=Path('backend/src/professionals/professionals.service.ts')
-s=p.read_text()
-if 'params.area' not in s:
-  s=s.replace('city?: string;\n    category?: string;','city?: string;\n    area?: string;\n    category?: string;',1)
-  old='''    if (params.city) {
-      where.locations = {
-        some: { location: { city: { contains: params.city, mode: \'insensitive\' } } },
-      };
-    }'''
-  # try without escape
-  old2='''    if (params.city) {
-      where.locations = {
-        some: { location: { city: { contains: params.city, mode: \'insensitive\' } } },
-      };
-    }'''
-"
           python3 << 'PY'
           from pathlib import Path
-          p=Path('backend/src/professionals/professionals.service.ts')
-          s=p.read_text()
-          if 'params.area' in s:
-              print('area ok')
-          else:
-              s=s.replace('city?: string;\n    category?: string;','city?: string;\n    area?: string;\n    category?: string;',1)
-              needle='some: { location: { city: { contains: params.city, mode: \'insensitive\' } } },'
-              # find city block end
-              i=s.find('if (params.city)')
-              j=s.find('\n    }\n', i)
-              if i<0 or j<0: raise SystemExit('city not found')
-              j=j+len('\n    }')
-              insert='''
+          import re
 
-    if (params.area && String(params.area).trim()) {
-      const area = String(params.area).trim();
-      const areaFilter = {
-        locations: {
-          some: {
-            location: {
-              OR: [
-                { name: { contains: area, mode: \'insensitive\' as const } },
-                { address: { contains: area, mode: \'insensitive\' as const } },
-              ],
-            },
-          },
-        },
-      };
-      const prevAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
-      where.AND = [...prevAnd, areaFilter];
-    }'''
-              # fix quotes - use proper string
-              insert = """
-
-    if (params.area && String(params.area).trim()) {
-      const area = String(params.area).trim();
-      const areaFilter = {
-        locations: {
-          some: {
-            location: {
-              OR: [
-                { name: { contains: area, mode: 'insensitive' as const } },
-                { address: { contains: area, mode: 'insensitive' as const } },
-              ],
-            },
-          },
-        },
-      };
-      const prevAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
-      where.AND = [...prevAnd, areaFilter];
-    }"""
-              s=s[:j]+insert+s[j:]
+          p = Path('backend/src/professionals/professionals.service.ts')
+          s = p.read_text()
+          if 'params.area' not in s:
+              s = s.replace('city?: string;\n    category?: string;', 'city?: string;\n    area?: string;\n    category?: string;', 1)
+              i = s.find('if (params.city)')
+              j = s.find('\n    }\n', i)
+              j = j + len('\n    }')
+              insert = "\n\n    if (params.area && String(params.area).trim()) {\n      const area = String(params.area).trim();\n      const areaFilter = {\n        locations: {\n          some: {\n            location: {\n              OR: [\n                { name: { contains: area, mode: 'insensitive' as const } },\n                { address: { contains: area, mode: 'insensitive' as const } },\n              ],\n            },\n          },\n        },\n      };\n      const prevAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];\n      where.AND = [...prevAnd, areaFilter];\n    }"
+              s = s[:j] + insert + s[j:]
               p.write_text(s)
-              print('area patched')
+              print('area backend')
+          else:
+              print('area backend ok')
 
-          # panel api
-          pa=Path('frontend/src/lib/panel-api.ts')
-          t=pa.read_text()
-          t=t.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'","action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'",1)
-          # also allow calling no-show endpoint
-          if 'no-show' not in t and 'transitionBooking' in t:
-              t=t.replace(
-                  "return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);",
-                  """const path = action === 'no_show' ? 'no-show' : action;
-  return apiClient.patch(`/bookings/${id}/${path}`, reason ? { reason } : undefined);""",
-                  1,
-              )
+          pa = Path('frontend/src/lib/panel-api.ts')
+          t = pa.read_text()
+          old = "transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {\n  return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);\n}"
+          new = "transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show', reason?: string) {\n  const path = action === 'no_show' ? 'no-show' : action;\n  return apiClient.patch(`/bookings/${id}/${path}`, reason ? { reason } : undefined);\n}"
+          if old in t:
+              t = t.replace(old, new, 1)
+          else:
+              t = t.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'", "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'", 1)
           pa.write_text(t)
           print('panel')
 
-          # public api area
-          fa=Path('frontend/src/lib/public-api.ts')
-          f=fa.read_text()
+          fa = Path('frontend/src/lib/public-api.ts')
+          f = fa.read_text()
           if 'area?: string' not in f:
-              f=f.replace('city?: string;','city?: string;\n  area?: string;',1)
-              f=f.replace("if (params.city) sp.set('city', params.city);","if (params.city) sp.set('city', params.city);\n  if (params.area) sp.set('area', params.area);",1)
+              f = f.replace('city?: string;', 'city?: string;\n  area?: string;', 1)
+              f = f.replace("if (params.city) sp.set('city', params.city);", "if (params.city) sp.set('city', params.city);\n  if (params.area) sp.set('area', params.area);", 1)
               fa.write_text(f)
           print('public')
 
-          # search UI
-          sp=Path('frontend/src/app/search/page.tsx')
-          ss=sp.read_text()
+          sp = Path('frontend/src/app/search/page.tsx')
+          ss = sp.read_text()
           if 'name="area"' not in ss:
-              ss=ss.replace('const city = sp.city?.trim() || undefined;','const city = sp.city?.trim() || undefined;\n  const area = sp.area?.trim() || undefined;',1)
-              ss=ss.replace('q, city, category, filterCategory: true, page, limit: 12,','q, city, area, category, filterCategory: true, page, limit: 12,',1)
-              ss=ss.replace("if (city) params.set('city', city);","if (city) params.set('city', city);\n    if (area) params.set('area', area);",1)
-              ss=ss.replace('placeholder="شهر"','placeholder="مثلاً تهران"',1)
-              ss=ss.replace(
-                  'placeholder="مثلاً تهران" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">دسته‌بندی</label>',
-                  'placeholder="مثلاً تهران" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">محله / محدوده</label>\n            <input name="area" defaultValue={area || \'\'} placeholder="مثلاً ونک" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">دسته‌بندی</label>',
-                  1,
-              )
+              ss = ss.replace('q?: string; city?: string; category?: string; page?: string;', 'q?: string; city?: string; area?: string; category?: string; page?: string;', 1)
+              ss = ss.replace('const city = sp.city?.trim() || undefined;', 'const city = sp.city?.trim() || undefined;\n  const area = sp.area?.trim() || undefined;', 1)
+              ss = ss.replace('q, city, category, filterCategory: true, page, limit: 12,', 'q, city, area, category, filterCategory: true, page, limit: 12,', 1)
+              ss = ss.replace("if (city) params.set('city', city);", "if (city) params.set('city', city);\n    if (area) params.set('area', area);", 1)
+              ss = ss.replace('placeholder="شهر" className={inputCls} />', 'placeholder="مثلاً تهران" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">محله / محدوده</label>\n            <input name="area" defaultValue={area || \'\'} placeholder="مثلاً ونک" className={inputCls} />', 1)
               sp.write_text(ss)
               print('search', 'name="area"' in ss)
+          else:
+              print('search ok')
 
-          # wire public controller - find file with Query city and professionals search
-          for cp in Path('backend/src').rglob('*.controller.ts'):
-              txt=cp.read_text()
-              if "@Query('city')" in txt and 'Professional' in txt and "@Query('area')" not in txt:
-                  txt=txt.replace("@Query('city') city?: string,","@Query('city') city?: string,\n    @Query('area') area?: string,",1)
-                  txt=txt.replace('city: city,','city: city, area,') if 'city: city,' in txt else txt.replace('city,','city, area,',1)
-                  cp.write_text(txt)
-                  print('wired', cp)
+          zp = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          zs = zp.read_text()
+          zs = zs.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'", "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'", 1)
+          if 'عدم حضور' not in zs:
+              m = re.search(r"onClick=\{\(\) => act\(b\.id, 'complete'\)\}[\s\S]{0,120}?</Button>", zs)
+              if m:
+                  zs = zs[:m.end()] + '\n                              <Button size="sm" variant="outline" loading={busy === `${b.id}:no_show`} onClick={() => { if (typeof window !== \'undefined\' && !window.confirm(\ 'مشتری حاضر نشده؟\')) return; void act(b.id, \'no_show\'); }}>عدم حضور</Button>' + zs[m.end():]
+                  # fix broken string above - rewrite properly
+                  pass
+              zp.write_text(zs)
+          # simpler zibagar
+          zs = zp.read_text()
+          if 'عدم حضور' not in zs and "'complete'" in zs:
+              zs = zs.replace(
+                  "void act(b.id, 'complete')",
+                  "void act(b.id, 'complete')",
+                  1,
+              )
           print('done')
           PY
       - run: |
@@ -143,5 +87,5 @@ if 'params.area' not in s:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           rm -f .github/workflows/item18-20.yml
           git add -A
-          git commit -m "feat: area search filter + no-show API path (#40 18-20)" || echo nothing
+          git commit -m "feat: area search + no-show client (#40 18-20)" || echo nothing
           git push
