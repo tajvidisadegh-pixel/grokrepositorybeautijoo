@@ -48,6 +48,12 @@ export class BookingsService {
   ) {
     if (!data.serviceIds?.length) throw new BadRequestException('حداقل یک خدمت لازم است');
 
+    const customer = await this.prisma.user.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('کاربر یافت نشد');
+    if (!customer.phoneVerified) {
+      throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
+    }
+
     const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });
     if (!pro || pro.status !== 'approved') throw new NotFoundException('زیباگر یافت نشد');
 
