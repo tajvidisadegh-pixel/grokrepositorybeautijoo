@@ -1,0 +1,64 @@
+name: item18-city
+on:
+  push:
+    paths:
+      - '.github/workflows/item18-city.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -eux
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/professionals/professionals.service.ts')
+          s = p.read_text()
+          old = "some: { location: { city: { contains: params.city, mode: 'insensitive' } } },"
+          new = """some: {
+          location: {
+            OR: [
+              { city: { contains: params.city, mode: 'insensitive' } },
+              { name: { contains: params.city, mode: 'insensitive' } },
+              { address: { contains: params.city, mode: 'insensitive' } },
+            ],
+          },
+        },"""
+          if 'name: { contains: params.city' in s:
+              print('already')
+          elif old not in s:
+              raise SystemExit('old missing')
+          else:
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+              print('ok')
+          # search placeholder
+          sp = Path('frontend/src/app/search/page.tsx')
+          ss = sp.read_text()
+          ss = ss.replace('placeholder="شهر"', 'placeholder="شهر یا محله"', 1)
+          ss = ss.replace(
+              '<label className="mb-1 block text-xs font-medium text-gray">شهر</label>',
+              '<label className="mb-1 block text-xs font-medium text-gray">شهر / محله</label>',
+              1,
+          )
+          sp.write_text(ss)
+          # panel no_show path
+          pa = Path('frontend/src/lib/panel-api.ts')
+          t = pa.read_text()
+          t = t.replace(
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {\n  return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);",
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show', reason?: string) {\n  const path = action === 'no_show' ? 'no-show' : action;\n  return apiClient.patch(`/bookings/${id}/${path}`, reason ? { reason } : undefined);",
+              1,
+          )
+          pa.write_text(t)
+          print('panel', 'no_show' in t)
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item18-city.yml
+          git add -A
+          git commit -m "feat: city/neighborhood search + no-show client (#40 18-20)" || echo nothing
+          git push
