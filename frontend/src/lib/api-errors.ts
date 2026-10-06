@@ -10,7 +10,7 @@ const MESSAGE_MAP: Array<{ test: RegExp; fa: string }> = [
   { test: /unauthorized|unauthorised/i, fa: 'برای ادامه باید وارد حساب کاربری شوید.' },
   { test: /too many|rate.?limit|تعداد درخواست/i, fa: 'تعداد درخواست‌ها بیش از حد مجاز است. کمی بعد تلاش کنید.' },
   { test: /network|failed to fetch|econnrefused|timeout|ECONNRESET/i, fa: 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.' },
-  { test: /slot|بازه.*رزرو|overlap|تداخل|no_overlap|قبلاً رزرو/i, fa: 'این بازه زمانی در دسترس نیست یا قبلاً رزرو شده است.' },
+  { test: /slot|بازه.*رزرو|overlap|تداخل|no_overlap|قبلاً رزرو|already booked/i, fa: 'این زمان قبلاً رزرو شده است. لطفاً زمان دیگری انتخاب کنید.' },
   { test: /otp|کد.*یکبار|verification code|invalid code/i, fa: 'کد تأیید نامعتبر یا منقضی است.' },
   { test: /password|رمز عبور/i, fa: 'رمز عبور نامعتبر است.' },
   { test: /validation|must be|should not|isString|isUUID|isInt|whitelist/i, fa: 'اطلاعات ارسالی نامعتبر است. فیلدها را بررسی کنید.' },
@@ -20,6 +20,7 @@ const MESSAGE_MAP: Array<{ test: RegExp; fa: string }> = [
   { test: /پروفایل ناقص|incomplete profile|completion/i, fa: 'پروفایل ناقص است. ابتدا موارد الزامی را تکمیل کنید.' },
   { test: /cancel.*hour|ساعات قبل|min.?hours/i, fa: 'در این فاصله زمانی امکان لغو یا تغییر وجود ندارد.' },
   { test: /only after|فقط پس از تکمیل/i, fa: 'این عملیات فقط پس از تکمیل نوبت امکان‌پذیر است.' },
+  { test: /no_show|عدم حضور/i, fa: 'ثبت عدم حضور فقط برای نوبت‌های نزدیک یا گذشته ممکن است.' },
   { test: /internal server error/i, fa: 'خطای سرور. لطفاً بعداً دوباره تلاش کنید.' },
 ];
 
@@ -29,7 +30,6 @@ function mapKnownMessage(msg: string): string | null {
   for (const { test, fa } of MESSAGE_MAP) {
     if (test.test(m)) return fa;
   }
-  // Prefer short Persian backend messages as-is
   if (/[\u0600-\u06FF]/.test(m) && m.length <= 160) return m;
   return null;
 }
@@ -50,7 +50,7 @@ export function friendlyApiError(err: unknown): string {
       case 404:
         return 'مورد درخواستی یافت نشد.';
       case 409:
-        return mapKnownMessage(err.message) || err.message || 'تداخل — این مورد قبلاً ثبت شده است.';
+        return mapKnownMessage(err.message) || err.message || 'این زمان قبلاً رزرو شده است. زمان دیگری انتخاب کنید.';
       case 422:
         return mapKnownMessage(err.message) || 'اطلاعات ارسالی نامعتبر است.';
       case 429:
@@ -85,7 +85,6 @@ export function friendlyApiError(err: unknown): string {
   return 'خطای غیرمنتظره رخ داد. دوباره تلاش کنید.';
 }
 
-/** Optional HTTP status extraction for callers that branch on status */
 export function getErrorStatus(err: unknown): number | null {
   if (err instanceof ApiError) return err.status;
   return null;

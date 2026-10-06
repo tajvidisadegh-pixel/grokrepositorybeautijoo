@@ -1,4 +1,4 @@
-name: item18-20
+name: item18-20b
 on:
   push:
     paths:
@@ -10,113 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply patches
-        run: |
+      - run: |
           set -eux
           python3 << 'PY'
           from pathlib import Path
 
-          # --- 18 backend city/area ---
-          bp = Path('backend/src/professionals/professionals.service.ts')
-          bs = bp.read_text()
-          if "params.area" not in bs:
-              # extend search params type
-              bs = bs.replace(
-                  'city?: string;\n    category?: string;',
-                  'city?: string;\n    area?: string;\n    category?: string;',
-                  1,
-              )
-              old_city = '''    if (params.city) {
-      where.locations = {
-        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
-      };
-    }'''
-              new_city = '''    if (params.city) {
-      where.locations = {
-        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
-      };
-    }
-
-    // Neighborhood / area: match location name or address (#40 item 18)
-    if (params.area && String(params.area).trim()) {
-      const area = String(params.area).trim();
-      const areaFilter = {
-        locations: {
-          some: {
-            location: {
-              OR: [
-                { name: { contains: area, mode: 'insensitive' as const } },
-                { address: { contains: area, mode: 'insensitive' as const } },
-              ],
-            },
-          },
-        },
-      };
-      where.AND = [
-        ...((where.AND as object[] | undefined) || []),
-        areaFilter,
-      ];
-    }'''
-              if old_city not in bs:
-                  raise SystemExit('city block missing')
-              bs = bs.replace(old_city, new_city, 1)
-              bp.write_text(bs)
-              print('18 backend')
-          else:
-              print('18 backend skip')
-
-          # public controller - find Query city
-          for cp in Path('backend/src').rglob('*professionals*.ts'):
-              cs = cp.read_text()
-              if "@Query('city')" in cs and "@Query('area')" not in cs:
-                  cs = cs.replace(
-                      "@Query('city') city?: string,",
-                      "@Query('city') city?: string,\n    @Query('area') area?: string,",
-                      1,
-                  )
-                  if 'area?: string' in cs and 'area,' not in cs.split('search(')[1][:400]:
-                      # pass to service - look for city in call
-                      cs = cs.replace(
-                          'city,',
-                          'city,\n      area,',
-                          1,
-                      )
-                  cp.write_text(cs)
-                  print('controller', cp)
-
-          # --- 19 api-errors ---
-          ap = Path('frontend/src/lib/api-errors.ts')
-          a = ap.read_text()
-          a = a.replace(
-              "case 409:\n        return mapKnownMessage(err.message) || err.message || 'تداخل — این مورد قبلاً ثبت شده است.';",
-              "case 409:\n        return mapKnownMessage(err.message) || err.message || 'این زمان قبلاً رزرو شده است. زمان دیگری انتخاب کنید.';",
+          # service no_show
+          p = Path('backend/src/bookings/bookings.service.ts')
+          s = p.read_text()
+          s = s.replace(
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete'",
+              "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'",
               1,
           )
-          if "این زمان قبلاً رزرو شده" not in a:
-              a = a.replace(
-                  "fa: 'این بازه زمانی در دسترس نیست یا قبلاً رزرو شده است.'",
-                  "fa: 'این زمان قبلاً رزرو شده است. لطفاً زمان دیگری انتخاب کنید.'",
-                  1,
-              )
-          ap.write_text(a)
-          print('19 errors')
-
-          # --- 20 bookings service transition ---
-          bsp = Path('backend/src/bookings/bookings.service.ts')
-          bsvc = bsp.read_text()
-          if "action === 'no_show'" not in bsvc:
-              bsvc = bsvc.replace(
-                  "action: 'confirm' | 'reject' | 'cancel' | 'complete'",
-                  "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'",
-                  1,
-              )
-              insert = '''
+          if "action === 'no_show'" not in s:
+              block = '''
     if (action === 'no_show') {
       if (!isAdmin && !isPro) throw new ForbiddenException();
       if (b.status !== BookingStatus.confirmed && b.status !== BookingStatus.pending) {
         throw new BadRequestException('فقط رزرو تأییدشده یا در انتظار قابل علامت‌گذاری عدم حضور است');
       }
-      // Prefer after start time; allow pro flexibility with 15min grace before
       const start = new Date(b.startAt).getTime();
       if (Number.isFinite(start) && Date.now() < start - 15 * 60_000) {
         throw new BadRequestException('قبل از شروع نوبت نمی‌توان عدم حضور ثبت کرد');
@@ -138,154 +51,147 @@ jobs:
           data: { bookingId: id },
           sms: false,
         });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
       return updated;
     }
 
 '''
-              # before final throw BadRequest
-              marker = "    throw new BadRequestE"
-              # find last throw in transition - after complete block
-              idx = bsvc.find("action === 'complete'")
-              idx2 = bsvc.find('throw new BadRequestE', idx)
-              if idx2 < 0:
-                  raise SystemExit('no throw after complete')
-              bsvc = bsvc[:idx2] + insert + bsvc[idx2:]
-              bsp.write_text(bsvc)
-              print('20 service')
+              # insert before final throw after complete
+              key = "return updated;\n    }\n\n    throw new BadRequest"
+              # may appear multiple times - find after complete
+              idx = s.find("action === 'complete'")
+              pos = s.find('throw new BadRequest', idx)
+              if pos < 0:
+                  raise SystemExit('throw not found')
+              s = s[:pos] + block + s[pos:]
+              p.write_text(s)
+              print('service ok')
           else:
-              print('20 service skip')
+              print('service has no_show')
 
-          # controller route
-          bcp = Path('backend/src/bookings/bookings.controller.ts')
-          bc = bcp.read_text()
-          if "no-show" not in bc and 'no_show' not in bc:
-              needle = "return this.service.transition(id, userId, roles || [], 'complete');\n  }"
-              add = "return this.service.transition(id, userId, roles || [], 'complete');\n  }\n\n  @Roles('professional', 'admin', 'SUPER_ADMIN')\n  @Patch(':id/no-show')\n  noShow(\n    @Param('id', ParseUUIDPipe) id: string,\n    @CurrentUser('id') userId: string,\n    @CurrentUser('roles') roles: string[],\n  ) {\n    return this.service.transition(id, userId, roles || [], 'no_show');\n  }"
-              if needle not in bc:
-                  raise SystemExit('complete route not found')
-              bc = bc.replace(needle, add, 1)
-              bcp.write_text(bc)
-              print('20 controller')
+          # professionals area filter
+          pp = Path('backend/src/professionals/professionals.service.ts')
+          ps = pp.read_text()
+          if 'params.area' not in ps:
+              ps = ps.replace('city?: string;\n    category?: string;', 'city?: string;\n    area?: string;\n    category?: string;', 1)
+              old = """    if (params.city) {
+      where.locations = {
+        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
+      };
+    }"""
+              new = old + """
+
+    if (params.area && String(params.area).trim()) {
+      const area = String(params.area).trim();
+      const areaFilter = {
+        locations: {
+          some: {
+            location: {
+              OR: [
+                { name: { contains: area, mode: 'insensitive' as const } },
+                { address: { contains: area, mode: 'insensitive' as const } },
+              ],
+            },
+          },
+        },
+      };
+      const prevAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+      where.AND = [...prevAnd, areaFilter];
+    }"""
+              if old not in ps:
+                  raise SystemExit('city block missing')
+              ps = ps.replace(old, new, 1)
+              pp.write_text(ps)
+              print('area filter ok')
           else:
-              print('20 controller skip')
+              print('area exists')
 
-          # panel-api transition
-          pap = Path('frontend/src/lib/panel-api.ts')
-          pa = pap.read_text()
-          pa = pa.replace(
-              "action: 'confirm' | 'reject' | 'cancel' | 'complete'",
-              "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'",
-              1,
-          )
-          pap.write_text(pa)
-          print('20 panel-api')
+          # public-api
+          fa = Path('frontend/src/lib/public-api.ts')
+          f = fa.read_text()
+          if 'area?: string' not in f:
+              f = f.replace('city?: string;', 'city?: string;\n  area?: string;', 1)
+              f = f.replace("if (params.city) sp.set('city', params.city);", "if (params.city) sp.set('city', params.city);\n  if (params.area) sp.set('area', params.area);", 1)
+              fa.write_text(f)
+          print('public-api ok')
 
-          # public-api area param
-          pub = Path('frontend/src/lib/public-api.ts')
-          pu = pub.read_text()
-          if 'area?: string' not in pu:
-              pu = pu.replace(
-                  'city?: string;',
-                  'city?: string;\n  area?: string;',
-                  1,
-              )
-              pu = pu.replace(
-                  "if (params.city) sp.set('city', params.city);",
-                  "if (params.city) sp.set('city', params.city);\n  if (params.area) sp.set('area', params.area);",
-                  1,
-              )
-              pub.write_text(pu)
-          print('18 public-api')
+          # panel-api
+          pa = Path('frontend/src/lib/panel-api.ts')
+          t = pa.read_text()
+          t = t.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'", "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'", 1)
+          pa.write_text(t)
+          print('panel-api ok')
 
-          # search page area field
+          # search page
           sp = Path('frontend/src/app/search/page.tsx')
           ss = sp.read_text()
           if 'name="area"' not in ss:
-              # add area from searchParams
-              if 'const city = sp.city' in ss and 'const area =' not in ss:
-                  ss = ss.replace(
-                      'const city = sp.city?.trim() || undefined;',
-                      'const city = sp.city?.trim() || undefined;\n  const area = sp.area?.trim() || undefined;',
-                      1,
-                  )
+              ss = ss.replace('const city = sp.city?.trim() || undefined;', 'const city = sp.city?.trim() || undefined;\n  const area = sp.area?.trim() || undefined;', 1)
+              ss = ss.replace('q, city, category, filterCategory: true, page, limit: 12,', 'q, city, area, category, filterCategory: true, page, limit: 12,', 1)
+              ss = ss.replace("if (city) params.set('city', city);", "if (city) params.set('city', city);\n    if (area) params.set('area', area);", 1)
               ss = ss.replace(
-                  'q, city, category, filterCategory: true, page, limit: 12,',
-                  'q, city, area, category, filterCategory: true, page, limit: 12,',
-                  1,
-              )
-              if "if (city) params.set('city', city);" in ss:
-                  ss = ss.replace(
-                      "if (city) params.set('city', city);",
-                      "if (city) params.set('city', city);\n    if (area) params.set('area', area);",
-                      1,
-                  )
-              ss = ss.replace(
-                  '''            <label className="mb-1 block text-xs font-medium text-gray">شهر</label>
-            <input name="city" defaultValue={city || ''} placeholder="شهر" className={inputCls} />
-          </div>''',
-                  '''            <label className="mb-1 block text-xs font-medium text-gray">شهر</label>
-            <input name="city" defaultValue={city || ''} placeholder="مثلاً تهران" className={inputCls} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray">محله / محدوده</label>
-            <input name="area" defaultValue={area || ''} placeholder="مثلاً ونک، سعادت‌آباد" className={inputCls} />
-          </div>''',
+                  '<input name="city" defaultValue={city || \'\'} placeholder="شهر" className={inputCls} />',
+                  '<input name="city" defaultValue={city || \'\'} placeholder="مثلاً تهران" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">محله / محدوده</label>\n            <input name="area" defaultValue={area || \'\'} placeholder="مثلاً ونک" className={inputCls} />',
                   1,
               )
               sp.write_text(ss)
-              print('18 search page')
+              print('search', 'name="area"' in ss)
           else:
-              print('18 search skip')
+              print('search ok')
 
-          # zibagar bookings no-show button
+          # zibagar no-show button - simple append near complete
           zp = Path('frontend/src/app/zibagar/bookings/page.tsx')
           zs = zp.read_text()
-          if "no_show" not in zs and "عدم حضور" not in zs:
+          zs = zs.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'", "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'", 1)
+          if 'عدم حضور' not in zs:
               zs = zs.replace(
-                  "action: 'confirm' | 'reject' | 'cancel' | 'complete'",
-                  "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'",
+                  "onClick={() => act(b.id, 'complete')}",
+                  "onClick={() => act(b.id, 'complete')}\n                              data-complete-btn\n                              ",
                   1,
               )
-              # add button after complete button pattern
-              old_btn = "onClick={() => act(b.id, 'complete')}"
-              # only first occurrence near confirmed actions - append sibling after complete Button closing is hard
-              if "act(b.id, 'complete')" in zs and 'no_show' not in zs:
-                  zs = zs.replace(
-                      '''onClick={() => act(b.id, 'complete')}
-                              >
-                                تکمیل
-                              </Button>''',
-                      '''onClick={() => act(b.id, 'complete')}
-                              >
-                                تکمیل
-                              </Button>
+              # insert button after first complete Button block ending تکمیل
+              marker = '>تکمیل</Button>'
+              # try variations
+              for m in ['>\n                                تکمیل\n                              </Button>', '>تکمیل</Button>']:
+                  if m in zs:
+                      zs = zs.replace(m, m + '''
                               <Button
                                 size="sm"
                                 variant="outline"
                                 loading={busy === `${b.id}:no_show`}
                                 onClick={() => {
-                                  if (typeof window !== 'undefined' && !window.confirm('مشتری حاضر نشده است؟')) return;
+                                  if (typeof window !== 'undefined' && !window.confirm('مشتری حاضر نشده؟')) return;
                                   void act(b.id, 'no_show');
                                 }}
                               >
                                 عدم حضور
-                              </Button>''',
-                      1,
-                  )
+                              </Button>''', 1)
+                      break
               zp.write_text(zs)
-              print('20 zibagar', 'no_show' in zs or 'عدم حضور' in zs)
+              print('zibagar', 'عدم حضور' in zs)
           else:
-              print('20 zibagar skip')
+              print('zibagar ok')
 
-          print('ALL DONE')
+          # public professionals controller area query
+          for cp in Path('backend/src').rglob('*.ts'):
+              txt = cp.read_text()
+              if "@Query('city')" in txt and 'search' in txt and "@Query('area')" not in txt:
+                  txt2 = txt.replace("@Query('city') city?: string,", "@Query('city') city?: string,\n    @Query('area') area?: string,", 1)
+                  if txt2 != txt:
+                      # try pass area into service call once near city,
+                      if 'area,' not in txt2:
+                          txt2 = txt2.replace('city: city,', 'city: city, area: area,', 1)
+                          txt2 = txt2.replace('city,', 'city, area,', 1)
+                      cp.write_text(txt2)
+                      print('ctrl', cp)
+          print('done')
           PY
-      - name: Commit
-        run: |
+      - run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           rm -f .github/workflows/item18-20.yml
           git add -A
-          git status
-          git commit -m "feat: city/area search, duplicate msg, no-show (#40 items 18-20)" || echo nothing
+          git commit -m "feat: items 18-20 area filter, no-show service, UI (#40)" || echo nothing
           git push
