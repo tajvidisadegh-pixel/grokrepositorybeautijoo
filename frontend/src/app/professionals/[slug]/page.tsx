@@ -8,6 +8,7 @@ import {
 import { absoluteUrl, professionalJsonLd, siteName } from '@/lib/seo';
 import { ServiceOfferCard } from '@/components/professionals/service-offer-card';
 import { ServicePortfolioGallery } from '@/components/professionals/service-portfolio-gallery';
+import { SalonMediaGallery } from '@/components/professionals/salon-media-gallery';
 import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
 import LocationMapView from '@/components/location/location-map-view'
 import { StickyBookBar } from '@/components/professionals/sticky-book-bar';
@@ -228,32 +229,15 @@ export default async function ProfessionalProfilePage({ params }: Props) {
             </section>
           )}
 
-          {(() => {
-            const salon = (pro.mediaAssets || []).filter(
-              (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
-            );
-            if (!salon.length) return null;
-            return (
-              <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-foreground">عکس‌های محل</h2>
-                <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
-                  {salon.map((m) => {
-                    const url = m.publicUrl || (m as { url?: string }).url || '';
-                    const video = (m.mimeType || '').startsWith('video/');
-                    return (
-                      <div key={m.id} className="h-36 w-52 shrink-0 overflow-hidden rounded-2xl border border-border bg-gray-light/30">
-                        {video ? (
-                          <video src={url} className="h-full w-full object-cover" controls playsInline />
-                        ) : (
-                          <img src={url} alt="" className="h-full w-full object-cover" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })()}
+          {(pro.mediaAssets || []).filter(
+  (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+).length > 0 && (
+  <SalonMediaGallery
+    media={(pro.mediaAssets || []).filter(
+      (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+    )}
+  />
+)}
 
           <ServicePortfolioGallery
             slug={pro.slug}
