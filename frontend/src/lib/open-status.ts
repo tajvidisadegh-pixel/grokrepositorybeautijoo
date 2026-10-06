@@ -11,26 +11,12 @@ export type HourSlot = {
 };
 
 export type OpenStatus = {
-  /** Has any active hours for today */
   hasHoursToday: boolean;
   isOpenNow: boolean;
-  /** e.g. "۸:۰۰ تا ۲۰:۰۰" */
   todayRangeLabel: string | null;
-  /** Short badge label */
   badge: string;
-  /** open | closed | unknown */
   kind: 'open' | 'closed' | 'unknown';
 };
-
-const DAY_KEYS = [
-  'sunday',
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-] as const;
 
 function tehranWeekdayKey(): string {
   const wd = new Intl.DateTimeFormat('en-US', {
@@ -40,7 +26,6 @@ function tehranWeekdayKey(): string {
   return wd.toLowerCase();
 }
 
-/** Minutes from midnight for "HH:MM" or "HH:MM:SS" */
 function toMinutes(t: string): number {
   const parts = String(t || '').split(':');
   const h = Number(parts[0]);
@@ -56,7 +41,6 @@ function tehranNowMinutes(): number {
     minute: '2-digit',
     hour12: false,
   }).format(new Date());
-  // en-GB may use "14:30"
   return toMinutes(s.replace(/\u200e/g, '').trim());
 }
 
@@ -66,9 +50,8 @@ function fmtFaTime(t: string): string {
   const h = String(Number(parts[0]));
   const m = parts[1].padStart(2, '0');
   try {
-    return new Intl.NumberFormat('fa-IR').format(Number(h)) + ':' + m.replace(/\d/g, (d) =>
-      '۰۱۲۳۴۵۶۷۸۹'[Number(d)],
-    );
+    const faDigits = (n: string) => n.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+    return faDigits(h) + ':' + faDigits(m);
   } catch {
     return `${h}:${m}`;
   }
@@ -103,7 +86,6 @@ export function getOpenStatus(hours: HourSlot[] | null | undefined): OpenStatus 
     };
   }
 
-  // Merge range label: earliest start – latest end
   let minStart = Infinity;
   let maxEnd = -Infinity;
   let minStartStr = '';
@@ -152,9 +134,4 @@ export function getOpenStatus(hours: HourSlot[] | null | undefined): OpenStatus 
     badge: isOpenNow ? 'الان باز است' : 'امروز بسته',
     kind: isOpenNow ? 'open' : 'closed',
   };
-}
-
-/** For type-only day key export (tests) */
-export function __tehranWeekdayKey() {
-  return tehranWeekdayKey();
 }
