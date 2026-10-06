@@ -1,0 +1,51 @@
+name: item14-relative
+on:
+  push:
+    paths:
+      - '.github/workflows/item14-relative-date.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -eux
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/lib/utils.ts')
+          s = p.read_text()
+          old = '''    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dayKey === tehranDayKey(yesterday)) {
+      return `دیروز، ${formatDate(d, { style: 'short' })}${timePart}`;
+    }
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);'''
+          new = '''    // Use wall-clock ±24h so tehranDayKey stays stable near midnight (Asia/Tehran)
+    const yesterday = new Date(Date.now() - 24 * 3600_000);
+    if (dayKey === tehranDayKey(yesterday)) {
+      return `دیروز، ${formatDate(d, { style: 'short' })}${timePart}`;
+    }
+
+    const tomorrow = new Date(Date.now() + 24 * 3600_000);'''
+          if old not in s:
+              if 'Date.now() - 24' in s:
+                  print('already fixed')
+              else:
+                  raise SystemExit('block not found')
+          else:
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+              print('fixed relative date')
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item14-relative-date.yml
+          git add frontend/src/lib/utils.ts
+          git add -A
+          git commit -m "fix(date): relative دیروز/فردا via Tehran-safe ±24h (#40 item 14)" || echo nothing
+          git push
