@@ -260,6 +260,10 @@ export class ProfessionalsService {
         orderBy: { price: 'asc' as const },
         include: { service: { select: { name: true, slug: true } } },
       },
+      workingHours: {
+        where: { isActive: true },
+        select: { dayOfWeek: true, startTime: true, endTime: true, isActive: true },
+      },
     };
 
     // When near-me (geo): over-fetch within bbox, rank by Haversine, then paginate (issue #24)
