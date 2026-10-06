@@ -30,7 +30,6 @@ function postUpload(
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
-        // Reserve 0–10% for compress phase; map network to 10–100
         const net = Math.round((event.loaded / event.total) * 90) + 10;
         onProgress(Math.max(10, Math.min(100, net)));
       }

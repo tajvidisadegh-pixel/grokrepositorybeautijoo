@@ -1,69 +1,8 @@
-name: item9-preview
+name: disabled-item9
 on:
-  push:
-    paths:
-      - '.github/workflows/item9-preview.yml'
-permissions:
-  contents: write
+  workflow_dispatch:
 jobs:
-  run:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          set -eux
-          python3 << 'PY'
-          from pathlib import Path
-          p = Path('frontend/src/app/zibagar/portfolio/page.tsx')
-          s = p.read_text()
-          if 'previewUrl' in s:
-              print('already has preview')
-          else:
-              s = s.replace(
-                  'const [uploadProgress, setUploadProgress] = useState<number | null>(null);',
-                  "const [uploadProgress, setUploadProgress] = useState<number | null>(null);\n  const [previewUrl, setPreviewUrl] = useState<string | null>(null);",
-                  1,
-              )
-              s = s.replace(
-                  'setBusy(true);\n    setUploadProgress(0);\n    setMsg(null);',
-                  "if (previewUrl) { try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ } }\n    setPreviewUrl(URL.createObjectURL(file));\n    setBusy(true);\n    setUploadProgress(0);\n    setMsg(null);",
-                  1,
-              )
-              old = '''      {uploadProgress != null && (
-        <div className="rounded-xl border border-blue/20 bg-blue/5 px-3 py-3">
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span>در حال آپلود…</span>
-            <span dir="ltr">{uploadProgress}%</span>
-          </div>'''
-              new = '''      {previewUrl && (
-        <div className="mb-3 overflow-hidden rounded-xl border border-border bg-white">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewUrl} alt="پیش‌نمایش" className="max-h-48 w-full object-contain" />
-        </div>
-      )}
-      {uploadProgress != null && (
-        <div className="rounded-xl border border-blue/20 bg-blue/5 px-3 py-3">
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span>{uploadProgress < 10 ? 'آماده‌سازی تصویر…' : 'در حال آپلود…'}</span>
-            <span dir="ltr">{uploadProgress}%</span>
-          </div>'''
-              if old not in s:
-                  raise SystemExit('progress block not found')
-              s = s.replace(old, new, 1)
-              # clear preview after success - find setUploadProgress(null)
-              s = s.replace(
-                  "if (inputRef.current) inputRef.current.value = '';",
-                  "if (previewUrl) { try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ } }\n      setPreviewUrl(null);\n      if (inputRef.current) inputRef.current.value = '';",
-                  1,
-              )
-              p.write_text(s)
-              print('portfolio patched', len(s))
-          PY
-      - run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          rm -f .github/workflows/item9-preview.yml
-          git add frontend/src/app/zibagar/portfolio/page.tsx
-          git add -A
-          git commit -m "feat(portfolio): local preview during media upload (#40 item 9)" || echo nothing
-          git push
+      - run: echo disabled
