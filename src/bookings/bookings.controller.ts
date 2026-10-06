@@ -149,10 +149,7 @@ export class BookingsController {
     return this.service.transition(id, userId, roles || [], 'complete');
   }
 
-  /**
-   * No-show: uses cancel with reason no_show (no schema migration).
-   * Pro/admin only — customer cannot call this endpoint.
-   */
+  /** No-show without schema change: cancel + cancelReason=no_show (pro/admin only). */
   @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Patch(':id/no-show')
   noShow(
