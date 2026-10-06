@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { ProfessionalServiceItem } from '@/types/public';
 import { formatPrice } from '@/lib/utils';
+import { ImageLightbox } from '@/components/media/image-lightbox';
 
 type MediaItem = {
   id: string;
@@ -52,16 +53,27 @@ export function ServicePortfolioGallery({
   }, [items]);
 
   const [filter, setFilter] = useState<string>('همه');
-  const [active, setActive] = useState<MediaItem | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const visible = filter === 'همه' ? items : items.filter((i) => i.serviceName === filter);
+
+  const lightboxItems = useMemo(
+    () =>
+      visible.map((m) => ({
+        id: m.id,
+        url: m.publicUrl,
+        mimeType: m.mimeType,
+        caption: `${m.serviceName} · ${formatPrice(m.price)} · ${m.durationMin} دقیقه`,
+      })),
+    [visible],
+  );
 
   if (!items.length) return null;
 
   return (
     <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
       <h2 className="text-lg font-bold">نمونه‌کار خدمات</h2>
-      <p className="mt-1 text-xs text-gray">جدا از عکس‌های محل — به‌صورت افقی مرور کنید</p>
+      <p className="mt-1 text-xs text-gray">روی هر عکس بزنید تا بزرگ شود و ورق بزنید</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
@@ -85,22 +97,24 @@ export function ServicePortfolioGallery({
           </button>
         ))}
       </div>
-      {/* Horizontal gallery (issue #33 / #38) */}
+
       <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
-        {visible.map((m) => (
+        {visible.map((m, idx) => (
           <button
             key={m.id}
             type="button"
-            onClick={() => setActive(m)}
-            className="w-40 shrink-0 overflow-hidden rounded-2xl border border-border text-right sm:w-52"
+            className="w-40 shrink-0 text-right"
+            onClick={() => setLightboxIndex(idx)}
           >
-            {isVideo(m.mimeType) ? (
-              <video src={m.publicUrl} className="h-36 w-full object-cover" muted playsInline />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.publicUrl} alt="" className="h-36 w-full object-cover" />
-            )}
-            <div className="p-2">
+            <div className="h-36 overflow-hidden rounded-2xl border border-border bg-gray-light">
+              {isVideo(m.mimeType) ? (
+                <video src={m.publicUrl} className="h-full w-full object-cover" muted playsInline />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={m.publicUrl} alt="" className="h-full w-full object-cover" />
+              )}
+            </div>
+            <div className="mt-1.5 px-0.5">
               <p className="truncate text-xs font-medium">{m.serviceName}</p>
               <p className="text-xs text-coral">{formatPrice(m.price)}</p>
             </div>
@@ -108,35 +122,24 @@ export function ServicePortfolioGallery({
         ))}
       </div>
 
-      {active && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
-          onClick={() => setActive(null)}
-        >
-          <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-4 shadow-xl"
+      {lightboxIndex != null && (
+        <ImageLightbox
+          items={lightboxItems}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+        />
+      )}
+
+      {lightboxIndex != null && visible[lightboxIndex] && (
+        <div className="fixed bottom-0 inset-x-0 z-[61] flex justify-center p-4 pointer-events-none">
+          <Link
+            href={`/booking/${slug}?serviceId=${encodeURIComponent(visible[lightboxIndex].serviceId)}`}
+            className="pointer-events-auto inline-flex h-11 items-center rounded-2xl bg-coral px-5 text-sm font-medium text-white shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            {isVideo(active.mimeType) ? (
-              <video src={active.publicUrl} className="w-full rounded-2xl" controls playsInline />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={active.publicUrl} alt="" className="w-full rounded-2xl object-cover" />
-            )}
-            <h3 className="mt-3 text-lg font-bold">{active.serviceName}</h3>
-            <p className="mt-1 text-sm text-gray">
-              {formatPrice(active.price)} · {active.durationMin} دقیقه
-            </p>
-            <Link
-              href={`/booking/${slug}?serviceId=${encodeURIComponent(active.serviceId)}`}
-              className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl bg-coral text-sm font-medium text-white"
-            >
-              رزرو همین مدل
-            </Link>
-            <button type="button" className="mt-2 w-full text-sm text-gray" onClick={() => setActive(null)}>
-              بستن
-            </button>
-          </div>
+            رزرو همین مدل
+          </Link>
         </div>
       )}
     </section>
