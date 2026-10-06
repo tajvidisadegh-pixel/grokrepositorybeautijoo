@@ -1,0 +1,198 @@
+name: Patch search filters item6
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-search-filters.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patches
+        run: |
+          set -e
+          python3 << 'PY'
+          from pathlib import Path
+
+          # professionals.service.ts
+          p = Path('backend/src/professionals/professionals.service.ts')
+          s = p.read_text()
+          if 'minDuration?: number' not in s:
+              s = s.replace(
+                  '    maxPrice?: number;\n    sort?: string;\n    availableDate?: string;',
+                  '    maxPrice?: number;\n    minDuration?: number;\n    sort?: string;\n    availableDate?: string;',
+                  1,
+              )
+          s = s.replace(
+              "verifiedOnly: params.verifiedOnly ?? null,\n            gender: params.gender || '',",
+              "verifiedOnly: params.verifiedOnly ?? null,\n            gender: params.gender || '',\n            minDuration: params.minDuration ?? null,",
+          )
+          old = '''    if (params.category || hasPrice) {
+      const svcSome: Prisma.ProfessionalServiceWhereInput = { isActive: true };
+      if (params.category) {
+        svcSome.service = { category: { slug: params.category } };
+      }
+      if (hasPrice) {
+        svcSome.price = priceFilter;
+      }
+      where.professionalServices = { some: svcSome };
+    }'''
+          new = '''    const hasDuration =
+      params.minDuration != null && Number.isFinite(params.minDuration) && params.minDuration > 0;
+    if (params.category || hasPrice || hasDuration) {
+      const svcSome: Prisma.ProfessionalServiceWhereInput = { isActive: true };
+      if (params.category) {
+        svcSome.service = { category: { slug: params.category } };
+      }
+      if (hasPrice) {
+        svcSome.price = priceFilter;
+      }
+      if (hasDuration) {
+        svcSome.durationMin = { gte: params.minDuration };
+      }
+      where.professionalServices = { some: svcSome };
+    }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          print('pros.service', 'minDuration' in s)
+
+          # professionals.controller.ts
+          p = Path('backend/src/professionals/professionals.controller.ts')
+          s = p.read_text()
+          if "minDuration" not in s:
+              s = s.replace(
+                  "    @Query('maxPrice') maxPrice?: string,\n    @Query('sort') sort?: string,",
+                  "    @Query('maxPrice') maxPrice?: string,\n    @Query('minDuration') minDuration?: string,\n    @Query('sort') sort?: string,",
+                  1,
+              )
+              s = s.replace(
+                  "maxPrice: maxPrice != null && maxPrice !== '' ? parseInt(maxPrice, 10) : undefined,",
+                  "maxPrice: maxPrice != null && maxPrice !== '' ? parseInt(maxPrice, 10) : undefined,\n      minDuration: minDuration != null && minDuration !== '' ? parseInt(minDuration, 10) : undefined,",
+                  1,
+              )
+          p.write_text(s)
+          print('pros.controller', 'minDuration' in s)
+
+          # service-filters.controller.ts
+          p = Path('backend/src/service-filters/service-filters.controller.ts')
+          s = p.read_text()
+          if "minDuration" not in s:
+              s = s.replace(
+                  "    @Query('maxPrice') maxPrice?: string,\n",
+                  "    @Query('maxPrice') maxPrice?: string,\n    @Query('minDuration') minDuration?: string,\n",
+                  1,
+              )
+              s = s.replace(
+                  "      maxPrice: maxPrice != null && maxPrice !== '' ? parseInt(maxPrice, 10) : undefined,\n",
+                  "      maxPrice: maxPrice != null && maxPrice !== '' ? parseInt(maxPrice, 10) : undefined,\n      minDuration: minDuration != null && minDuration !== '' ? parseInt(minDuration, 10) : undefined,\n",
+                  1,
+              )
+          p.write_text(s)
+          print('sf.controller', 'minDuration' in s)
+
+          # service-filters.service.ts
+          p = Path('backend/src/service-filters/service-filters.service.ts')
+          s = p.read_text()
+          if 'minDuration?: number' not in s:
+              s = s.replace('    maxPrice?: number;\n', '    maxPrice?: number;\n    minDuration?: number;\n', 1)
+          p.write_text(s)
+
+          # public-api.ts
+          p = Path('frontend/src/lib/public-api.ts')
+          s = p.read_text()
+          if 'minDuration' not in s:
+              s = s.replace(
+                  '  maxPrice?: number;\n  sort?: string;',
+                  '  maxPrice?: number;\n  minDuration?: number;\n  sort?: string;',
+                  1,
+              )
+              s = s.replace(
+                  "if (params.maxPrice != null) sp.set('maxPrice', String(params.maxPrice));\n  if (params.sort)",
+                  "if (params.maxPrice != null) sp.set('maxPrice', String(params.maxPrice));\n  if (params.minDuration != null) sp.set('minDuration', String(params.minDuration));\n  if (params.sort)",
+                  1,
+              )
+          p.write_text(s)
+          print('public-api', 'minDuration' in s)
+
+          # search page
+          p = Path('frontend/src/app/search/page.tsx')
+          s = p.read_text()
+          if 'tehranTodayIso' not in s:
+              s = s.replace(
+                  "import { FormJalaliDate } from '@/components/ui/jalali-date-input';",
+                  "import { FormJalaliDate } from '@/components/ui/jalali-date-input';\nimport { tehranTodayIso } from '@/lib/jalali';",
+                  1,
+              )
+          if 'availableToday' not in s:
+              s = s.replace(
+                  "    sort?: string; availableDate?: string;\n    lat?: string; lng?: string;\n    verifiedOnly?: string; gender?: string;",
+                  "    sort?: string; availableDate?: string; availableToday?: string;\n    lat?: string; lng?: string;\n    verifiedOnly?: string; gender?: string; minDuration?: string;",
+                  1,
+              )
+              s = s.replace(
+                  "  const availableDate = sp.availableDate?.trim() || undefined;",
+                  "  const availableToday = sp.availableToday === '1' || sp.availableToday === 'true';\n  const availableDate = availableToday\n    ? tehranTodayIso()\n    : (sp.availableDate?.trim() || undefined);\n  const minDuration = sp.minDuration != null && sp.minDuration !== '' ? parseInt(sp.minDuration, 10) : undefined;",
+                  1,
+              )
+              s = s.replace(
+                  "      minRating: Number.isFinite(minRating as number) ? minRating : undefined,",
+                  "      minRating: Number.isFinite(minRating as number) ? minRating : undefined,\n      minDuration: Number.isFinite(minDuration as number) ? minDuration : undefined,",
+                  1,
+              )
+              s = s.replace(
+                  "    if (availableDate) params.set('availableDate', availableDate);",
+                  "    if (availableDate) params.set('availableDate', availableDate);\n    if (availableToday) params.set('availableToday', '1');\n    if (minDuration != null && Number.isFinite(minDuration)) params.set('minDuration', String(minDuration));",
+                  1,
+              )
+              old_ui = '''          <div>
+            <label className="mb-1 block text-xs font-medium text-gray">تاریخ در دسترس بودن</label>
+            <FormJalaliDate name="availableDate" defaultValue={availableDate || ''} className={inputCls} />
+          </div>'''
+              new_ui = '''          <div>
+            <label className="mb-1 block text-xs font-medium text-gray">تاریخ در دسترس بودن</label>
+            <FormJalaliDate name="availableDate" defaultValue={availableToday ? '' : (availableDate || '')} className={inputCls} />
+            <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-gray">
+              <input
+                type="checkbox"
+                name="availableToday"
+                value="1"
+                defaultChecked={availableToday}
+                className="size-4 accent-coral"
+              />
+              امروز آزاد است
+            </label>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray">حداقل مدت خدمت (دقیقه)</label>
+            <select name="minDuration" defaultValue={minDuration != null && Number.isFinite(minDuration) ? String(minDuration) : ''} className={inputCls}>
+              <option value="">همه</option>
+              <option value="30">۳۰+</option>
+              <option value="60">۶۰+</option>
+              <option value="90">۹۰+</option>
+              <option value="120">۱۲۰+</option>
+            </select>
+          </div>'''
+              if old_ui in s:
+                  s = s.replace(old_ui, new_ui, 1)
+          p.write_text(s)
+          print('search', 'minDuration' in s, 'availableToday' in s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/patch-search-filters.yml
+          git add backend/src/professionals/professionals.service.ts \
+            backend/src/professionals/professionals.controller.ts \
+            backend/src/service-filters/service-filters.controller.ts \
+            backend/src/service-filters/service-filters.service.ts \
+            frontend/src/lib/public-api.ts \
+            frontend/src/app/search/page.tsx
+          git add -A
+          git status
+          git diff --cached --stat
+          git commit -m "feat(search): minDuration filter + availableToday checkbox (#40 item 6)"
+          git push
