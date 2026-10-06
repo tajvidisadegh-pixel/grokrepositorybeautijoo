@@ -7,6 +7,7 @@ import { ApiErrorState } from '@/components/professionals/api-error';
 import { siteName } from '@/lib/seo';
 import { NearMeFields } from '@/components/search/near-me-fields';
 import { FormJalaliDate } from '@/components/ui/jalali-date-input';
+import { tehranTodayIso } from '@/lib/jalali';
 
 export const metadata: Metadata = {
   title: 'جستجو',
@@ -17,9 +18,9 @@ type Props = {
   searchParams: Promise<{
     q?: string; city?: string; category?: string; page?: string;
     minRating?: string; minPrice?: string; maxPrice?: string;
-    sort?: string; availableDate?: string;
+    sort?: string; availableDate?: string; availableToday?: string;
     lat?: string; lng?: string;
-    verifiedOnly?: string; gender?: string;
+    verifiedOnly?: string; gender?: string; minDuration?: string;
   }>;
 };
 
@@ -33,7 +34,9 @@ export default async function SearchPage({ searchParams }: Props) {
   const minPrice = sp.minPrice != null && sp.minPrice !== '' ? parseInt(sp.minPrice, 10) : undefined;
   const maxPrice = sp.maxPrice != null && sp.maxPrice !== '' ? parseInt(sp.maxPrice, 10) : undefined;
   const sort = sp.sort?.trim() || 'featured';
-  const availableDate = sp.availableDate?.trim() || undefined;
+  const availableToday = sp.availableToday === '1' || sp.availableToday === 'true';
+  const availableDate = availableToday ? tehranTodayIso() : (sp.availableDate?.trim() || undefined);
+  const minDuration = sp.minDuration != null && sp.minDuration !== '' ? parseInt(sp.minDuration, 10) : undefined;
   const lat = sp.lat?.trim() || undefined;
   const lng = sp.lng?.trim() || undefined;
   // Near-me uses a fixed technical maximum; the customer no longer chooses a radius.
@@ -50,6 +53,7 @@ export default async function SearchPage({ searchParams }: Props) {
     result = await searchProfessionals({
       q, city, category, filterCategory: true, page, limit: 12,
       minRating: Number.isFinite(minRating as number) ? minRating : undefined,
+      minDuration: Number.isFinite(minDuration as number) ? minDuration : undefined,
       minPrice: Number.isFinite(minPrice as number) ? minPrice : undefined,
       maxPrice: Number.isFinite(maxPrice as number) ? maxPrice : undefined,
       sort, availableDate, lat, lng, radiusKm,
@@ -72,6 +76,8 @@ export default async function SearchPage({ searchParams }: Props) {
     if (maxPrice != null && Number.isFinite(maxPrice)) params.set('maxPrice', String(maxPrice));
     if (sort && sort !== 'featured') params.set('sort', sort);
     if (availableDate) params.set('availableDate', availableDate);
+    if (availableToday) params.set('availableToday', '1');
+    if (minDuration != null && Number.isFinite(minDuration)) params.set('minDuration', String(minDuration));
     if (lat) params.set('lat', lat);
     if (lng) params.set('lng', lng);
     if (lat && lng) params.set('radiusKm', '200');
