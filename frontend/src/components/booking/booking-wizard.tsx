@@ -17,6 +17,7 @@ import {
   bookingLoginReturnPath,
 } from '@/lib/booking-draft';
 import { friendlyApiError } from '@/lib/api-errors';
+import { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';
 import { formatPrice } from '@/lib/utils';
 import { tehranTodayIso, isoToJalaliLabel } from '@/lib/jalali';
 import { JalaliDateInput } from '@/components/ui/jalali-date-input';
@@ -636,6 +637,7 @@ export function BookingWizard({
               className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"
             />
           </div>
+          <CancelPolicyNotice className="mb-3" />
           {submitError && (
             <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</p>
           )}
