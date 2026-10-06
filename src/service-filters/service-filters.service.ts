@@ -123,6 +123,7 @@ export class ServiceFiltersService {
     minRating?: number;
     minPrice?: number;
     maxPrice?: number;
+    minDuration?: number;
     sort?: string;
     availableDate?: string;
     lat?: string;
