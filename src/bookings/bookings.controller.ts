@@ -152,6 +152,17 @@ export class BookingsController {
     return this.service.transition(id, userId, roles || [], 'complete');
   }
 
+  /** Mark customer no-show (professional/admin). Stored as cancelled + cancelReason=no_show. */
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Patch(':id/no-show')
+  noShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('roles') roles: string[],
+  ) {
+    return this.service.transition(id, userId, roles || [], 'no_show');
+  }
+
   /** Professional (or admin) reports a booking issue to SUPER_ADMIN */
   @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Post(':id/report')
