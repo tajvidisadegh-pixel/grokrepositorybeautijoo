@@ -1,0 +1,41 @@
+name: item17-profile
+on:
+  push:
+    paths:
+      - '.github/workflows/item17-profile.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -eux
+          F='frontend/src/app/professionals/[slug]/page.tsx'
+          python3 -c "
+from pathlib import Path
+p=Path('$F')
+s=p.read_text()
+if 'OpenStatusBadge' in s:
+  print('ok')
+else:
+  for a,b in [
+    (\"import { ShareProfileButton } from '@/components/professionals/share-profile-button';\",
+     \"import { ShareProfileButton } from '@/components/professionals/share-profile-button';\\nimport { OpenStatusBadge } from '@/components/professionals/open-status-badge';\"),
+    (\"import { StickyBookBar } from '@/components/professionals/sticky-book-bar';\",
+     \"import { StickyBookBar } from '@/components/professionals/sticky-book-bar';\\nimport { OpenStatusBadge } from '@/components/professionals/open-status-badge';\"),
+  ]:
+    if a in s and 'OpenStatusBadge' not in s:
+      s=s.replace(a,b,1)
+  s=s.replace('ساعات کاری: {hoursLine}', '<OpenStatusBadge hours={pro.workingHours || []} showRange size=\"md\" />{hoursLine ? <span className=\"text-sm text-gray\"> · {hoursLine}</span> : null}', 1)
+  p.write_text(s)
+  print('OpenStatusBadge' in s)
+"
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item17-profile.yml
+          git add -A
+          git commit -m "feat(ui): OpenStatusBadge on public pro profile (#40-17)" || echo nothing
+          git push
