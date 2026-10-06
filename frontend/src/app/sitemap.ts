@@ -11,6 +11,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '/search',
     '/professionals',
     '/services',
+    '/about',
+    '/contact',
+    '/faq',
     '/privacy',
     '/terms',
     '/refund',
@@ -23,7 +26,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         : path === '/privacy' ||
             path === '/terms' ||
             path === '/refund' ||
-            path === '/cookies'
+            path === '/cookies' ||
+            path === '/about' ||
+            path === '/contact' ||
+            path === '/faq'
           ? 'monthly'
           : 'weekly',
     priority:
@@ -34,7 +40,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           : path === '/privacy' ||
               path === '/terms' ||
               path === '/refund' ||
-              path === '/cookies'
+              path === '/cookies' ||
+              path === '/about' ||
+              path === '/contact' ||
+              path === '/faq'
             ? 0.3
             : 0.8,
   }));

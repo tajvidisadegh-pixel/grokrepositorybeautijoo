@@ -16,14 +16,32 @@ export function appUrl() {
   return APP_URL;
 }
 
+/** Make media/CDN paths absolute for Open Graph (WhatsApp/Telegram need absolute URLs). */
+export function absoluteMediaUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  const trimmed = String(url).trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  const mediaBase = (process.env.NEXT_PUBLIC_MEDIA_URL || '').trim().replace(/\/$/, '');
+  if (mediaBase) {
+    return `${mediaBase}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+  }
+  // Fall back to site origin for same-host paths
+  if (trimmed.startsWith('/')) return absoluteUrl(trimmed);
+  return absoluteUrl(`/${trimmed}`);
+}
+
 /** Shared metadata for public pages: canonical + Open Graph + Twitter */
 export function pageMetadata(opts: {
   title: string;
   description: string;
   path: string;
   noIndex?: boolean;
+  image?: string | null;
 }): import('next').Metadata {
   const url = absoluteUrl(opts.path);
+  const image = absoluteMediaUrl(opts.image);
   return {
     title: opts.title,
     description: opts.description,
@@ -38,11 +56,13 @@ export function pageMetadata(opts: {
       title: opts.title,
       description: opts.description,
       url,
+      ...(image ? { images: [{ url: image }] } : {}),
     },
     twitter: {
-      card: 'summary',
+      card: image ? 'summary_large_image' : 'summary',
       title: opts.title,
       description: opts.description,
+      ...(image ? { images: [image] } : {}),
     },
   };
 }
@@ -67,9 +87,8 @@ export function professionalJsonLd(pro: {
     description: pro.bio || pro.title,
     url: absoluteUrl(`/professionals/${pro.slug}`),
   };
-  if (pro.user?.profile?.avatarUrl) {
-    data.image = pro.user.profile.avatarUrl;
-  }
+  const img = absoluteMediaUrl(pro.user?.profile?.avatarUrl);
+  if (img) data.image = img;
   if (pro.ratingAvg != null && pro.ratingCount && pro.ratingCount > 0) {
     data.aggregateRating = {
       '@type': 'AggregateRating',
