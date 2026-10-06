@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/components/theme/theme-provider';
 import { ImpersonationBanner } from '@/components/auth/impersonation-banner';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { ToastProvider } from '@/components/ui/app-toast';
 import './globals.css';
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Beautijoo';
@@ -84,12 +85,14 @@ export default function RootLayout({
         </a>
         <ThemeProvider>
           <AuthProvider>
-            <ImpersonationBanner />
-            <Header />
-            <main id="main-content" className="flex-1" tabIndex={-1}>
-              {children}
-            </main>
-            <Footer />
+            <ToastProvider>
+              <ImpersonationBanner />
+              <Header />
+              <main id="main-content" className="flex-1" tabIndex={-1}>
+                {children}
+              </main>
+              <Footer />
+            </ToastProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
