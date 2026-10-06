@@ -20,11 +20,8 @@ class CreateBookingDto {
   @IsString() startAt!: string;
   @IsOptional() @IsUUID() locationId?: string;
   @IsOptional() @IsString() notes?: string;
-  /** Selected ServiceAddOn ids — validated server-side against professional services */
   @IsOptional() @IsArray() @IsUUID('4', { each: true }) addOnIds?: string[];
-  /** Optional active ServicePriceRule for the primary service */
   @IsOptional() @IsUUID() priceRuleId?: string;
-  /** Optional active ServiceDurationRule for the primary service */
   @IsOptional() @IsUUID() durationRuleId?: string;
 }
 
@@ -152,7 +149,10 @@ export class BookingsController {
     return this.service.transition(id, userId, roles || [], 'complete');
   }
 
-  /** Mark customer no-show (professional/admin). Stored as cancelled + cancelReason=no_show. */
+  /**
+   * No-show: uses cancel with reason no_show (no schema migration).
+   * Pro/admin only — customer cannot call this endpoint.
+   */
   @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Patch(':id/no-show')
   noShow(
@@ -160,10 +160,9 @@ export class BookingsController {
     @CurrentUser('id') userId: string,
     @CurrentUser('roles') roles: string[],
   ) {
-    return this.service.transition(id, userId, roles || [], 'no_show');
+    return this.service.transition(id, userId, roles || [], 'cancel', 'no_show');
   }
 
-  /** Professional (or admin) reports a booking issue to SUPER_ADMIN */
   @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Post(':id/report')
   report(

@@ -1,4 +1,4 @@
-name: item18-20b
+name: item18-20c
 on:
   push:
     paths:
@@ -12,76 +12,60 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set -eux
+          # area filter
+          python3 -c "
+from pathlib import Path
+p=Path('backend/src/professionals/professionals.service.ts')
+s=p.read_text()
+if 'params.area' not in s:
+  s=s.replace('city?: string;\n    category?: string;','city?: string;\n    area?: string;\n    category?: string;',1)
+  old='''    if (params.city) {
+      where.locations = {
+        some: { location: { city: { contains: params.city, mode: \'insensitive\' } } },
+      };
+    }'''
+  # try without escape
+  old2='''    if (params.city) {
+      where.locations = {
+        some: { location: { city: { contains: params.city, mode: \'insensitive\' } } },
+      };
+    }'''
+"
           python3 << 'PY'
           from pathlib import Path
-
-          # service no_show
-          p = Path('backend/src/bookings/bookings.service.ts')
-          s = p.read_text()
-          s = s.replace(
-              "action: 'confirm' | 'reject' | 'cancel' | 'complete'",
-              "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'",
-              1,
-          )
-          if "action === 'no_show'" not in s:
-              block = '''
-    if (action === 'no_show') {
-      if (!isAdmin && !isPro) throw new ForbiddenException();
-      if (b.status !== BookingStatus.confirmed && b.status !== BookingStatus.pending) {
-        throw new BadRequestException('فقط رزرو تأییدشده یا در انتظار قابل علامت‌گذاری عدم حضور است');
-      }
-      const start = new Date(b.startAt).getTime();
-      if (Number.isFinite(start) && Date.now() < start - 15 * 60_000) {
-        throw new BadRequestException('قبل از شروع نوبت نمی‌توان عدم حضور ثبت کرد');
-      }
-      const updated = await this.prisma.booking.update({
-        where: { id },
-        data: {
-          status: BookingStatus.cancelled,
-          cancelReason: 'no_show',
-          cancelledAt: new Date(),
-        },
-      });
-      try {
-        await this.notifications.notify({
-          userId: b.customerId,
-          type: NotificationType.booking_cancelled,
-          title: 'عدم حضور ثبت شد',
-          body: 'زیباگر این نوبت را به‌عنوان عدم حضور شما ثبت کرد.',
-          data: { bookingId: id },
-          sms: false,
-        });
-      } catch {
-        /* non-fatal */
-      }
-      return updated;
-    }
-
-'''
-              # insert before final throw after complete
-              key = "return updated;\n    }\n\n    throw new BadRequest"
-              # may appear multiple times - find after complete
-              idx = s.find("action === 'complete'")
-              pos = s.find('throw new BadRequest', idx)
-              if pos < 0:
-                  raise SystemExit('throw not found')
-              s = s[:pos] + block + s[pos:]
-              p.write_text(s)
-              print('service ok')
+          p=Path('backend/src/professionals/professionals.service.ts')
+          s=p.read_text()
+          if 'params.area' in s:
+              print('area ok')
           else:
-              print('service has no_show')
+              s=s.replace('city?: string;\n    category?: string;','city?: string;\n    area?: string;\n    category?: string;',1)
+              needle='some: { location: { city: { contains: params.city, mode: \'insensitive\' } } },'
+              # find city block end
+              i=s.find('if (params.city)')
+              j=s.find('\n    }\n', i)
+              if i<0 or j<0: raise SystemExit('city not found')
+              j=j+len('\n    }')
+              insert='''
 
-          # professionals area filter
-          pp = Path('backend/src/professionals/professionals.service.ts')
-          ps = pp.read_text()
-          if 'params.area' not in ps:
-              ps = ps.replace('city?: string;\n    category?: string;', 'city?: string;\n    area?: string;\n    category?: string;', 1)
-              old = """    if (params.city) {
-      where.locations = {
-        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
+    if (params.area && String(params.area).trim()) {
+      const area = String(params.area).trim();
+      const areaFilter = {
+        locations: {
+          some: {
+            location: {
+              OR: [
+                { name: { contains: area, mode: \'insensitive\' as const } },
+                { address: { contains: area, mode: \'insensitive\' as const } },
+              ],
+            },
+          },
+        },
       };
-    }"""
-              new = old + """
+      const prevAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+      where.AND = [...prevAnd, areaFilter];
+    }'''
+              # fix quotes - use proper string
+              insert = """
 
     if (params.area && String(params.area).trim()) {
       const area = String(params.area).trim();
@@ -100,92 +84,58 @@ jobs:
       const prevAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
       where.AND = [...prevAnd, areaFilter];
     }"""
-              if old not in ps:
-                  raise SystemExit('city block missing')
-              ps = ps.replace(old, new, 1)
-              pp.write_text(ps)
-              print('area filter ok')
-          else:
-              print('area exists')
+              s=s[:j]+insert+s[j:]
+              p.write_text(s)
+              print('area patched')
 
-          # public-api
-          fa = Path('frontend/src/lib/public-api.ts')
-          f = fa.read_text()
-          if 'area?: string' not in f:
-              f = f.replace('city?: string;', 'city?: string;\n  area?: string;', 1)
-              f = f.replace("if (params.city) sp.set('city', params.city);", "if (params.city) sp.set('city', params.city);\n  if (params.area) sp.set('area', params.area);", 1)
-              fa.write_text(f)
-          print('public-api ok')
-
-          # panel-api
-          pa = Path('frontend/src/lib/panel-api.ts')
-          t = pa.read_text()
-          t = t.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'", "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'", 1)
+          # panel api
+          pa=Path('frontend/src/lib/panel-api.ts')
+          t=pa.read_text()
+          t=t.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'","action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'",1)
+          # also allow calling no-show endpoint
+          if 'no-show' not in t and 'transitionBooking' in t:
+              t=t.replace(
+                  "return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);",
+                  """const path = action === 'no_show' ? 'no-show' : action;
+  return apiClient.patch(`/bookings/${id}/${path}`, reason ? { reason } : undefined);""",
+                  1,
+              )
           pa.write_text(t)
-          print('panel-api ok')
+          print('panel')
 
-          # search page
-          sp = Path('frontend/src/app/search/page.tsx')
-          ss = sp.read_text()
+          # public api area
+          fa=Path('frontend/src/lib/public-api.ts')
+          f=fa.read_text()
+          if 'area?: string' not in f:
+              f=f.replace('city?: string;','city?: string;\n  area?: string;',1)
+              f=f.replace("if (params.city) sp.set('city', params.city);","if (params.city) sp.set('city', params.city);\n  if (params.area) sp.set('area', params.area);",1)
+              fa.write_text(f)
+          print('public')
+
+          # search UI
+          sp=Path('frontend/src/app/search/page.tsx')
+          ss=sp.read_text()
           if 'name="area"' not in ss:
-              ss = ss.replace('const city = sp.city?.trim() || undefined;', 'const city = sp.city?.trim() || undefined;\n  const area = sp.area?.trim() || undefined;', 1)
-              ss = ss.replace('q, city, category, filterCategory: true, page, limit: 12,', 'q, city, area, category, filterCategory: true, page, limit: 12,', 1)
-              ss = ss.replace("if (city) params.set('city', city);", "if (city) params.set('city', city);\n    if (area) params.set('area', area);", 1)
-              ss = ss.replace(
-                  '<input name="city" defaultValue={city || \'\'} placeholder="شهر" className={inputCls} />',
-                  '<input name="city" defaultValue={city || \'\'} placeholder="مثلاً تهران" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">محله / محدوده</label>\n            <input name="area" defaultValue={area || \'\'} placeholder="مثلاً ونک" className={inputCls} />',
+              ss=ss.replace('const city = sp.city?.trim() || undefined;','const city = sp.city?.trim() || undefined;\n  const area = sp.area?.trim() || undefined;',1)
+              ss=ss.replace('q, city, category, filterCategory: true, page, limit: 12,','q, city, area, category, filterCategory: true, page, limit: 12,',1)
+              ss=ss.replace("if (city) params.set('city', city);","if (city) params.set('city', city);\n    if (area) params.set('area', area);",1)
+              ss=ss.replace('placeholder="شهر"','placeholder="مثلاً تهران"',1)
+              ss=ss.replace(
+                  'placeholder="مثلاً تهران" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">دسته‌بندی</label>',
+                  'placeholder="مثلاً تهران" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">محله / محدوده</label>\n            <input name="area" defaultValue={area || \'\'} placeholder="مثلاً ونک" className={inputCls} />\n          </div>\n          <div>\n            <label className="mb-1 block text-xs font-medium text-gray">دسته‌بندی</label>',
                   1,
               )
               sp.write_text(ss)
               print('search', 'name="area"' in ss)
-          else:
-              print('search ok')
 
-          # zibagar no-show button - simple append near complete
-          zp = Path('frontend/src/app/zibagar/bookings/page.tsx')
-          zs = zp.read_text()
-          zs = zs.replace("action: 'confirm' | 'reject' | 'cancel' | 'complete'", "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show'", 1)
-          if 'عدم حضور' not in zs:
-              zs = zs.replace(
-                  "onClick={() => act(b.id, 'complete')}",
-                  "onClick={() => act(b.id, 'complete')}\n                              data-complete-btn\n                              ",
-                  1,
-              )
-              # insert button after first complete Button block ending تکمیل
-              marker = '>تکمیل</Button>'
-              # try variations
-              for m in ['>\n                                تکمیل\n                              </Button>', '>تکمیل</Button>']:
-                  if m in zs:
-                      zs = zs.replace(m, m + '''
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                loading={busy === `${b.id}:no_show`}
-                                onClick={() => {
-                                  if (typeof window !== 'undefined' && !window.confirm('مشتری حاضر نشده؟')) return;
-                                  void act(b.id, 'no_show');
-                                }}
-                              >
-                                عدم حضور
-                              </Button>''', 1)
-                      break
-              zp.write_text(zs)
-              print('zibagar', 'عدم حضور' in zs)
-          else:
-              print('zibagar ok')
-
-          # public professionals controller area query
-          for cp in Path('backend/src').rglob('*.ts'):
-              txt = cp.read_text()
-              if "@Query('city')" in txt and 'search' in txt and "@Query('area')" not in txt:
-                  txt2 = txt.replace("@Query('city') city?: string,", "@Query('city') city?: string,\n    @Query('area') area?: string,", 1)
-                  if txt2 != txt:
-                      # try pass area into service call once near city,
-                      if 'area,' not in txt2:
-                          txt2 = txt2.replace('city: city,', 'city: city, area: area,', 1)
-                          txt2 = txt2.replace('city,', 'city, area,', 1)
-                      cp.write_text(txt2)
-                      print('ctrl', cp)
+          # wire public controller - find file with Query city and professionals search
+          for cp in Path('backend/src').rglob('*.controller.ts'):
+              txt=cp.read_text()
+              if "@Query('city')" in txt and 'Professional' in txt and "@Query('area')" not in txt:
+                  txt=txt.replace("@Query('city') city?: string,","@Query('city') city?: string,\n    @Query('area') area?: string,",1)
+                  txt=txt.replace('city: city,','city: city, area,') if 'city: city,' in txt else txt.replace('city,','city, area,',1)
+                  cp.write_text(txt)
+                  print('wired', cp)
           print('done')
           PY
       - run: |
@@ -193,5 +143,5 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           rm -f .github/workflows/item18-20.yml
           git add -A
-          git commit -m "feat: items 18-20 area filter, no-show service, UI (#40)" || echo nothing
+          git commit -m "feat: area search filter + no-show API path (#40 18-20)" || echo nothing
           git push
