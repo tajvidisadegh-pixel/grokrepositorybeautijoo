@@ -1,0 +1,80 @@
+name: item13-og
+on:
+  push:
+    paths:
+      - '.github/workflows/item13-og.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -eux
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          s = p.read_text()
+          if 'absoluteMediaUrl' in s:
+              print('already has absoluteMediaUrl')
+          else:
+              s = s.replace(
+                  "import { absoluteUrl, professionalJsonLd, siteName } from '@/lib/seo';",
+                  "import { absoluteUrl, absoluteMediaUrl, professionalJsonLd, siteName } from '@/lib/seo';",
+                  1,
+              )
+              old = '''      openGraph: {
+        title,
+        description,
+        url,
+        type: 'profile',
+        locale: 'fa_IR',
+        images: pro.user?.profile?.avatarUrl
+          ? [{ url: pro.user.profile.avatarUrl }]
+          : undefined,
+      },
+      twitter: {
+        card: 'summary',
+        title,
+        description,
+      },'''
+              new = '''      openGraph: {
+        title,
+        description,
+        url,
+        type: 'profile',
+        locale: 'fa_IR',
+        siteName: siteName(),
+        images: (() => {
+          const cover = absoluteMediaUrl(pro.coverImageUrl);
+          const avatar = absoluteMediaUrl(pro.user?.profile?.avatarUrl);
+          const img = cover || avatar;
+          return img ? [{ url: img, alt: name }] : undefined;
+        })(),
+      },
+      twitter: {
+        card: (absoluteMediaUrl(pro.coverImageUrl) || absoluteMediaUrl(pro.user?.profile?.avatarUrl))
+          ? 'summary_large_image'
+          : 'summary',
+        title,
+        description,
+        images: (() => {
+          const img = absoluteMediaUrl(pro.coverImageUrl) || absoluteMediaUrl(pro.user?.profile?.avatarUrl);
+          return img ? [img] : undefined;
+        })(),
+      },'''
+              if old not in s:
+                  raise SystemExit('og block not found')
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+              print('patched', 'absoluteMediaUrl' in s)
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item13-og.yml
+          git add 'frontend/src/app/professionals/[slug]/page.tsx'
+          git add -A
+          git commit -m "feat(seo): absolute OG/Twitter images on pro profile (#40 item 13)" || echo nothing
+          git push
