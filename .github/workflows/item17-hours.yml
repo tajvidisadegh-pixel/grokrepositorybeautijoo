@@ -1,4 +1,4 @@
-name: disabled-item17-profile
+name: disabled-item17-hours
 on:
   workflow_dispatch:
 jobs:
