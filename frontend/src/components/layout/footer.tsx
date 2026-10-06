@@ -4,8 +4,8 @@ import { Logo } from '@/components/brand/logo';
 export function Footer() {
   return (
     <footer className="mt-auto bg-blue text-white">
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-3 sm:py-12">
-        <div className="sm:col-span-1">
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4 sm:py-12">
+        <div className="sm:col-span-2 lg:col-span-1">
           <div className="mb-3">
             <Logo onDark href={null} />
           </div>
@@ -53,9 +53,51 @@ export function Footer() {
             </li>
           </ul>
         </div>
+        <div>
+          <h3 className="mb-3 text-sm font-bold text-white">قوانین و پشتیبانی</h3>
+          <ul className="space-y-2.5 text-sm text-white/75">
+            <li>
+              <Link href="/about" className="transition-colors hover:text-coral-light">
+                درباره ما
+              </Link>
+            </li>
+            <li>
+              <Link href="/faq" className="transition-colors hover:text-coral-light">
+                سوالات متداول
+              </Link>
+            </li>
+            <li>
+              <Link href="/contact" className="transition-colors hover:text-coral-light">
+                تماس با پشتیبانی
+              </Link>
+            </li>
+            <li>
+              <Link href="/terms" className="transition-colors hover:text-coral-light">
+                شرایط استفاده
+              </Link>
+            </li>
+            <li>
+              <Link href="/refund" className="transition-colors hover:text-coral-light">
+                کنسلی و بازپرداخت
+              </Link>
+            </li>
+            <li>
+              <Link href="/privacy" className="transition-colors hover:text-coral-light">
+                حریم خصوصی
+              </Link>
+            </li>
+            <li>
+              <Link href="/cookies" className="transition-colors hover:text-coral-light">
+                سیاست کوکی
+              </Link>
+            </li>
+          </ul>
+        </div>
       </div>
       <div className="border-t border-white/10 bg-blue-dark/40 py-4 text-center text-xs text-white/60">
-        © {new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date())} Beautijoo — بیوتی‌جو · همه حقوق محفوظ است
+        ©{' '}
+        {new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date())}{' '}
+        Beautijoo — بیوتی‌جو · همه حقوق محفوظ است
       </div>
     </footer>
   );
