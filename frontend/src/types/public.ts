@@ -94,6 +94,8 @@ export type ProfessionalListItem = {
   distanceKm?: number | null;
   /** True when professional location is approximate (issue #24). */
   distanceApproximate?: boolean;
+  /** Active hours for open-now badge */
+  workingHours?: Array<{ dayOfWeek: string; startTime: string; endTime: string; isActive?: boolean }>;
   user?: { profile?: ProfileSnippet | null } | null;
   locations?: { location: LocationSnippet; isPrimary?: boolean }[];
   /** List may return a subset; detail uses ProfessionalServiceItem[] */

@@ -13,6 +13,7 @@ import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
 import LocationMapView from '@/components/location/location-map-view'
 import { StickyBookBar } from '@/components/professionals/sticky-book-bar';
 import { ShareProfileButton } from '@/components/professionals/share-profile-button';
+import { OpenStatusBadge } from '@/components/professionals/open-status-badge';
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -343,7 +344,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
       {/* Issue #28: one short line at bottom — no card/grid */}
       {hoursLine && (
         <p className="mt-8 border-t border-border/60 pt-4 text-center text-sm text-gray">
-          ساعات کاری: {hoursLine}
+          <OpenStatusBadge hours={pro.workingHours || []} showRange size="md" />{hoursLine ? <span className="text-sm text-gray"> · {hoursLine}</span> : null}
         </p>
       )}
 
