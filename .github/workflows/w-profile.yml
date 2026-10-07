@@ -1,0 +1,31 @@
+name: w-profile
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write
+        run: |
+          python3 -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/895745e/frontend/src/app/panel/profile/page.tsx', '/tmp/p.tsx')"
+          python3 << 'PY'
+          from pathlib import Path
+          t = Path('/tmp/p.tsx').read_text(encoding='utf-8')
+          old = '''            <textarea\n              value={bio}\n              onChange={(e) => setBio(e.target.value)}\n              rows={3}\n              className="w-full rounded-xl border border-border px-3 py-2 text-sm"\n              maxLength={2000}\n            />\n          </div>'''
+          new = '''            <textarea\n              value={bio}\n              onChange={(e) => setBio(e.target.value)}\n              rows={3}\n              className="w-full rounded-xl border border-border px-3 py-2 text-sm"\n              maxLength={2000}\n            />\n            <p className="mt-1 text-left text-xs text-gray" dir="ltr">{`${bio.length}/2000`}</p>\n          </div>'''
+          if old in t:
+              t = t.replace(old, new, 1)
+              print('bio counter ok')
+          else:
+              print('bio needle missing')
+          Path('frontend/src/app/panel/profile/page.tsx').write_text(t, encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add frontend/src/app/panel/profile/page.tsx
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: restore profile page + bio char counter" && git push; fi
