@@ -1,9 +1,9 @@
-name: fix-notify-46-50
+name: fix-46-fe
 
 on:
   push:
     paths:
-      - '.github/triggers/fix-notify.flag'
+      - '.github/triggers/fix-46-fe.flag'
 
 jobs:
   patch:
@@ -12,10 +12,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: python3 .github/triggers/fix-notify.py
+      - run: python3 .github/triggers/fix-46-fe.py
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/reminders/reminders.service.ts
-          git commit -m "fix(#40): use notifications.notify for daily summary" || echo nochange
+          git add frontend/src/app/professionals/[slug]/page.tsx frontend/src/app/zibagar/bookings/page.tsx
+          git commit -m "fix(#40): typecheck createdAt cast + block button scope" || echo nochange
           git push
