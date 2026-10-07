@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, Suspense, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
@@ -11,13 +11,21 @@ import { Card } from '@/components/ui/card';
 import { LogoMark } from '@/components/brand/logo';
 import type { AccountType } from '@/types/auth';
 
+/**
+ * OTP page — supports login/register and phone verification before booking (#40 item 25).
+ * When user is authenticated but phoneVerified=false (reason=booking), stay on page and verify.
+ */
 function OtpForm() {
-  const { requestOtp, verifyOtp, isAuthenticated, user } = useAuth();
+  const { requestOtp, verifyOtp, isAuthenticated, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
   const asParam = search?.get('as');
+  const reason = search?.get('reason') || '';
   const nextDefault = asParam === 'professional' ? '/zibagar' : '/panel';
   const next = search?.get('next') || nextDefault;
+
+  const needsPhoneVerify =
+    isAuthenticated && user != null && user.phoneVerified === false;
 
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
@@ -29,15 +37,31 @@ function OtpForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (isAuthenticated) {
-    const dest =
-      user?.accountType === 'professional' || (user?.roles || []).includes('professional')
-        ? '/zibagar'
-        : next.startsWith('/zibagar')
-          ? '/panel'
-          : next;
-    router.replace(dest);
-  }
+  // Prefill phone for logged-in users verifying before booking
+  useEffect(() => {
+    if (user?.phone && /^09\d{9}$/.test(user.phone)) {
+      setPhone(user.phone);
+    }
+    if (user?.accountType === 'professional') {
+      setAccountType('professional');
+    } else if (user?.accountType === 'customer') {
+      setAccountType('customer');
+    }
+  }, [user?.phone, user?.accountType]);
+
+  // Only bounce away when already verified (or no need to verify)
+  useEffect(() => {
+    if (authLoading) return;
+    if (isAuthenticated && user && user.phoneVerified !== false && !needsPhoneVerify) {
+      const dest =
+        user.accountType === 'professional' || (user.roles || []).includes('professional')
+          ? '/zibagar'
+          : next.startsWith('/zibagar')
+            ? '/panel'
+            : next;
+      router.replace(dest);
+    }
+  }, [authLoading, isAuthenticated, user, needsPhoneVerify, next, router]);
 
   async function onRequest(e: FormEvent) {
     e.preventDefault();
@@ -48,6 +72,7 @@ function OtpForm() {
     }
     setLoading(true);
     try {
+      // purpose login works for existing users and sets phoneVerified on success
       const res = await requestOtp(phone.trim(), 'login', accountType);
       setExpiresIn(res.expiresIn);
       setStep('code');
@@ -64,7 +89,14 @@ function OtpForm() {
     setLoading(true);
     try {
       await verifyOtp(phone.trim(), code.trim(), 'login', accountType);
-      router.replace(accountType === 'professional' ? '/zibagar' : '/panel');
+      // Prefer return path (e.g. booking wizard) over hard-coded panel
+      const dest =
+        next && next.startsWith('/') && !next.startsWith('//')
+          ? next
+          : accountType === 'professional'
+            ? '/zibagar'
+            : '/panel';
+      router.replace(dest);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تأیید کد ناموفق بود');
     } finally {
@@ -72,48 +104,61 @@ function OtpForm() {
     }
   }
 
-  return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-12">
-      <div className="text-center">
-        <LogoMark className="mx-auto mb-4 size-14" />
-        <h1 className="text-xl font-bold text-coral sm:text-2xl">ورود با کد یک‌بارمصرف</h1>
-        <p className="mt-2 text-sm text-gray">
-          {step === 'phone'
-            ? 'شماره موبایل و نوع حساب را انتخاب کنید'
-            : `کد ارسال‌شده به ${phone} را وارد کنید`}
-        </p>
-      </div>
+  const title =
+    reason === 'booking' || needsPhoneVerify
+      ? 'تأیید موبایل برای رزرو'
+      : 'ورود با کد یکبارمصرف';
 
-      <Card>
+  const subtitle =
+    reason === 'booking' || needsPhoneVerify
+      ? 'برای ثبت رزرو باید شماره موبایل خود را با کد پیامکی تأیید کنید.'
+      : 'کد تأیید به شماره موبایل شما ارسال می‌شود.';
+
+  return (
+    <div className="flex min-h-[70vh] flex-col items-center justify-center px-4 py-10" dir="rtl">
+      <Link href="/" className="mb-6">
+        <LogoMark className="h-10 w-10" />
+      </Link>
+      <Card className="w-full max-w-md space-y-4 p-6">
+        <div className="text-center">
+          <h1 className="text-xl font-bold text-blue">{title}</h1>
+          <p className="mt-1 text-sm text-gray">{subtitle}</p>
+        </div>
+
+        {(reason === 'booking' || needsPhoneVerify) && (
+          <div
+            className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
+            role="status"
+          >
+            بعد از تأیید، به صفحه رزرو برمی‌گردید و می‌توانید ادامه دهید.
+          </div>
+        )}
+
+        {!needsPhoneVerify && (
+          <div className="flex gap-2 rounded-2xl bg-gray-light p-1 text-sm">
+            <button
+              type="button"
+              className={`flex-1 rounded-xl py-2 font-medium ${
+                accountType === 'customer' ? 'bg-white shadow text-coral' : 'text-gray'
+              }`}
+              onClick={() => setAccountType('customer')}
+            >
+              مشتری
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded-xl py-2 font-medium ${
+                accountType === 'professional' ? 'bg-white shadow text-coral' : 'text-gray'
+              }`}
+              onClick={() => setAccountType('professional')}
+            >
+              زیباگر
+            </button>
+          </div>
+        )}
+
         {step === 'phone' ? (
           <form onSubmit={onRequest} className="space-y-4">
-            <div>
-              <p className="mb-2 text-sm font-medium">ورود به‌عنوان</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAccountType('customer')}
-                  className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                    accountType === 'customer'
-                      ? 'border-coral bg-coral-soft text-coral'
-                      : 'border-border text-gray hover:bg-gray-light'
-                  }`}
-                >
-                  مشتری
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAccountType('professional')}
-                  className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                    accountType === 'professional'
-                      ? 'border-coral bg-coral-soft text-coral'
-                      : 'border-border text-gray hover:bg-gray-light'
-                  }`}
-                >
-                  زیباگر
-                </button>
-              </div>
-            </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">شماره موبایل</label>
               <Input
@@ -125,6 +170,7 @@ function OtpForm() {
                 required
                 dir="ltr"
                 className="text-left"
+                readOnly={needsPhoneVerify && !!user?.phone}
               />
             </div>
             {error && (
@@ -159,7 +205,7 @@ function OtpForm() {
               <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
             <Button type="submit" className="w-full" loading={loading}>
-              تأیید و ورود
+              تأیید
             </Button>
             <Button
               type="button"
@@ -179,7 +225,7 @@ function OtpForm() {
         <div className="mt-6 border-t border-border pt-4 text-center text-sm text-gray">
           ورود با رمز عبور؟{' '}
           <Link
-            href={`/login?as=${accountType}`}
+            href={`/login?as=${accountType}${next ? `&next=${encodeURIComponent(next)}` : ''}`}
             className="font-medium text-coral hover:text-coral-dark"
           >
             صفحه ورود
