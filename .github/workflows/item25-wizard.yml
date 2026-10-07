@@ -1,4 +1,4 @@
-name: item25-wizard
+name: item25b
 on:
   push:
     paths:
@@ -12,62 +12,65 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set -eux
+          python3 -c "
+from pathlib import Path
+w=Path('frontend/src/components/booking/booking-wizard.tsx')
+s=w.read_text()
+s=s.replace(
+  'const { isAuthenticated, loading: authLoading } = useAuth();',
+  'const { isAuthenticated, loading: authLoading, user } = useAuth();',
+  1,
+)
+needle=\""\"    if (!isAuthenticated) {
+      const draft = buildDraft();
+      saveBookingDraft(draft);
+      router.push(\\`/login?next=\${encodeURIComponent(bookingLoginReturnPath(draft))}\\`);
+      return;
+    }
+    setSubmitting(true);\""\"
+# fix - use normal string
+"
           python3 << 'PY'
           from pathlib import Path
           w = Path('frontend/src/components/booking/booking-wizard.tsx')
           s = w.read_text()
-          # useAuth user
           s = s.replace(
               'const { isAuthenticated, loading: authLoading } = useAuth();',
               'const { isAuthenticated, loading: authLoading, user } = useAuth();',
               1,
           )
-          old = '''  async function submitBooking() {
-    if (!selected || !date || !slotStart) return;
-    setSubmitError(null);
-    if (!isAuthenticated) {
+          a = """    if (!isAuthenticated) {
       const draft = buildDraft();
       saveBookingDraft(draft);
       router.push(`/login?next=${encodeURIComponent(bookingLoginReturnPath(draft))}`);
       return;
     }
-    setSubmitting(true);'''
-          new = '''  async function submitBooking() {
-    if (!selected || !date || !slotStart) return;
-    setSubmitError(null);
-    if (!isAuthenticated) {
+    setSubmitting(true);"""
+          b = """    if (!isAuthenticated) {
       const draft = buildDraft();
       saveBookingDraft(draft);
       router.push(`/login?next=${encodeURIComponent(bookingLoginReturnPath(draft))}`);
       return;
     }
-    // #40 item 25 — require verified mobile before create
     if (user && user.phoneVerified === false) {
       const draft = buildDraft();
       saveBookingDraft(draft);
-      const next = encodeURIComponent(bookingLoginReturnPath(draft));
       setSubmitError('قبل از رزرو باید شماره موبایل را تأیید کنید.');
-      router.push(`/otp?next=${next}&reason=booking`);
+      router.push(`/otp?next=${encodeURIComponent(bookingLoginReturnPath(draft))}&reason=booking`);
       return;
     }
-    setSubmitting(true);'''
-          if old not in s:
-              if 'phoneVerified' in s:
-                  print('already has phoneVerified check')
-              else:
-                  raise SystemExit('submit block not found')
-          else:
-              s = s.replace(old, new, 1)
-              print('submit patched')
-          # UI hint near button
-          if 'phoneVerified === false' in s and 'تأیید موبایل' not in s:
-              s = s.replace(
-                  '<CancelPolicyNotice className="mb-3" />',
-                  '''<CancelPolicyNotice className="mb-3" />
+    setSubmitting(true);"""
+          if a not in s:
+              raise SystemExit('block missing')
+          s = s.replace(a, b, 1)
+          # banner before CancelPolicy or submitError
+          if 'تأیید شماره موبایل لازم است' not in s:
+              marker = '<CancelPolicyNotice className="mb-3" />'
+              banner = '''<CancelPolicyNotice className="mb-3" />
           {isAuthenticated && user && user.phoneVerified === false && (
-            <div className="mb-3 rounded-2xl border border-coral/30 bg-coral-soft/40 px-3 py-2 text-sm">
+            <div className="mb-3 rounded-2xl border border-coral/30 bg-coral-soft/50 px-3 py-2 text-sm">
               <p className="font-medium text-coral">تأیید شماره موبایل لازم است</p>
-              <p className="mt-1 text-xs text-gray">برای ثبت رزرو، ابتدا موبایل را با کد پیامکی تأیید کنید.</p>
+              <p className="mt-1 text-xs text-gray">برای ثبت رزرو ابتدا موبایل را با کد پیامکی تأیید کنید.</p>
               <button
                 type="button"
                 className="mt-2 text-xs font-medium text-coral underline"
@@ -80,11 +83,19 @@ jobs:
                 رفتن به تأیید موبایل
               </button>
             </div>
-          )}''',
-                  1,
-              )
+          )}
+'''
+              if marker in s:
+                  s = s.replace(marker, banner, 1)
+              else:
+                  s = s.replace(
+                      '{submitError && (',
+                      banner + '          {submitError && (',
+                      1,
+                  )
           w.write_text(s)
-          print('done', 'phoneVerified' in s)
+          assert 'phoneVerified' in s
+          print('ok', s.count('phoneVerified'))
           PY
       - run: |
           git config user.name github-actions[bot]
@@ -92,5 +103,6 @@ jobs:
           rm -f .github/workflows/item25-wizard.yml
           git add frontend/src/components/booking/booking-wizard.tsx
           git add -A
-          git commit -m "feat(booking): block submit until phoneVerified (#40 item 25)" || echo nothing
+          git status
+          git commit -m "feat(booking): require phoneVerified in wizard (#40-25)" || echo nothing
           git push
