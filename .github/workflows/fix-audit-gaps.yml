@@ -1,0 +1,190 @@
+name: fix-audit-gaps
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          changed = []
+
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text(encoding='utf-8')
+          old = "export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {\n  return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);\n}"
+          new = "export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show', reason?: string) {\n  return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);\n}"
+          if old in t:
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+              changed.append('panel-api')
+          else:
+              print('panel-api skip')
+
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          old = "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete') {"
+          new = "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show') {"
+          if old in t:
+              t = t.replace(old, new, 1)
+              changed.append('act-type')
+          old = """      const labels: Record<string, string> = {
+        confirm: 'رزرو با موفقیت تأیید شد.',
+        reject: 'رزرو رد شد.',
+        cancel: 'رزرو لغو شد.',
+        complete: 'رزرو به عنوان انجام‌شده ثبت شد.',
+      };"""
+          new = """      const labels: Record<string, string> = {
+        confirm: 'رزرو با موفقیت تأیید شد.',
+        reject: 'رزرو رد شد.',
+        cancel: 'رزرو لغو شد.',
+        complete: 'رزرو به عنوان انجام‌شده ثبت شد.',
+        'no-show': 'عدم حضور مشتری ثبت شد.',
+      };"""
+          if old in t:
+              t = t.replace(old, new, 1)
+              changed.append('labels')
+          needle = """                              <Button
+                                size="sm"
+                                loading={busy === `${b.id}:complete`}
+                                onClick={() => act(b.id, 'complete')}
+                              >
+                                تکمیل
+                              </Button>
+                            </>
+                          )}"""
+          insert = """                              <Button
+                                size="sm"
+                                loading={busy === `${b.id}:complete`}
+                                onClick={() => act(b.id, 'complete')}
+                              >
+                                تکمیل
+                              </Button>
+                              {b.status === 'confirmed' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  loading={busy === `${b.id}:no-show`}
+                                  onClick={() => {
+                                    if (typeof window !== 'undefined' && !window.confirm('مشتری حضور نداشته؟ ثبت عدم حضور؟')) return;
+                                    void act(b.id, 'no-show');
+                                  }}
+                                >
+                                  عدم حضور
+                                </Button>
+                              )}
+                            </>
+                          )}"""
+          if needle in t and 'عدم حضور' not in t:
+              t = t.replace(needle, insert, 1)
+              changed.append('no-show-btn')
+          else:
+              print('no-show btn skip', 'عدم حضور' in t)
+          p.write_text(t, encoding='utf-8')
+
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if '_pinnedServiceIds' not in t:
+              old = """            <ul className="mt-4 space-y-3">
+              {pro.professionalServices?.map((ps) => (
+                <ServiceOfferCard
+                  key={ps.id}
+                  ps={ps as ProfessionalServiceItem}
+                  slug={pro.slug}
+                />
+              ))}
+            </ul>"""
+              new = """            <ul className="mt-4 space-y-3">
+              {(() => {
+                const list = [...(pro.professionalServices || [])] as ProfessionalServiceItem[];
+                const pins = ((pro as { socialLinks?: { _pinnedServiceIds?: string[] } }).socialLinks?._pinnedServiceIds) || [];
+                const pinSet = new Set(Array.isArray(pins) ? pins : []);
+                list.sort((a, b) => {
+                  const ap = pinSet.has(a.id) ? 0 : 1;
+                  const bp = pinSet.has(b.id) ? 0 : 1;
+                  return ap - bp;
+                });
+                return list.map((ps) => (
+                  <li key={ps.id} className="list-none">
+                    {pinSet.has(ps.id) && (
+                      <span className="mb-1 inline-block rounded-full bg-coral/10 px-2 py-0.5 text-[10px] font-medium text-coral">
+                        پین\u200cشده
+                      </span>
+                    )}
+                    <ServiceOfferCard
+                      ps={ps as ProfessionalServiceItem}
+                      slug={pro.slug}
+                    />
+                  </li>
+                ));
+              })()}
+            </ul>"""
+              if old in t:
+                  t = t.replace(old, new, 1)
+                  p.write_text(t, encoding='utf-8')
+                  changed.append('public-pins')
+              else:
+                  print('slug needle missing')
+          else:
+              print('slug pins exist')
+
+          p = Path('frontend/src/app/panel/profile/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          old = """            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+              maxLength={2000}
+            />
+          </div>"""
+          new = """            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+              maxLength={2000}
+            />
+            <p className="mt-1 text-left text-xs text-gray" dir="ltr">{`${bio.length}/2000`}</p>
+          </div>"""
+          if old in t and 'bio.length}/2000' not in t:
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+              changed.append('bio-counter')
+          else:
+              print('bio skip')
+
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text(encoding='utf-8')
+          old = """            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"
+              placeholder="توضیح کوتاه برای زیباگر…"
+            />"""
+          new = """            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value.slice(0, 500))}
+              rows={2}
+              maxLength={500}
+              className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"
+              placeholder="توضیح کوتاه برای زیباگر…"
+            />
+            <p className="mt-1 text-left text-xs text-gray" dir="ltr">{`${notes.length}/500`}</p>"""
+          if old in t and 'notes.length' not in t:
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+              changed.append('notes-counter')
+          else:
+              print('notes skip')
+
+          print('CHANGED', changed)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: complete audit gaps (no-show UI, public pins, char counters)" && git push; fi
