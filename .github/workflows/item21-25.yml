@@ -1,8 +1,87 @@
-name: disabled-item21-25
+name: apply-item-31-32
+
 on:
   workflow_dispatch:
+
 jobs:
-  noop:
+  patch:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - run: echo disabled
+      - uses: actions/checkout@v4
+      - name: Patch backend
+        run: |
+          python3 << 'ENDPY'
+          from pathlib import Path
+
+          p = Path("backend/src/bookings/bookings.service.ts")
+          text = p.read_text()
+          if "MAX_CONCURRENT_BOOKINGS" not in text:
+              pro_idx = text.find("const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } })")
+              phone_idx = text.find("if (!customer.phoneVerified)")
+              if pro_idx < 0 or phone_idx < 0 or pro_idx < phone_idx:
+                  raise SystemExit("markers missing")
+              insert = '''
+    // #40 item 31 — limit concurrent active bookings per customer
+    const maxConcurrent = Math.max(
+      1,
+      parseInt(process.env.MAX_CONCURRENT_BOOKINGS || '3', 10) || 3,
+    );
+    const activeCount = await this.prisma.booking.count({
+      where: {
+        customerId,
+        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+        startAt: { gte: new Date() },
+      },
+    });
+    if (activeCount >= maxConcurrent) {
+      throw new BadRequestException(
+        `حداکثر ${maxConcurrent} رزرو فعال همزمان مجاز است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.`,
+      );
+    }
+
+    '''
+              text = text[:pro_idx] + insert + text[pro_idx:]
+              p.write_text(text)
+              print("31 OK")
+          else:
+              print("31 skip")
+
+          p2 = Path("backend/src/professionals/professionals.service.ts")
+          t2 = p2.read_text()
+          if "lastLoginAt: true" not in t2:
+              pi = t2.find("private publicInclude")
+              sel = t2.find("select: {", pi)
+              insert_at = sel + len("select: {")
+              t2 = t2[:insert_at] + "\n          lastLoginAt: true," + t2[insert_at:]
+              p2.write_text(t2)
+              print("32 include OK")
+          else:
+              print("32 include skip")
+
+          p3 = Path("backend/src/auth/auth.service.ts")
+          t3 = p3.read_text()
+          needle = "const tokens = await this.issueTokens(user.id, user.phone);"
+          login_idx = t3.find("async login")
+          rel = t3.find(needle, login_idx)
+          if rel > 0 and "lastLoginAt" not in t3[rel-120:rel]:
+              block = "// #40 item 32\n    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => undefined);\n    "
+              t3 = t3[:rel] + block + t3[rel:]
+              print("32 login OK")
+          vo = t3.find("async verifyOtp")
+          rel2 = t3.find(needle, vo)
+          if rel2 > 0 and "lastLoginAt" not in t3[rel2-120:rel2]:
+              block = "await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => undefined);\n    "
+              t3 = t3[:rel2] + block + t3[rel2:]
+              print("32 otp OK")
+          p3.write_text(t3)
+          print("DONE")
+          ENDPY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(#40): items 31-32 concurrent booking limit + last activity" || echo nochange
+          git push
