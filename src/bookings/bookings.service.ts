@@ -340,7 +340,7 @@ export class BookingsService {
         orderBy: { startAt: 'desc' },
         include: {
           professional: {
-            include: { user: { select: { profile: { select: { displayName: true } } } } },
+            include: { user: { select: { phone: true, profile: { select: { displayName: true, avatarUrl: true } } } } },
           },
           items: { include: { service: true } },
           payment: true,
