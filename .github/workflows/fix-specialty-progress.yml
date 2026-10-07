@@ -1,0 +1,41 @@
+name: fix-specialty-progress
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/zibagar/services/SpecialtyView.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'uploadProgress' not in t:
+              t = t.replace(
+                  "uploadState: 'idle' | 'uploading' | 'ok' | 'err';\n  uploadErr: string | null;",
+                  "uploadState: 'idle' | 'uploading' | 'ok' | 'err';\n  uploadErr: string | null;\n  uploadProgress?: number | null;",
+                  1,
+              )
+              t = t.replace('uploadState,\n    uploadErr,', 'uploadState,\n    uploadErr,\n    uploadProgress,', 1)
+              # progress UI near uploading text
+              if "uploadState === 'uploading' ?" in t and 'uploadProgress != null' not in t:
+                  t = t.replace(
+                      "{uploadState === 'err' && uploadErr && <p className=\"mt-2 text-xs text-red-600\">",
+                      "{uploadState === 'uploading' && uploadProgress != null && (\n          <div className=\"mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100\">\n            <div className=\"h-full rounded-full bg-blue-500 transition-all\" style={{ width: `${uploadProgress}%` }} />\n          </div>\n        )}\n        {uploadState === 'err' && uploadErr && <p className=\"mt-2 text-xs text-red-600\">",
+                      1,
+                  )
+              p.write_text(t, encoding='utf-8')
+              print('OK')
+          else:
+              print('exists')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: SpecialtyView accepts uploadProgress prop" && git push; fi
