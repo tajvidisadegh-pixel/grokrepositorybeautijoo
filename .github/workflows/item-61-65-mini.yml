@@ -1,0 +1,116 @@
+name: item-61-65-mini
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          # 61 address privacy
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'pl.location.address' in t:
+              t = t.replace('{pl.location.address}', '\u0622\u062f\u0631\u0633 \u062f\u0642\u06cc\u0642 \u067e\u0633 \u0627\u0632 \u062a\u0623\u06cc\u06cc\u062f \u0646\u0648\u0628\u062a')
+              t = t.replace('precision={(loc as { precision?: string | null }).precision === "exact" ? "exact" : "approximate"}', 'precision="approximate"')
+              p.write_text(t, encoding='utf-8')
+              print('61 ok')
+
+          # 62 repeat booking
+          p = Path('frontend/src/app/panel/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if '\u062a\u06a9\u0631\u0627\u0631 \u0627\u06cc\u0646 \u0631\u0632\u0631\u0648' not in t:
+              needle = "href={`/booking/confirmation/${b.id}`}"
+              if needle in t and 'repeat-booking' not in t:
+                  # add link after confirmation link block - insert marker comment and button via string near details
+                  old = """                    <Link href={`/booking/confirmation/${b.id}`}>\n                      <Button size=\"sm\" variant=\"outline\">\n                        \u062c\u0632\u0626\u06cc\u0627\u062a\n                      </Button>\n                    </Link>"""
+                  new = old + """\n                    {(b.status === 'completed' || b.status === 'cancelled') && (b as any).professional?.slug && (\n                      <Link href={`/professionals/${(b as any).professional.slug}?service=${(b as any).professionalServiceId || ''}`}>\n                        <Button size=\"sm\" variant=\"secondary\">\n                          \u062a\u06a9\u0631\u0627\u0631 \u0627\u06cc\u0646 \u0631\u0632\u0631\u0648\n                        </Button>\n                      </Link>\n                    )}"""
+                  if old in t:
+                      t = t.replace(old, new, 1)
+                      p.write_text(t, encoding='utf-8')
+                      print('62 ok')
+                  else:
+                      print('62 miss', old[:40] in t)
+
+          # 64 max addons
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'MAX_ADDONS' not in t:
+              t = t.replace('type Step', 'const MAX_ADDONS = 5;\ntype Step', 1)
+              if ': [...prev, a.id]' in t:
+                  t = t.replace(': [...prev, a.id]', ': prev.length >= MAX_ADDONS ? prev : [...prev, a.id]', 1)
+              p.write_text(t, encoding='utf-8')
+              print('64 ok')
+
+          # 63 admin notify
+          p = Path('backend/src/professionals/professionals.service.ts')
+          t = p.read_text(encoding='utf-8')
+          if '\u0632\u06cc\u0628\u0627\u06af\u0631 \u062c\u062f\u06cc\u062f \u062f\u0631 \u0627\u0646\u062a\u0638\u0627\u0631 \u0628\u0631\u0631\u0633\u06cc' not in t:
+              idx = t.find('return { ...updated, completion };')
+              if idx > 0 and 'pending_review' in t[max(0,idx-900):idx]:
+                  inject = '''\n    // #40 item 63\n    try {\n      const adminRoles = await this.prisma.role.findMany({ where: { name: { in: ['admin', 'SUPER_ADMIN', 'super_admin'] } }, select: { id: true } });\n      const roleIds = adminRoles.map((r) => r.id);\n      if (roleIds.length) {\n        const admins = await this.prisma.userRole.findMany({ where: { roleId: { in: roleIds } }, select: { userId: true }, distinct: ['userId'] });\n        for (const a of admins) {\n          if (a.userId === userId) continue;\n          await this.prisma.notification.create({ data: { userId: a.userId, type: 'system', title: '\u0632\u06cc\u0628\u0627\u06af\u0631 \u062c\u062f\u06cc\u062f \u062f\u0631 \u0627\u0646\u062a\u0638\u0627\u0631 \u0628\u0631\u0631\u0633\u06cc', body: `\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u00ab${pro.title || '\u0632\u06cc\u0628\u0627\u06af\u0631'}\u00bb \u0628\u0631\u0627\u06cc \u062a\u0623\u06cc\u06cc\u062f \u0627\u0631\u0633\u0627\u0644 \u0634\u062f.`, data: { professionalId: pro.id, status: 'pending_review', href: '/admin/professionals' } } }).catch(() => undefined);\n        }\n      }\n    } catch { /* non-blocking */ }\n'''
+                  t = t[:idx] + inject + '\n    ' + t[idx:]
+                  p.write_text(t, encoding='utf-8')
+                  print('63 ok')
+
+          # 65 pause create guard
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text(encoding='utf-8')
+          if '_pauseBookings' not in t:
+              m = 'if (!customer.phoneVerified)'
+              pos = t.find(m)
+              if pos > 0:
+                  lines = t[pos:].split('\n')
+                  depth = 0
+                  end_i = 0
+                  for i, line in enumerate(lines):
+                      depth += line.count('{') - line.count('}')
+                      if i > 0 and depth <= 0:
+                          end_i = i
+                          break
+                  inject = '''\n    // #40 item 65\n    {\n      const proId = (data as { professionalId?: string }).professionalId;\n      if (proId) {\n        const proRow = await this.prisma.professional.findUnique({ where: { id: proId }, select: { socialLinks: true } });\n        const sl = (proRow?.socialLinks || {}) as Record<string, unknown>;\n        if (sl._pauseBookings === true) {\n          throw new BadRequestException('\u0627\u06cc\u0646 \u0632\u06cc\u0628\u0627\u06af\u0631 \u0641\u0639\u0644\u0627\u064b \u0646\u0648\u0628\u062a \u062c\u062f\u06cc\u062f \u0646\u0645\u06cc\u200c\u067e\u0630\u06cc\u0631\u062f.');\n        }\n      }\n    }\n'''
+                  t = t[:pos] + '\n'.join(lines[:end_i+1]) + inject + '\n'.join(lines[end_i+1:])
+                  p.write_text(t, encoding='utf-8')
+                  print('65 create ok')
+
+          # 65 merge socialLinks
+          p = Path('backend/src/professionals/professionals.service.ts')
+          t = p.read_text(encoding='utf-8')
+          if 'socialLinks: data.socialLinks' in t:
+              t = t.replace('socialLinks: data.socialLinks', 'socialLinks: { ...((pro.socialLinks as Record<string, unknown>) || {}), ...((data.socialLinks as Record<string, unknown>) || {}) }', 1)
+              p.write_text(t, encoding='utf-8')
+              print('65 merge ok')
+
+          # 65 pause component
+          comp = Path('frontend/src/components/professionals/pause-bookings-toggle.tsx')
+          if not comp.exists():
+              comp.parent.mkdir(parents=True, exist_ok=True)
+              comp.write_text("'use client';\nimport { useEffect, useState } from 'react';\nimport { apiClient } from '@/lib/api';\nimport { friendlyApiError } from '@/lib/api-errors';\nimport { Button } from '@/components/ui/button';\n\nexport function PauseBookingsToggle() {\n  const [paused, setPaused] = useState(false);\n  const [loading, setLoading] = useState(true);\n  const [busy, setBusy] = useState(false);\n  const [msg, setMsg] = useState<string | null>(null);\n  const [err, setErr] = useState<string | null>(null);\n  useEffect(() => {\n    let c = false;\n    (async () => {\n      try {\n        const me = await apiClient.get<{ socialLinks?: { _pauseBookings?: boolean } }>('/professionals/me');\n        if (!c) setPaused(Boolean(me?.socialLinks?._pauseBookings));\n      } catch {} finally { if (!c) setLoading(false); }\n    })();\n    return () => { c = true; };\n  }, []);\n  async function toggle() {\n    setBusy(true); setMsg(null); setErr(null);\n    try {\n      const next = !paused;\n      await apiClient.patch('/professionals/me', { socialLinks: { _pauseBookings: next } });\n      setPaused(next);\n      setMsg(next ? '\u062e\u0627\u0645\u0648\u0634 \u0634\u062f' : '\u0641\u0639\u0627\u0644 \u0634\u062f');\n    } catch (e) { setErr(friendlyApiError(e)); } finally { setBusy(false); }\n  }\n  if (loading) return null;\n  return (\n    <div className=\"rounded-2xl border border-border bg-white p-4 text-sm\">\n      <div className=\"flex flex-wrap items-center justify-between gap-3\">\n        <div>\n          <p className=\"font-medium\">\u062f\u0631\u06cc\u0627\u0641\u062a \u0646\u0648\u0628\u062a \u062c\u062f\u06cc\u062f</p>\n          <p className=\"mt-0.5 text-xs text-gray\">{paused ? '\u0645\u0648\u0642\u062a\u0627\u064b \u062e\u0627\u0645\u0648\u0634' : '\u0641\u0639\u0627\u0644'}</p>\n        </div>\n        <Button size=\"sm\" variant={paused ? 'secondary' : 'outline'} loading={busy} onClick={() => void toggle()}>\n          {paused ? '\u0641\u0639\u0627\u0644\u200c\u0633\u0627\u0632\u06cc \u062f\u0648\u0628\u0627\u0631\u0647' : '\u0641\u0639\u0644\u0627\u064b \u0646\u0648\u0628\u062a \u0646\u0645\u06cc\u200c\u06af\u06cc\u0631\u0645'}\n        </Button>\n      </div>\n      {msg && <p className=\"mt-2 text-xs text-emerald-700\">{msg}</p>}\n      {err && <p className=\"mt-2 text-xs text-red-600\">{err}</p>}\n    </div>\n  );\n}\n")
+              print('65 comp ok')
+
+          # wire zibagar dashboard
+          p = Path('frontend/src/app/zibagar/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'PauseBookingsToggle' not in t and 'use client' in t[:80]:
+              t = t.replace("'use client';", "'use client';\nimport { PauseBookingsToggle } from '@/components/professionals/pause-bookings-toggle';", 1)
+              m = re.search(r'(return \(\s*\n\s*<div[^>]*>)', t)
+              if m:
+                  t = t[:m.end()] + '\n      <div className="mb-4"><PauseBookingsToggle /></div>\n' + t[m.end():]
+                  p.write_text(t, encoding='utf-8')
+                  print('65 wire ok')
+
+          print('DONE')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "feat: #40 items 61-65 (privacy, repeat, admin notify, max addons, pause)" && git push; fi
