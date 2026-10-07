@@ -133,20 +133,22 @@ export class ProfessionalsController {
     return this.service.requestPayout(userId, dto.amount, dto.note);
   }
 
-  
   @ApiBearerAuth()
   @Roles('professional', 'admin', 'SUPER_ADMIN')
-  
   @Get('me/pinned-services')
   listPinned(@CurrentUser('id') userId: string) {
     return this.service.listPinnedServices(userId);
   }
 
+  @ApiBearerAuth()
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Post('me/pinned-services')
   setPinned(@CurrentUser('id') userId: string, @Body() body: { serviceIds?: string[] }) {
     return this.service.setPinnedServices(userId, body?.serviceIds || []);
   }
 
+  @ApiBearerAuth()
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Get('me/blocked-customers')
   listBlocked(@CurrentUser('id') userId: string) {
     return this.service.listBlockedCustomers(userId);
