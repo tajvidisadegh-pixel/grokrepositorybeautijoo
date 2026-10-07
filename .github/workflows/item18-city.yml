@@ -1,9 +1,9 @@
-name: fix-orphan-zb
+name: fix-orphan2
 
 on:
   push:
     paths:
-      - '.github/triggers/fix-orphan.flag'
+      - '.github/triggers/fix-orphan2.flag'
 
 jobs:
   patch:
@@ -12,10 +12,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: python3 .github/triggers/fix-orphan.py
+      - run: python3 .github/triggers/fix-orphan2.py
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add frontend/src/app/zibagar/bookings/page.tsx
-          git commit -m "fix(#40): remove orphan JSX after zibagar bookings" || echo nochange
+          git commit -m "fix(#40): truncate orphan JSX in zibagar bookings" || echo nochange
           git push
