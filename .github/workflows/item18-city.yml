@@ -1,9 +1,9 @@
-name: fix-41-45-types
+name: fix-46-50
 
 on:
   push:
     paths:
-      - '.github/triggers/fix-41-45.flag'
+      - '.github/triggers/fix-46-50.flag'
 
 jobs:
   patch:
@@ -13,11 +13,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fix
-        run: python3 .github/triggers/fix-41-45.py
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text()
+          old = 'where: { id: professionalId },'
+          new = 'where: { id: data.professionalId },'
+          if old in t:
+              t = t.replace(old, new, 1)
+              p.write_text(t)
+              print('fixed professionalId')
+          else:
+              print('already fixed or missing')
+          # also check notifications.create signature
+          r = Path('backend/src/reminders/reminders.service.ts')
+          rt = r.read_text()
+          # Verify create API - look at other calls in file
+          print('reminders has create', 'notifications.create' in rt)
+          PY
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/panel/bookings/page.tsx
-          git commit -m "fix(#40): panel bookings report UI structure + types" || echo nochange
+          git add backend/src/bookings/bookings.service.ts
+          git commit -m "fix(#40): use data.professionalId in block check" || echo nochange
           git push
