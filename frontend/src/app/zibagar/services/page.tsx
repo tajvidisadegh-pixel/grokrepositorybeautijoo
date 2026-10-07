@@ -29,6 +29,7 @@ import {
   type MediaAssetItem,
 } from '@/lib/panel-api';
 import { apiClient } from '@/lib/api';
+import { uploadMyMedia as uploadMyMediaWithProgress } from '@/lib/media-upload';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, parsePriceInput, formatPriceDigits } from '@/lib/utils';
 import {
@@ -78,6 +79,7 @@ export default function ZibagarServicesPage() {
 
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'ok' | 'err'>('idle');
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [addSearch, setAddSearch] = useState('');
 
   const [showCreateSpecialty, setShowCreateSpecialty] = useState(false);
@@ -505,12 +507,17 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
     setUploadState('uploading');
     setUploadErr(null);
     try {
-      await uploadMyMedia(file, 'portfolio', attachToPsId);
+      setUploadProgress(0);
+      const uploader = typeof uploadMyMediaWithProgress === 'function' ? uploadMyMediaWithProgress : uploadMyMedia;
+      await uploader(file, 'portfolio', attachToPsId, (pct: number) => setUploadProgress(pct));
+      setUploadProgress(100);
       setUploadState('ok');
       await load();
     } catch (e) {
       setUploadState('err');
       setUploadErr(friendlyApiError(e));
+    } finally {
+      setTimeout(() => setUploadProgress(null), 800);
     }
   }
 
@@ -750,6 +757,7 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
           specialtyMenu={specialtyMenu}
           busy={busy}
           uploadState={uploadState}
+          uploadProgress={uploadProgress}
           uploadErr={uploadErr}
           ensureAndEditService={ensureAndEditService}
           setSelectedPsId={setSelectedPsId}
@@ -798,6 +806,7 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
           editingAddOnId={editingAddOnId}
           setEditingAddOnId={setEditingAddOnId}
           uploadState={uploadState}
+          uploadProgress={uploadProgress}
           uploadErr={uploadErr}
           onSavePs={onSavePs}
           applyFixedToAllUnderRoot={applyFixedToAllUnderRoot}

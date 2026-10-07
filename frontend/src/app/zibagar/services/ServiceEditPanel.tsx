@@ -50,6 +50,7 @@ export type ServiceEditPanelProps = {
   setEditingAddOnId: (id: string | null) => void;
   uploadState: 'idle' | 'uploading' | 'ok' | 'err';
   uploadErr: string | null;
+  uploadProgress?: number | null;
   onSavePs: () => void | Promise<void>;
   applyFixedToAllUnderRoot: () => void | Promise<void>;
   onAddModel: () => void | Promise<void>;
@@ -61,7 +62,7 @@ export type ServiceEditPanelProps = {
 };
 
 export function ServiceEditPanel(props: ServiceEditPanelProps) {
-  const { selectedPs, busy, price, setPrice, durationMin, setDurationMin, activeRootId, showModels, setShowModels, priceRules, setPriceRules, durationRules, setDurationRules, ruleLabel, setRuleLabel, rulePrice, setRulePrice, ruleDuration, setRuleDuration, showAddOnForm, setShowAddOnForm, addOnName, setAddOnName, addOnPrice, setAddOnPrice, addOnExtra, setAddOnExtra, editingAddOnId, setEditingAddOnId, uploadState, uploadErr, onSavePs, applyFixedToAllUnderRoot, onAddModel, onAddOn, onToggleActive, onDeleteMedia, onUploadMedia, load } = props;
+  const { selectedPs, busy, price, setPrice, durationMin, setDurationMin, activeRootId, showModels, setShowModels, priceRules, setPriceRules, durationRules, setDurationRules, ruleLabel, setRuleLabel, rulePrice, setRulePrice, ruleDuration, setRuleDuration, showAddOnForm, setShowAddOnForm, addOnName, setAddOnName, addOnPrice, setAddOnPrice, addOnExtra, setAddOnExtra, editingAddOnId, setEditingAddOnId, uploadState, uploadErr, uploadProgress, onSavePs, applyFixedToAllUnderRoot, onAddModel, onAddOn, onToggleActive, onDeleteMedia, onUploadMedia, load } = props;
 
   return (
     <div className={`space-y-5 rounded-2xl border ${navy.border} bg-white p-4`}>
@@ -114,6 +115,7 @@ export function ServiceEditPanel(props: ServiceEditPanelProps) {
         <p className={`mb-2 text-sm font-medium ${navy.title}`}>نمونه‌کار این خدمت</p>
         <div className="mb-2 grid grid-cols-3 gap-2">{(selectedPs.mediaAssets || []).map((m: MediaAssetItem) => <div key={m.id} className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">{isVideoMime(m.mimeType) ? <video src={resolveMediaUrl(m.publicUrl)} className="h-full w-full object-cover" /> : <img src={resolveMediaUrl(m.publicUrl)} alt="" className="h-full w-full object-cover" />}<button type="button" className="absolute left-1 top-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white" onClick={() => onDeleteMedia(m.id)}>حذف</button></div>)}</div>
         <label className="inline-block cursor-pointer text-sm text-blue-600">+ آپلود عکس/ویدیو<input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onUploadMedia(f, selectedPs.id); e.target.value = ''; }} /></label>
+        {uploadState === 'uploading' && (<div className="mt-2 space-y-1"><div className="flex justify-between text-[11px] text-gray"><span>در حال آپلود…</span><span dir="ltr">{uploadProgress != null ? `${uploadProgress}%` : '…'}</span></div><div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${uploadProgress ?? 10}%` }} /></div></div>)}
         {uploadState === 'err' && uploadErr && <p className="mt-1 text-xs text-red-600">{uploadErr}</p>}
       </div>
     </div>

@@ -317,7 +317,16 @@ export function isAllowedImageFile(file: File): boolean {
   return false;
 }
 
-export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
+export async function uploadMyMedia(
+  file: File,
+  kind: string,
+  professionalServiceId?: string,
+  onProgress?: (percent: number) => void,
+) {
+  if (typeof window !== 'undefined') {
+    const { uploadMyMedia: uploadWithProgress } = await import('./media-upload');
+    return uploadWithProgress(file, kind, professionalServiceId, onProgress);
+  }
   const { getAccessToken } = await import('./auth-storage');
   const { ApiError, tryRefresh } = await import('./api');
   const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');

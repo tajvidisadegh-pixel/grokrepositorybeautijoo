@@ -191,6 +191,7 @@ export default function ZibagarBookingsPage() {
       }
       await transitionBooking(id, action, reason);
       const labels: Record<string, string> = {
+        'no-show': 'عدم حضور مشتری ثبت شد.',
         confirm: 'رزرو با موفقیت تأیید شد.',
         reject: 'رزرو رد شد.',
         cancel: 'رزرو لغو شد.',
