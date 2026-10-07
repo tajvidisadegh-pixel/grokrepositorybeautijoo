@@ -1,9 +1,9 @@
-name: fix-36-40-types
+name: fix-41-45-types
 
 on:
   push:
     paths:
-      - '.github/triggers/fix-36-40.flag'
+      - '.github/triggers/fix-41-45.flag'
 
 jobs:
   patch:
@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fix
-        run: python3 .github/triggers/fix-36-40.py
+        run: python3 .github/triggers/fix-41-45.py
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/search/page.tsx frontend/src/app/zibagar/hours/page.tsx
-          git commit -m "fix(#40): typecheck items 38-40 pageHref + formatDate imports" || echo nochange
+          git add frontend/src/app/panel/bookings/page.tsx
+          git commit -m "fix(#40): panel bookings report UI structure + types" || echo nochange
           git push
