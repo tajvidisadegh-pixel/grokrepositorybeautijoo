@@ -1,7 +1,9 @@
 name: apply-item-31-32
 
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - '.github/triggers/apply-31-32.flag'
 
 jobs:
   patch:
@@ -22,7 +24,7 @@ jobs:
               phone_idx = text.find("if (!customer.phoneVerified)")
               if pro_idx < 0 or phone_idx < 0 or pro_idx < phone_idx:
                   raise SystemExit("markers missing")
-              insert = '''
+              insert = """
     // #40 item 31 — limit concurrent active bookings per customer
     const maxConcurrent = Math.max(
       1,
@@ -41,7 +43,7 @@ jobs:
       );
     }
 
-    '''
+    """
               text = text[:pro_idx] + insert + text[pro_idx:]
               p.write_text(text)
               print("31 OK")
@@ -82,6 +84,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add backend/src/bookings/bookings.service.ts backend/src/professionals/professionals.service.ts backend/src/auth/auth.service.ts
           git commit -m "feat(#40): items 31-32 concurrent booking limit + last activity" || echo nochange
           git push
