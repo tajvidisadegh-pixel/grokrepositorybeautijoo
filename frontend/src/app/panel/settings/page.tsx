@@ -73,13 +73,13 @@ export default function PanelSettingsPage() {
   const [delMsg, setDelMsg] = useState<string | null>(null);
   const [delErr, setDelErr] = useState<string | null>(null);
   const [delLoading, setDelLoading] = useState(false);
+
   const [newPhone, setNewPhone] = useState('');
   const [phoneCode, setPhoneCode] = useState('');
   const [phoneStep, setPhoneStep] = useState<'idle' | 'code'>('idle');
   const [phoneMsg, setPhoneMsg] = useState<string | null>(null);
   const [phoneErr, setPhoneErr] = useState<string | null>(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
-
 
   const refreshSessions = useCallback(async () => {
     setSessLoading(true);
@@ -98,7 +98,7 @@ export default function PanelSettingsPage() {
     refreshSessions();
   }, [refreshSessions]);
 
-  
+
   async function onRequestPhoneChange() {
     setPhoneMsg(null);
     setPhoneErr(null);
@@ -108,7 +108,122 @@ export default function PanelSettingsPage() {
       setPhoneStep('code');
       setPhoneMsg('کد تأیید به شماره جدید ارسال شد');
     } catch (e: unknown) {
-      setPhoneErr(e instanceof Error ? e.message : 'خطا در حذف حساب';
+      const msg = (e as { message?: string })?.message || 'خطا در ارسال کد';
+      setPhoneErr(String(msg));
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
+
+  async function onVerifyPhoneChange() {
+    setPhoneMsg(null);
+    setPhoneErr(null);
+    setPhoneLoading(true);
+    try {
+      const res = await verifyChangePhone(newPhone.trim(), phoneCode.trim());
+      setPhoneMsg(res?.message || 'شماره موبایل با موفقیت تغییر کرد');
+      setPhoneStep('idle');
+      setPhoneCode('');
+      setNewPhone('');
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message || 'کد نامعتبر است';
+      setPhoneErr(String(msg));
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
+
+  async function onLogout() {
+    await logout();
+    router.replace('/login');
+  }
+
+  async function onChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwMsg(null);
+    setPwErr(null);
+    if (newPassword.length < 8) {
+      setPwErr('رمز جدید باید حداقل ۸ کاراکتر باشد');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwErr('تکرار رمز جدید مطابقت ندارد');
+      return;
+    }
+    setPwLoading(true);
+    try {
+      const res = await changePassword({ currentPassword, newPassword });
+      setPwMsg(res?.message || 'رمز با موفقیت تغییر کرد');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(async () => {
+        await logout();
+        router.replace('/login');
+      }, 1500);
+    } catch (err: unknown) {
+      const msg =
+        (err as { message?: string })?.message ||
+        'خطا در تغییر رمز';
+      setPwErr(String(msg));
+    } finally {
+      setPwLoading(false);
+    }
+  }
+
+  async function onRevoke(id: string) {
+    setSessMsg(null);
+    try {
+      await revokeSession(id);
+      setSessMsg('نشست لغو شد');
+      await refreshSessions();
+    } catch {
+      setSessMsg('خطا در لغو نشست');
+    }
+  }
+
+  async function onRevokeAll() {
+    setSessMsg(null);
+    try {
+      await revokeAllSessions();
+      setSessMsg('همه نشست‌ها لغو شدند');
+      await logout();
+      router.replace('/login');
+    } catch {
+      setSessMsg('خطا در لغو همه نشست‌ها');
+    }
+  }
+
+  function togglePref(key: keyof NotifPrefs) {
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefs(next);
+    savePrefs(next);
+  }
+
+  async function onDeleteAccount(e: React.FormEvent) {
+    e.preventDefault();
+    setDelMsg(null);
+    setDelErr(null);
+    if (!deleteConfirm) {
+      setDelErr('لطفاً تأیید حذف را علامت بزنید');
+      return;
+    }
+    if (!deletePassword) {
+      setDelErr('رمز عبور الزامی است');
+      return;
+    }
+    setDelLoading(true);
+    try {
+      const res = await deleteAccount({ password: deletePassword });
+      setDelMsg(res?.message || 'حساب حذف شد');
+      setTimeout(async () => {
+        await logout();
+        router.replace('/login');
+      }, 1200);
+    } catch (err: unknown) {
+      const msg =
+        (err as { message?: string })?.message ||
+        'خطا در حذف حساب';
       setDelErr(String(msg));
     } finally {
       setDelLoading(false);
@@ -263,9 +378,12 @@ export default function PanelSettingsPage() {
         </label>
       </Card>
 
-            <Card className="space-y-3 p-4">
+      
+      <Card className="space-y-3 p-4">
         <h2 className="text-base font-semibold">تغییر شماره موبایل</h2>
-        <p className="text-xs text-gray">شماره فعلی: {user?.phone || '—'} — شماره جدید با کد تأیید می‌شود.</p>
+        <p className="text-xs text-gray">
+          شماره فعلی: <span dir="ltr">{user?.phone || '—'}</span> — شماره جدید فقط با کد تأیید OTP عوض می‌شود.
+        </p>
         <input
           className="h-11 w-full rounded-2xl border border-border px-3 text-sm"
           placeholder="09xxxxxxxxx"
@@ -286,18 +404,28 @@ export default function PanelSettingsPage() {
         {phoneErr && <p className="text-sm text-red-600">{phoneErr}</p>}
         <div className="flex gap-2">
           {phoneStep === 'idle' ? (
-            <Button size="sm" loading={phoneLoading} onClick={() => void onRequestPhoneChange()} disabled={newPhone.trim().length < 11}>
+            <Button
+              size="sm"
+              loading={phoneLoading}
+              onClick={() => void onRequestPhoneChange()}
+              disabled={newPhone.trim().length < 11}
+            >
               ارسال کد
             </Button>
           ) : (
-            <Button size="sm" loading={phoneLoading} onClick={() => void onVerifyPhoneChange()} disabled={phoneCode.trim().length < 4}>
+            <Button
+              size="sm"
+              loading={phoneLoading}
+              onClick={() => void onVerifyPhoneChange()}
+              disabled={phoneCode.trim().length < 4}
+            >
               تأیید و تغییر
             </Button>
           )}
         </div>
       </Card>
 
-      <Card className="space-y-4 border-red-200">
+<Card className="space-y-4 border-red-200">
         <h2 className="text-lg font-semibold text-red-700">منطقه خطر — حذف حساب</h2>
         <p className="text-sm text-gray">
           با حذف حساب، دسترسی شما قطع می‌شود و وضعیت حساب به «حذف‌شده» تغییر می‌کند. این عمل
