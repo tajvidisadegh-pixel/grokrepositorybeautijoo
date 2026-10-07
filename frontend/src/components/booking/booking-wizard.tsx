@@ -262,8 +262,8 @@ export function BookingWizard({
     if (user && user.phoneVerified === false) {
       const draft = buildDraft();
       saveBookingDraft(draft);
-      setSubmitError('قبل از رزرو باید شماره موبایل را تأیید کنید.');
-      router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft)));
+      setSubmitError('Phone verification required');
+      router.push('/otp?reason=booking');
       return;
     }
     setSubmitting(true);
@@ -353,8 +353,336 @@ export function BookingWizard({
         ))}
       </ol>
 
-      {/* truncated body continues in part 2 - MUST BE FULL */}
-      <p className="text-red-600">RESTORE_INCOMPLETE</p>
+      {step === 'service' && (
+        <Card className="mt-6 space-y-3">
+          <h2 className="font-bold">انتخاب خدمت</h2>
+          <ul className="space-y-2">
+            {services.map((s) => (
+              <li key={s.serviceId}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServiceId(s.serviceId);
+                    if (!(s.priceRules || []).length) setStep('datetime');
+                  }}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-right text-sm transition ${
+                    serviceId === s.serviceId
+                      ? 'border-coral bg-coral-soft'
+                      : 'border-border hover:border-coral-light'
+                  }`}
+                >
+                  <span>
+                    <span className="font-medium">{s.name}</span>
+                    <span className="mt-0.5 block text-xs text-gray">
+                      {s.durationMin} دقیقه{s.categoryName ? ` · ${s.categoryName}` : ''}
+                    </span>
+                  </span>
+                  <span className="font-bold text-coral">{formatPrice(s.price)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {selected && (selected.priceRules || []).length > 0 && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <p className="text-sm font-medium">انتخاب زیرمجموعه</p>
+              <ul className="space-y-1.5">
+                {(selected.priceRules || []).map((r) => {
+                  const on = priceRuleId === r.id;
+                  return (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectPriceRule(r.id)}
+                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
+                          on ? 'border-coral bg-coral/5' : 'border-border'
+                        }`}
+                      >
+                        <span>
+                          {on ? '✓ ' : ''}
+                          {r.label}
+                        </span>
+                        <span className="font-medium">{formatPrice(r.price)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {selected && (selected.addOns || []).length > 0 && (
+            <div className="space-y-2 border-t border-border pt-3">
+              {!showAddOns ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddOns(true)}
+                  className="text-sm font-medium text-blue"
+                >
+                  ＋ گزینه‌های اضافی
+                </button>
+              ) : (
+                <>
+                  <p className="text-sm font-medium">گزینه‌های اضافی</p>
+                  <ul className="space-y-1.5">
+                    {(selected.addOns || []).map((a) => {
+                      const on = selectedAddOnIds.includes(a.id);
+                      return (
+                        <li key={a.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggleAddOn(a.id)}
+                            className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
+                              on ? 'border-blue bg-blue-soft' : 'border-border'
+                            }`}
+                          >
+                            <span>
+                              {on ? '☑ ' : '☐ '}
+                              {a.name}
+                              {a.extraDurationMin ? ` (+${a.extraDurationMin}د)` : ''}
+                            </span>
+                            <span className="font-medium">{formatPrice(a.price)}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <button
+                    type="button"
+                    className="text-xs text-gray-muted"
+                    onClick={() => {
+                      setShowAddOns(false);
+                      setSelectedAddOnIds([]);
+                    }}
+                  >
+                    رد کردن
+                  </button>
+                  <div className="flex justify-between rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
+                    <span className="text-gray">جمع · {serviceDuration} دقیقه</span>
+                    <span className="font-bold text-blue">{formatPrice(displayPrice)}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <Button className="w-full" disabled={!serviceId} onClick={goDatetime}>
+            ادامه
+          </Button>
+        </Card>
+      )}
+
+      {step === 'datetime' && selected && (
+        <Card className="mt-6 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold">تاریخ و ساعت</h2>
+            <button
+              type="button"
+              className="text-sm text-coral hover:underline"
+              onClick={() => setStep('service')}
+            >
+              تغییر خدمت
+            </button>
+          </div>
+          <p className="text-sm text-gray">
+            {selected.name}
+            {selectedRuleLabel ? ` · ${selectedRuleLabel}` : ''}
+            {selectedAddOnNames.length ? ` · ${selectedAddOnNames.join('، ')}` : ''}
+            {' — '}
+            {totalDuration} دقیقه — {formatPrice(displayPrice)}
+          </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium">تاریخ</label>
+            <JalaliDateInput
+    value={date}
+    min={todayISO()}
+    onChange={(iso) => {
+      setDate(iso);
+      setSlotStart('');
+    }}
+  />
+          </div>
+          {locations.length > 0 && (
+            <div>
+              <label className="mb-1 block text-sm font-medium">مکان</label>
+              <select
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+                className="h-11 w-full rounded-2xl border border-border bg-white px-3 text-sm"
+              >
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} — {l.city}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium">ساعت</label>
+              {slotsLoading && <span className="text-xs text-gray">در حال بارگذاری...</span>}
+            </div>
+            {slotsError && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{slotsError}</p>
+            )}
+            {!slotsLoading && !slotsError && slots.length === 0 && (
+              <p className="text-sm text-gray">ساعت آزادی برای این تاریخ نیست.</p>
+            )}
+            {!slotsLoading && !slotsError && slots.length > 0 && slots.every((s) => s.available === false) && (
+              <p className="text-sm text-gray">همه ساعت‌های این روز پر یا مسدود هستند.</p>
+            )}
+            <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+              {slots.map((s) => {
+                const free = s.available !== false;
+                return (
+                  <button
+                    key={s.start}
+                    type="button"
+                    dir="ltr"
+                    disabled={!free}
+                    title={free ? s.start : 'پر / مسدود'}
+                    onClick={() => free && setSlotStart(s.start)}
+                    className={`rounded-xl border py-2 text-sm transition ${
+                      !free
+                        ? 'cursor-not-allowed border-red-300 bg-red-50 text-red-700 line-through opacity-90'
+                        : slotStart === s.start
+                          ? 'border-coral bg-coral text-white'
+                          : 'border-border hover:border-coral-light'
+                    }`}
+                  >
+                    {free ? s.start : `${s.start} پر`}
+                  </button>
+                );
+              })}
+            </div>
+            {slots.some((s) => s.available === false) && (
+              <p className="mt-2 text-xs text-red-600">ساعت‌های قرمز پر یا مسدود هستند و قابل انتخاب نیستند.</p>
+            )}
+          </div>
+          <Button className="w-full" disabled={!slotStart} onClick={goSummary}>
+            ادامه به خلاصه
+          </Button>
+        </Card>
+      )}
+
+      {step === 'summary' && selected && (
+        <Card className="mt-6 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold">خلاصه رزرو</h2>
+            <button
+              type="button"
+              className="text-sm text-coral hover:underline"
+              onClick={() => setStep('datetime')}
+            >
+              ویرایش زمان
+            </button>
+          </div>
+          <dl className="space-y-2 text-sm">
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray">زیباگر</dt>
+              <dd>{professional.name}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray">خدمت</dt>
+              <dd>
+                {selected.name}
+                {selectedRuleLabel ? ` · ${selectedRuleLabel}` : ''}
+              </dd>
+            </div>
+            {selectedAddOnNames.length > 0 && (
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray">اضافات</dt>
+                <dd>{selectedAddOnNames.join('، ')}</dd>
+              </div>
+            )}
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray">تاریخ</dt>
+              <dd>{isoToJalaliLabel(date)}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray">ساعت</dt>
+              <dd dir="ltr">{slotStart}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray">مدت</dt>
+              <dd>{totalDuration} دقیقه</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray">مدت</dt>
+              <dd>{totalDuration} دقیقه</dd>
+            </div>
+          </dl>
+          <div className="space-y-2 rounded-2xl border border-border bg-gray-light/40 p-3 text-sm">
+            <p className="font-medium">جزئیات مبلغ</p>
+            <div className="flex justify-between gap-2">
+              <span className="text-gray">{selected.name}{selectedRuleLabel ? ` (${selectedRuleLabel})` : ''}</span>
+              <span>{formatPrice(basePrice)}</span>
+            </div>
+            {(selected.addOns || []).filter((a) => selectedAddOnIds.includes(a.id)).map((a) => (
+              <div key={a.id} className="flex justify-between gap-2">
+                <span className="text-gray">+ {a.name}</span>
+                <span>{formatPrice(a.price)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between gap-2 border-t border-border pt-2 text-base font-bold">
+              <span>مبلغ قابل پرداخت</span>
+              <span className="text-coral">{formatPrice(displayPrice)}</span>
+            </div>
+            <p className="text-xs text-gray">هیچ هزینه پنهانی اضافه نمی‌شود.</p>
+<p className="rounded-xl bg-gray-light/60 px-3 py-2 text-xs text-gray">
+  سیاست لغو: تا حدود ۲ ساعت قبل از نوبت می‌توانید رزرو را لغو کنید. پس از پرداخت موفق،
+  با لغو به‌موقع درخواست استرداد ثبت می‌شود.
+</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">یادداشت (اختیاری)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"
+            />
+          </div>
+          <CancelPolicyNotice className="mb-3" />
+          {submitError && (
+            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</p>
+          )}
+          <Button className="w-full" loading={submitting || authLoading} onClick={() => void submitBooking()}>
+            {isAuthenticated ? 'ادامه به پرداخت' : 'ورود و ادامه'}
+          </Button>
+        </Card>
+      )}
+
+      {step === 'done' && booking && (
+        <Card className="mt-6 space-y-4 text-center">
+          <h2 className="text-xl font-bold text-coral">رزرو ذخیره شد — هنوز نهایی نیست</h2>
+          <p className="text-sm text-gray">
+            وضعیت رزرو: <strong>{persianBookingStatus(booking.status)}</strong>
+          </p>
+          <p className="text-sm font-bold text-coral">{formatPrice(booking.totalPrice)}</p>
+          {paymentInfo && (
+            <p className="rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-900">{paymentInfo}</p>
+          )}
+          <p className="text-xs text-gray">
+            رزرو فقط پس از تأیید پرداخت از سرور قطعی می‌شود. موفقیت را از روی ظاهر مرورگر فرض نکنید.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <Link
+              href={`/booking/confirmation/${booking.id}`}
+              className="inline-flex h-11 items-center justify-center rounded-2xl bg-coral px-6 text-sm font-medium text-white"
+            >
+              بررسی وضعیت رزرو
+            </Link>
+            <Link
+              href={`/professionals/${professional.slug}`}
+              className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-6 text-sm"
+            >
+              بازگشت به پروفایل
+            </Link>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
