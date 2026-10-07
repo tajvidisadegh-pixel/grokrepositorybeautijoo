@@ -12,15 +12,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Write and run patch script
-        run: |
-          python3 << 'PY'
-          import base64, pathlib
-          b64 = open(".github/triggers/fe-patch.b64").read().strip()
-          pathlib.Path("/tmp/patch_fe.py").write_bytes(base64.b64decode(b64))
-          print("script size", pathlib.Path("/tmp/patch_fe.py").stat().st_size)
-          PY
-          python3 /tmp/patch_fe.py
+      - name: Run patch
+        run: python3 .github/triggers/fe-patch.py
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
