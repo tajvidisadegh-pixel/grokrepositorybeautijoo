@@ -56,7 +56,7 @@ export class BookingsService {
 
     {
       const proRow = await this.prisma.professional.findUnique({
-        where: { id: professionalId },
+        where: { id: data.professionalId },
         select: { socialLinks: true },
       });
       const links = (proRow?.socialLinks as { _blockedCustomerIds?: string[] } | null) || null;
