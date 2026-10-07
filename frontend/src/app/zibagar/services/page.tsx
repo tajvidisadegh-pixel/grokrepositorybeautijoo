@@ -629,6 +629,7 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="font-medium text-[#0B2C4A]">{serviceLabel(ps)}</span>
                                 <button type="button" className="text-[10px] text-gray-400 hover:text-[#2D6CDF]" onClick={() => { setEditingNamePsId(ps.id); setEditNameValue(serviceLabel(ps)); setEditingSubKey(null); }}>ویرایش نام</button>
+                                <button type="button" className={`text-[10px] ${pinnedIds.includes(ps.id) ? 'font-semibold text-coral' : 'text-gray-400 hover:text-coral'}`} onClick={() => void togglePin(ps.id)} title="پین در صفحه عمومی (حداکثر ۳)">{pinnedIds.includes(ps.id) ? 'پین شده' : 'پین'}</button>
                               </div>
                             )}
                             {subs.length > 0 && (
