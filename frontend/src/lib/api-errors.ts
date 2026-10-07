@@ -16,6 +16,9 @@ const MESSAGE_MAP: Array<{ test: RegExp; fa: string }> = [
     test: /قبل از رزرو.*موبایل|شماره موبایل.*تأیید|phoneVerified|phone.?not.?verif|موبایل با کد/i,
     fa: 'قبل از رزرو باید شماره موبایل خود را با کد یکبارمصرف تأیید کنید.',
   },
+  { test: /حداکثر.*رزرو فعال|رزرو فعال همزمان|MAX_CONCURRENT|concurrent.?booking/i,
+    fa: 'تعداد رزروهای فعال شما به سقف مجاز رسیده است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.',
+  },
   { test: /otp|کد.*نامعتبر|verification code|invalid code/i, fa: 'کد تأیید نامعتبر یا منقضی است.' },
   { test: /password|رمز عبور/i, fa: 'رمز عبور نامعتبر است.' },
   { test: /validation|must be|should not|isString|isUUID|isInt|whitelist/i, fa: 'اطلاعات ارسالی نامعتبر است. فیلدها را بررسی کنید.' },
@@ -80,17 +83,9 @@ export function friendlyApiError(err: unknown): string {
     return 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.';
   }
 
-  if (err instanceof Error && err.message && err.message.trim().length > 0) {
-    const mapped = mapKnownMessage(err.message);
-    if (mapped) return mapped;
-    const m = err.message.trim();
-    if (/[\u0600-\u06FF]/.test(m) || m.length < 120) return m;
+  if (err instanceof Error && err.message) {
+    return mapKnownMessage(err.message) || err.message;
   }
 
-  return 'خطای غیرمنتظره رخ داد. دوباره تلاش کنید.';
-}
-
-export function getErrorStatus(err: unknown): number | null {
-  if (err instanceof ApiError) return err.status;
-  return null;
+  return 'خطای ناشناخته. دوباره تلاش کنید.';
 }
