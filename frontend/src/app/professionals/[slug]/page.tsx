@@ -219,6 +219,13 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                   name.charAt(0)
                 )}
               </div>
+
+                {pro.createdAt && (
+                  <span className="text-xs text-gray">
+                    عضو از{' '}
+                    {new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long', timeZone: 'Asia/Tehran' }).format(new Date(pro.createdAt))}
+                  </span>
+                )}
               <div className="min-w-0 flex-1">
                 <h1 className="text-xl font-bold text-blue sm:text-2xl">{name}</h1>
                 <div className="mt-2"><ShareProfileButton slug={pro.slug} name={name} /></div>

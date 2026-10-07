@@ -529,7 +529,18 @@ export function BookingWizard({
               <p className="text-sm text-gray">ساعت آزادی برای این روز نیست.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {slots.map((s) => {
+                {(() => {
+              const avail = slots.filter((s) => s.available !== false);
+              if (avail.length > 0 && avail.length <= 3) {
+                return (
+                  <p className="mb-2 text-xs font-medium text-coral">
+                    فقط {avail.length.toLocaleString('fa-IR')} نوبت باقی مانده
+                  </p>
+                );
+              }
+              return null;
+            })()}
+            {slots.map((s) => {
                   const available = s.available !== false;
                   const on = slotStart === s.start;
                   return (

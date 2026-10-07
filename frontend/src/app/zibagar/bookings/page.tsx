@@ -12,6 +12,7 @@ import {
   reportBookingToAdmin,
   type BookingListItem,
 } from '@/lib/panel-api';
+import { apiClient } from '@/lib/api';
 import { fetchAvailability } from '@/lib/booking-api';
 import { persianBookingStatus, effectiveBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
@@ -182,7 +183,23 @@ export default function ZibagarBookingsPage() {
     }
   }
 
-  async function submitReport(id: string) {
+  
+  async function blockCustomer(customerId: string) {
+    if (!customerId) return;
+    if (typeof window !== 'undefined' && !window.confirm('این مشتری دیگر نتواند از شما نوبت بگیرد. ادامه می‌دهید؟')) return;
+    setBusy(`${customerId}:block`);
+    setError(null);
+    try {
+      await apiClient.post('/professionals/me/blocked-customers', { customerId });
+      setActionMsg('مشتری مسدود شد.');
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+async function submitReport(id: string) {
     setBusy(`${id}:report`);
     setReportMsg(null);
     setError(null);
@@ -588,3 +605,8 @@ export default function ZibagarBookingsPage() {
     </div>
   );
 }
+                            {b.customer?.id && (
+                              <button type="button" className="text-xs text-red-600 hover:underline" disabled={busy === `${b.customer.id}:block`} onClick={() => void blockCustomer(b.customer!.id)}>
+                                مسدود کردن مشتری
+                              </button>
+                            )}

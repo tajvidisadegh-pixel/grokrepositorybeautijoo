@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MinLength, MaxLength, IsArray, IsUUID, IsInt, Min, IsObject } from 'class-validator';
@@ -131,6 +131,28 @@ export class ProfessionalsController {
   @Post('me/payout-request')
   requestPayout(@CurrentUser('id') userId: string, @Body() dto: PayoutRequestDto) {
     return this.service.requestPayout(userId, dto.amount, dto.note);
+  }
+
+  
+  @ApiBearerAuth()
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Get('me/blocked-customers')
+  listBlocked(@CurrentUser('id') userId: string) {
+    return this.service.listBlockedCustomers(userId);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Post('me/blocked-customers')
+  blockCustomer(@CurrentUser('id') userId: string, @Body() body: { customerId: string }) {
+    return this.service.blockCustomer(userId, body.customerId);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin', 'SUPER_ADMIN')
+  @Delete('me/blocked-customers/:customerId')
+  unblockCustomer(@CurrentUser('id') userId: string, @Param('customerId') customerId: string) {
+    return this.service.unblockCustomer(userId, customerId);
   }
 
   /** Public profile by slug — stricter throttle (#17) */

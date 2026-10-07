@@ -9,6 +9,7 @@ export type ReminderStats = {
   reminders24h: number;
   reminders2h: number;
   reviewRequests: number;
+  dailyProSummaries: number;
 };
 
 /**
@@ -66,7 +67,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       );
       if (!stats) return;
       this.logger.log(
-        `Reminders done: 24h=${stats.reminders24h} 2h=${stats.reminders2h} review=${stats.reviewRequests}`,
+        `Reminders done: 24h=${stats.reminders24h} 2h=${stats.reminders2h} review=${stats.reviewRequests} daily=${stats.dailyProSummaries}`,
       );
     } catch (err) {
       this.logger.error(`Reminders failed: ${(err as Error)?.message}`);
@@ -87,12 +88,13 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
 
   /** Public for tests / manual trigger */
   async runAll(): Promise<ReminderStats> {
-    const [reminders24h, reminders2h, reviewRequests] = await Promise.all([
+    const [reminders24h, reminders2h, reviewRequests, dailyProSummaries] = await Promise.all([
       this.sendWindowReminders('24h', 23, 25),
       this.sendWindowReminders('2h', 1.5, 2.5),
       this.sendReviewRequests(),
+      this.sendDailyProSummaries(),
     ]);
-    return { reminders24h, reminders2h, reviewRequests };
+    return { reminders24h, reminders2h, reviewRequests, dailyProSummaries };
   }
 
   /**
@@ -255,6 +257,58 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       if (result?.id) sent += 1;
     }
     return sent;
+  }
+
+
+  async sendDailyProSummaries(): Promise<number> {
+    const now = new Date();
+    const hourStr = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tehran', hour: '2-digit', hour12: false }).format(now);
+    const hour = parseInt(hourStr, 10);
+    if (Number.isNaN(hour) || hour < 7 || hour > 10) return 0;
+    const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const startUtc = new Date(`${dayKey}T00:00:00+03:30`);
+    const endUtc = new Date(`${dayKey}T23:59:59+03:30`);
+    const bookings = await this.prisma.booking.findMany({
+      where: { status: BookingStatus.confirmed, startAt: { gte: startUtc, lte: endUtc } },
+      select: { id: true, startAt: true, professional: { select: { userId: true } } },
+      orderBy: { startAt: 'asc' },
+    });
+    const byPro = new Map<string, { count: number; first: Date }>();
+    for (const b of bookings) {
+      const uid = b.professional.userId;
+      const cur = byPro.get(uid);
+      if (!cur) byPro.set(uid, { count: 1, first: b.startAt });
+      else byPro.set(uid, { count: cur.count + 1, first: cur.first });
+    }
+    let sent = 0;
+    for (const [userId, info] of byPro) {
+      const already = await this.hasDayNotification(userId, dayKey);
+      if (already) continue;
+      const timeFa = this.formatTehran(info.first);
+      const result = await this.notifications.create({
+        userId,
+        type: NotificationType.system,
+        title: 'خلاصه نوبت‌های امروز',
+        body: `امروز ${info.count} نوبت دارید. اولین نوبت: ${timeFa}`,
+        data: { kind: 'daily_pro_summary', dayKey, count: info.count, href: '/zibagar/bookings' },
+        sms: false,
+      });
+      if (result?.id) sent += 1;
+    }
+    return sent;
+  }
+
+  private async hasDayNotification(userId: string, dayKey: string): Promise<boolean> {
+    const rows = await this.prisma.notification.findMany({
+      where: { userId, type: NotificationType.system, createdAt: { gte: new Date(Date.now() - 2 * 24 * 3600_000) } },
+      select: { data: true },
+      take: 30,
+    });
+    for (const r of rows) {
+      const data = r.data as { kind?: string; dayKey?: string } | null;
+      if (data?.kind === 'daily_pro_summary' && data.dayKey === dayKey) return true;
+    }
+    return false;
   }
 
   /** Dedup: any existing notification of this type for the same bookingId (+ optional window). */
