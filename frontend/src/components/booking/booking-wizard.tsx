@@ -60,6 +60,16 @@ type Props = {
   initialDurationRuleId?: string;
 };
 
+
+function formatDurationFa(totalMin: number): string {
+  const m = Math.max(0, Math.round(totalMin || 0));
+  if (m < 60) return `حدود ${m.toLocaleString('fa-IR')} دقیقه`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (r === 0) return `حدود ${h.toLocaleString('fa-IR')} ساعت`;
+  return `حدود ${h.toLocaleString('fa-IR')} ساعت و ${r.toLocaleString('fa-IR')} دقیقه`;
+}
+
 type Step = 'service' | 'datetime' | 'summary' | 'done';
 
 const STEP_LABELS: Record<Step, string> = {
@@ -489,7 +499,7 @@ export function BookingWizard({
             {selectedRuleLabel ? ` · ${selectedRuleLabel}` : ''}
             {selectedAddOnNames.length ? ` · ${selectedAddOnNames.join('، ')}` : ''}
             {' — '}
-            {totalDuration} دقیقه — {formatPrice(displayPrice)}
+            {formatDurationFa(totalDuration)} — {formatPrice(displayPrice)}
           </p>
           <div>
             <label className="mb-1 block text-sm font-medium">تاریخ</label>
@@ -610,7 +620,7 @@ export function BookingWizard({
             </div>
             <div className="flex justify-between gap-2">
               <dt className="text-gray">مدت</dt>
-              <dd>{totalDuration} دقیقه</dd>
+              <dd>{formatDurationFa(totalDuration)}</dd>
             </div>
           </dl>
           <div className="space-y-2 rounded-2xl border border-border bg-gray-light/40 p-3 text-sm">

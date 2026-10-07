@@ -34,6 +34,7 @@ function canCustomerCancel(b: BookingWithReview): boolean {
 
 export default function PanelBookingsPage() {
   const [statusFilter, setStatusFilter] = useState('');
+  const [timeScope, setTimeScope] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [items, setItems] = useState<BookingWithReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +193,27 @@ async function submitReview(bookingId: string) {
         <p className="mt-1 text-sm text-gray">لیست واقعی از سرور</p>
       </div>
 
+      <div className="flex flex-wrap gap-2" aria-label="بازه زمانی">
+        {([
+          { v: 'upcoming' as const, l: 'آینده' },
+          { v: 'past' as const, l: 'گذشته' },
+          { v: 'all' as const, l: 'همه' },
+        ]).map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => setTimeScope(o.v)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+              timeScope === o.v
+                ? 'border-coral bg-coral text-white'
+                : 'border-border bg-white hover:border-coral'
+            }`}
+          >
+            {o.l}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2" aria-label="فیلتر وضعیت">
         {[
           { v: '', l: 'همه' },
@@ -255,7 +277,21 @@ async function submitReview(bookingId: string) {
       {actionMsg && (
         <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{actionMsg}</p>
       )}
-      {items.length === 0 ? (
+      {(() => {
+        const now = Date.now();
+        const visibleItems = items.filter((b) => {
+          if (timeScope === 'all') return true;
+          const start = new Date(b.startAt).getTime();
+          const isPast =
+            Number.isFinite(start) &&
+            (start < now ||
+              b.status === 'completed' ||
+              b.status === 'cancelled' ||
+              b.status === 'rejected' ||
+              b.status === 'expired');
+          return timeScope === 'past' ? isPast : !isPast;
+        });
+        return visibleItems.length === 0 ? (
         <PanelEmpty
           title="رزروی یافت نشد"
           description="هنوز نوبتی رزرو نکرده‌اید."
@@ -267,7 +303,7 @@ async function submitReview(bookingId: string) {
         />
       ) : (
         <ul className="space-y-3">
-          {items.map((b) => {
+          {visibleItems.map((b) => {
             const proName =
               b.professional?.user?.profile?.displayName ||
               b.professional?.title ||
@@ -521,7 +557,8 @@ async function submitReview(bookingId: string) {
             );
           })}
         </ul>
-      )}
+      );
+      })()}
     </div>
   );
 }
