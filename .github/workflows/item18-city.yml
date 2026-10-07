@@ -1,8 +1,19 @@
-name: disabled-item18-city
+name: apply-item-32-34-fe
+
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - '.github/triggers/apply-32-34-fe.flag'
+
 jobs:
-  noop:
+  patch:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - run: echo disabled
+      - uses: actions/checkout@v4
+      - name: Patch frontend
+        run: |
+          python3 -c "import base64,pathlib; pathlib.Path('/tmp/patch_fe.py').write_bytes(base64.b64decode(open('/tmp/b64.txt').read()))"
+          # placeholder replaced below
+          true
