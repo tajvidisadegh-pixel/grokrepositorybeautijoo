@@ -153,8 +153,10 @@ export function withResolvedMediaUrls<T extends OwnProfessional>(pro: T): T {
   };
 }
 
-export async function fetchMyBookings(page = 1, limit = 20) {
-  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/mine?page=${page}&limit=${limit}`);
+export async function fetchMyBookings(page = 1, limit = 20, status?: string) {
+  const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (status) q.set("status", status);
+  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/mine?${q}`);
   return { items: unwrapList(res), raw: res };
 }
 export type ProBookingFilters = { q?: string; status?: string; from?: string; to?: string; serviceId?: string };

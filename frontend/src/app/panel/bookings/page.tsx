@@ -4,7 +4,30 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
+import { 
+      <div className="flex flex-wrap gap-2" aria-label="فیلتر وضعیت">
+        {[
+          { v: '', l: 'همه' },
+          { v: 'pending', l: 'در انتظار' },
+          { v: 'confirmed', l: 'تأییدشده' },
+          { v: 'completed', l: 'انجام‌شده' },
+          { v: 'cancelled', l: 'کنسل‌شده' },
+        ].map((o) => (
+          <button
+            key={o.v || 'all'}
+            type="button"
+            onClick={() => setStatusFilter(o.v)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+              statusFilter === o.v
+                ? 'border-coral bg-coral text-white'
+                : 'border-border bg-white hover:border-coral'
+            }`}
+          >
+            {o.l}
+          </button>
+        ))}
+      </div>
+PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
 import {
   fetchMyBookings,
   createReview,
@@ -32,6 +55,7 @@ function canCustomerCancel(b: BookingWithReview): boolean {
 }
 
 export default function PanelBookingsPage() {
+  const [statusFilter, setStatusFilter] = useState('');
   const [items, setItems] = useState<BookingWithReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +77,7 @@ export default function PanelBookingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchMyBookings(1, 50);
+      const res = await fetchMyBookings(1, 50, statusFilter || undefined);
       setItems(Array.isArray(res.items) ? (res.items as BookingWithReview[]) : []);
     } catch (e) {
       setItems([]);

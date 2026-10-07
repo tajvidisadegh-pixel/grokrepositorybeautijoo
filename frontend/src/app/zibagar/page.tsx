@@ -211,6 +211,22 @@ export default function ZibagarDashboard() {
 
   const maxSeries = Math.max(1, ...weekSeries);
   const statusInfo = statusDot(pro?.status);
+
+  const pendingReviewBanner =
+    pro?.status === 'pending_review' ? (
+      <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+        <p className="font-bold">پروفایل شما در حال بررسی است</p>
+        <p className="mt-1 text-xs leading-6 text-amber-900/90">
+          درخواست تأیید برای ادمین ارسال شده. معمولاً بررسی بین ۲۴ تا ۷۲ ساعت طول می‌کشد.
+          تا زمان تأیید، پروفایل در جستجوی عمومی نمایش داده نمی‌شود.
+        </p>
+      </div>
+    ) : pro?.status === 'draft' ? (
+      <div className="mb-4 rounded-2xl border border-border bg-gray-light/50 px-4 py-3 text-sm" role="status">
+        <p className="font-medium">پروفایل هنوز پیش‌نویس است</p>
+        <p className="mt-1 text-xs text-gray">پس از تکمیل اطلاعات، آن را برای بررسی ادمین ارسال کنید.</p>
+      </div>
+    ) : null;
   const published = pro?.status === 'approved';
   const percent = pro?.completion?.percent ?? 0;
   const complete = pro?.completion?.complete ?? false;
@@ -221,6 +237,8 @@ export default function ZibagarDashboard() {
 
   return (
     <div className="space-y-5">
+      {pendingReviewBanner}
+
       {/* Header */}
       <div className="overflow-hidden rounded-2xl bg-coral px-5 py-5 text-white shadow-sm sm:rounded-3xl sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">

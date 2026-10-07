@@ -486,6 +486,16 @@ export class AuthService {
       phoneVerified: user.phoneVerified,
       displayName: user.profile?.displayName,
       avatarUrl: user.profile?.avatarUrl,
+      profile: user.profile
+        ? {
+            displayName: user.profile.displayName,
+            firstName: user.profile.firstName,
+            lastName: user.profile.lastName,
+            avatarUrl: user.profile.avatarUrl,
+            bio: user.profile.bio,
+            gender: user.profile.gender,
+          }
+        : null,
       roles,
       permissions: Array.from(permissions),
       professional: user.professional,
@@ -499,6 +509,9 @@ export class AuthService {
     if (dto.displayName !== undefined) profileData.displayName = dto.displayName;
     if (dto.avatarUrl !== undefined) profileData.avatarUrl = dto.avatarUrl;
     if (dto.bio !== undefined) profileData.bio = dto.bio;
+    if (dto.firstName !== undefined) profileData.firstName = dto.firstName;
+    if (dto.lastName !== undefined) profileData.lastName = dto.lastName;
+    if (dto.gender !== undefined) profileData.gender = dto.gender;
 
     const emailUpdate = dto.email !== undefined ? dto.email : undefined;
 
