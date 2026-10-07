@@ -1,0 +1,302 @@
+name: item26-30
+on:
+  push:
+    paths: ['.github/workflows/item26-30.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch backend + frontend
+        run: |
+          set -e
+          python3 << 'ENDPY'
+          from pathlib import Path
+
+          # --- 27 DTO gender ---
+          dto = Path('backend/src/auth/dto/auth.dto.ts')
+          s = dto.read_text()
+          if 'gender?:' not in s[s.find('UpdateProfileDto'):s.find('UpdateProfileDto')+800]:
+              needle = "  avatarUrl?: string;\n}"
+              # only first avatarUrl near UpdateProfile
+              idx = s.find('export class UpdateProfileDto')
+              sub = s[idx:]
+              sub2 = sub.replace(
+                  "  avatarUrl?: string;\n}",
+                  "  avatarUrl?: string;\n\n  @ApiPropertyOptional({ enum: ['female', 'male', 'other', 'undisclosed'] })\n  @IsOptional()\n  @IsString()\n  gender?: string;\n}",
+                  1,
+              )
+              s = s[:idx] + sub2
+              # ensure IsIn import not required - IsString ok
+              dto.write_text(s)
+              print('dto gender')
+          else:
+              print('dto ok')
+
+          # --- 27 service updateProfile fields ---
+          svc = Path('backend/src/auth/auth.service.ts')
+          s = svc.read_text()
+          if 'dto.gender' not in s:
+              old = "    if (dto.avatarUrl !== undefined) profileData.avatarUrl = dto.avatarUrl;\n    if (dto.bio !== undefined) profileData.bio = dto.bio;"
+              new = old + "\n    if (dto.firstName !== undefined) profileData.firstName = dto.firstName;\n    if (dto.lastName !== undefined) profileData.lastName = dto.lastName;\n    if (dto.gender !== undefined) profileData.gender = dto.gender;"
+              if old not in s:
+                  raise SystemExit('updateProfile needle missing')
+              s = s.replace(old, new, 1)
+              print('service profile fields')
+          # me() include profile nested + gender
+          if 'gender: user.profile' not in s and "profile: user.profile" not in s[s.find('async me('):s.find('async me(')+1500]:
+              # enrich return
+              old = "      displayName: user.profile?.displayName,\n      avatarUrl: user.profile?.avatarUrl,\n      roles,"
+              new = """      displayName: user.profile?.displayName,
+      avatarUrl: user.profile?.avatarUrl,
+      profile: user.profile
+        ? {
+            displayName: user.profile.displayName,
+            firstName: user.profile.firstName,
+            lastName: user.profile.lastName,
+            avatarUrl: user.profile.avatarUrl,
+            bio: user.profile.bio,
+            gender: user.profile.gender,
+          }
+        : null,
+      roles,"""
+              if old in s:
+                  s = s.replace(old, new, 1)
+                  print('me profile nested')
+              else:
+                  print('me shape skip')
+          svc.write_text(s)
+
+          # --- 29 listMineAsCustomer status ---
+          bs = Path('backend/src/bookings/bookings.service.ts')
+          s = bs.read_text()
+          if 'listMineAsCustomer(userId: string, page = 1, limit = 20)' in s and 'status?:' not in s[s.find('listMineAsCustomer'):s.find('listMineAsCustomer')+200]:
+              s = s.replace(
+                  'listMineAsCustomer(userId: string, page = 1, limit = 20) {\n    const skip = (page - 1) * limit;\n    const [items, total] = await Promise.all([\n      this.prisma.booking.findMany({\n        where: { customerId: userId },',
+                  '''listMineAsCustomer(userId: string, page = 1, limit = 20, status?: string) {
+    const skip = (page - 1) * limit;
+    const where: { customerId: string; status?: string } = { customerId: userId };
+    if (status) where.status = status;
+    const [items, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,''',
+                  1,
+              )
+              bs.write_text(s)
+              print('listMine status')
+          else:
+              print('listMine ok or already')
+
+          ctrl = Path('backend/src/bookings/bookings.controller.ts')
+          s = ctrl.read_text()
+          if "@Get('mine')" in s and "@Query('status')" not in s[s.find("@Get('mine')"):s.find("@Get('mine')")+250]:
+              s = s.replace(
+                  """  @Get('mine')
+  mine(
+    @CurrentUser('id') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.listMineAsCustomer(
+      userId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }""",
+                  """  @Get('mine')
+  mine(
+    @CurrentUser('id') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.service.listMineAsCustomer(
+      userId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+      status,
+    );
+  }""",
+                  1,
+              )
+              ctrl.write_text(s)
+              print('controller status')
+
+          # --- frontend types ---
+          t = Path('frontend/src/types/auth.ts')
+          s = t.read_text()
+          if 'gender?:' not in s:
+              s = s.replace(
+                  "    avatarUrl?: string | null;\n    bio?: string | null;\n  } | null;",
+                  "    avatarUrl?: string | null;\n    bio?: string | null;\n    gender?: string | null;\n  } | null;",
+                  1,
+              )
+              s = s.replace(
+                  "  avatarUrl?: string;\n};",
+                  "  avatarUrl?: string;\n  gender?: 'female' | 'male' | 'other' | 'undisclosed';\n};",
+                  1,
+              )
+              t.write_text(s)
+              print('types')
+
+          # --- panel-api fetchMyBookings status ---
+          api = Path('frontend/src/lib/panel-api.ts')
+          s = api.read_text()
+          if 'fetchMyBookings(page = 1, limit = 20)' in s and 'status?' not in s[s.find('fetchMyBookings'):s.find('fetchMyBookings')+200]:
+              s = s.replace(
+                  "export async function fetchMyBookings(page = 1, limit = 20) {\n  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/mine?page=${page}&limit=${limit}`);",
+                  "export async function fetchMyBookings(page = 1, limit = 20, status?: string) {\n  const q = new URLSearchParams({ page: String(page), limit: String(limit) });\n  if (status) q.set('status', status);\n  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/mine?${q}`);",
+                  1,
+              )
+              api.write_text(s)
+              print('panel-api')
+
+          # --- 26 wizard price transparency ---
+          w = Path('frontend/src/components/booking/booking-wizard.tsx')
+          if w.exists():
+              s = w.read_text()
+              if 'جزئیات مبلغ' not in s and 'مبلغ قابل پرداخت' in s:
+                  s = s.replace(
+                      '<p className="text-xs text-gray">هیچ هزینه پنهانی اضافه نمی‌شود.</p>',
+                      '''<p className="text-xs text-gray">جزئیات مبلغ: قیمت خدمت و افزودنی‌ها در بالا آمده است. کمیسیون پلتفرم از مشتری کسر نمی‌شود؛ مبلغ نهایی همان جمع بالا است. هیچ هزینه پنهانی اضافه نمی‌شود.</p>''',
+                      1,
+                  )
+                  w.write_text(s)
+                  print('wizard price note')
+
+          # --- 30 zibagar pending banner ---
+          z = Path('frontend/src/app/zibagar/page.tsx')
+          if z.exists():
+              s = z.read_text()
+              if 'تقریباً ۲۴ تا ۷۲ ساعت' not in s:
+                  # insert after statusInfo definition usage in JSX - look for statusInfo
+                  marker = 'const statusInfo = statusDot(pro?.status);'
+                  if marker in s and 'pending_review_banner' not in s:
+                      # add banner component inline near return start of main content
+                      # find first return after statusInfo
+                      idx = s.find(marker)
+                      # find `return (` after that
+                      ridx = s.find('return (', idx)
+                      # inject banner right after opening of main container if possible
+                      insert_after = 'dir="rtl"'
+                      # safer: before first Card or h1 in return
+                      banner = '''
+      {pro?.status === 'pending_review' && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+          <p className="font-bold">پروفایل شما در حال بررسی است</p>
+          <p className="mt-1 text-xs leading-6 text-amber-900/90">
+            درخواست تأیید برای ادمین ارسال شده. معمولاً بررسی بین ۲۴ تا ۷۲ ساعت طول می‌کشد.
+            تا زمان تأیید، پروفایل در جستجوی عمومی نمایش داده نمی‌شود.
+          </p>
+        </div>
+      )}
+      {pro?.status === 'draft' && (
+        <div className="mb-4 rounded-2xl border border-border bg-gray-light/50 px-4 py-3 text-sm" role="status">
+          <p className="font-medium">پروفایل هنوز پیش‌نویس است</p>
+          <p className="mt-1 text-xs text-gray">پس از تکمیل اطلاعات، آن را برای بررسی ادمین ارسال کنید.</p>
+        </div>
+      )}
+'''
+                      # Insert after return ( first div
+                      # find pattern after statusInfo return
+                      chunk = s[ridx:ridx+800]
+                      # try insert after first <div ...>
+                      import re
+                      m = re.search(r'return \(\s*<div[^>]*>', s[ridx:])
+                      if m:
+                          pos = ridx + m.end()
+                          s = s[:pos] + banner + s[pos:]
+                          z.write_text(s)
+                          print('zibagar banner')
+                      else:
+                          print('zibagar insert point missing')
+                  else:
+                      print('zibagar marker missing')
+              else:
+                  print('zibagar banner exists')
+
+          # --- 29 panel bookings client filter ---
+          bp = Path('frontend/src/app/panel/bookings/page.tsx')
+          if bp.exists():
+              s = bp.read_text()
+              if 'statusFilter' not in s:
+                  # add state after other useState
+                  if 'const [items, setItems]' in s:
+                      s = s.replace(
+                          'const [items, setItems]',
+                          "const [statusFilter, setStatusFilter] = useState('');\n  const [items, setItems]",
+                          1,
+                      )
+                  # change fetch
+                  if 'fetchMyBookings(' in s:
+                      import re
+                      s2 = re.sub(
+                          r'fetchMyBookings\(([^)]*)\)',
+                          lambda m: (
+                              "fetchMyBookings(page, 20, statusFilter || undefined)"
+                              if 'statusFilter' not in m.group(0)
+                              else m.group(0)
+                          ),
+                          s,
+                          count=1,
+                      )
+                      s = s2
+                  # add statusFilter to load deps if [page]
+                  s = s.replace('}, [page]);', '}, [page, statusFilter]);', 1)
+                  # UI filter bar - after h1 block
+                  if 'فیلتر وضعیت' not in s:
+                      ui = '''
+      <div className="flex flex-wrap gap-2">
+        {[
+          { v: '', l: 'همه' },
+          { v: 'pending', l: 'در انتظار' },
+          { v: 'confirmed', l: 'تأییدشده' },
+          { v: 'completed', l: 'انجام‌شده' },
+          { v: 'cancelled', l: 'کنسل‌شده' },
+        ].map((o) => (
+          <button
+            key={o.v || 'all'}
+            type="button"
+            onClick={() => {
+              setStatusFilter(o.v);
+              setPage?.(1);
+            }}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium border ${
+              statusFilter === o.v
+                ? 'border-coral bg-coral text-white'
+                : 'border-border bg-white text-foreground hover:border-coral'
+            }`}
+          >
+            {o.l}
+          </button>
+        ))}
+      </div>
+'''
+                      # insert after first heading section
+                      if '<h1' in s:
+                          # after closing of header div following h1
+                          idx = s.find('<h1')
+                          # find next Card or list
+                          for marker in ['<Card', '{loading', '{items', '<ul', 'PanelLoading']:
+                              j = s.find(marker, idx)
+                              if j > 0:
+                                  s = s[:j] + ui + s[j:]
+                                  break
+                  bp.write_text(s)
+                  print('panel bookings filter')
+              else:
+                  print('panel filter exists')
+
+          print('DONE')
+          ENDPY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/item26-30.yml
+          git add -A
+          git status
+          git commit -m "feat: complete #40 items 26-30 (price, profile, filters, pending banner)" || echo nothing
+          git push
