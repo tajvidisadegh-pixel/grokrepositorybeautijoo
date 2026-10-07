@@ -1,0 +1,15 @@
+name: patch-40-gaps3
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 -c "import base64,pathlib; pathlib.Path('/tmp/p.py').write_bytes(base64.b64decode(open('/tmp/b64.txt').read()))"
+          # placeholder replaced below
+          true
