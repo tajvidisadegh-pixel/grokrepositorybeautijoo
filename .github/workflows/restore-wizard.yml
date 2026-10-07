@@ -1,0 +1,78 @@
+name: restore-wizard
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-wizard.yml'
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          set -eux
+          # Last known good before PLACEHOLDER: 5a7537d1dfd944da76d8b765c6d24704823e748e
+          git show 5a7537d1dfd944da76d8b765c6d24704823e748e:frontend/src/components/booking/booking-wizard.tsx > frontend/src/components/booking/booking-wizard.tsx
+          python3 << 'PY'
+          from pathlib import Path
+          w = Path('frontend/src/components/booking/booking-wizard.tsx')
+          s = w.read_text()
+          assert 'export function BookingWizard' in s
+          assert len(s) > 20000
+          s = s.replace(
+              'const { isAuthenticated, loading: authLoading } = useAuth();',
+              'const { isAuthenticated, loading: authLoading, user } = useAuth();',
+              1,
+          )
+          marker = '    setSubmitting(true);'
+          idx = s.find('async function submitBooking')
+          idx2 = s.find(marker, idx)
+          if 'user.phoneVerified' not in s[idx:idx2+80]:
+              insert = '''    if (user && user.phoneVerified === false) {
+      const draft = buildDraft();
+      saveBookingDraft(draft);
+      setSubmitError('قبل از رزرو باید شماره موبایل را تأیید کنید.');
+      router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft)));
+      return;
+    }
+'''
+              s = s[:idx2] + insert + s[idx2:]
+          if 'تأیید شماره موبایل لازم است' not in s:
+              hint = '''
+          {isAuthenticated && user && user.phoneVerified === false && (
+            <div className="mb-3 rounded-2xl border border-coral/30 bg-coral-soft/50 px-3 py-2 text-sm">
+              <p className="font-medium text-coral">تأیید شماره موبایل لازم است</p>
+              <p className="mt-1 text-xs text-gray">برای ثبت رزرو ابتدا موبایل را با کد پیامکی تأیید کنید.</p>
+              <button
+                type="button"
+                className="mt-2 text-xs font-medium text-coral underline"
+                onClick={() => {
+                  const draft = buildDraft();
+                  saveBookingDraft(draft);
+                  router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft)));
+                }}
+              >
+                رفتن به تأیید موبایل
+              </button>
+            </div>
+          )}
+'''
+              if '<CancelPolicyNotice className="mb-3" />' in s:
+                  s = s.replace('<CancelPolicyNotice className="mb-3" />', '<CancelPolicyNotice className="mb-3" />' + hint, 1)
+              else:
+                  s = s.replace('{submitError && (', hint + '          {submitError && (', 1)
+          w.write_text(s)
+          print('restored', len(s), 'phoneVerified', s.count('phoneVerified'))
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/restore-wizard.yml
+          rm -f .github/workflows/item25-wizard.yml
+          git add frontend/src/components/booking/booking-wizard.tsx
+          git add -A
+          git commit -m "fix: restore booking-wizard + phoneVerified gate (#40-25)"
+          git push
