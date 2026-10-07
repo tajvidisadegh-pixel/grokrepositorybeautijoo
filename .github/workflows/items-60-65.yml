@@ -1,0 +1,15 @@
+name: items-60-65
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply script from artifact path in repo
+        run: |
+          python3 << 'PY'
+          print('placeholder - replaced next')
+          PY
