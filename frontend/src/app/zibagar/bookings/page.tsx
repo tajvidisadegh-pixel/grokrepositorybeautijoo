@@ -605,8 +605,15 @@ async function submitReport(id: string) {
     </div>
   );
 }
-                            {b.customer?.id && (
-                              <button type="button" className="text-xs text-red-600 hover:underline" disabled={busy === `${b.customer.id}:block`} onClick={() => void blockCustomer(b.customer!.id)}>
+                              </button>
+                            {b.customer?.id ? (
+                              <button
+                                type="button"
+                                className="text-xs text-red-600 hover:underline"
+                                disabled={busy === `${b.customer.id}:block`}
+                                onClick={() => void blockCustomer(b.customer!.id)}
+                              >
                                 مسدود کردن مشتری
                               </button>
+                            ) : null}
                             )}
