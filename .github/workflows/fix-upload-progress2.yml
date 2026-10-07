@@ -1,0 +1,67 @@
+name: fix-upload-progress2
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/zibagar/services/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if "from '@/lib/media-upload'" not in t and "import { apiClient } from '@/lib/api';" in t:
+              t = t.replace("import { apiClient } from '@/lib/api';", "import { apiClient } from '@/lib/api';\nimport { uploadMyMedia as uploadMyMediaWithProgress } from '@/lib/media-upload';", 1)
+              print('import')
+          if 'uploadProgress' not in t:
+              t = t.replace("const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'ok' | 'err'>('idle');\n  const [uploadErr, setUploadErr] = useState<string | null>(null);", "const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'ok' | 'err'>('idle');\n  const [uploadErr, setUploadErr] = useState<string | null>(null);\n  const [uploadProgress, setUploadProgress] = useState<number | null>(null);", 1)
+              print('state')
+          if "await uploadMyMedia(file, 'portfolio', attachToPsId);" in t:
+              t = t.replace("await uploadMyMedia(file, 'portfolio', attachToPsId);", "setUploadProgress(0);\n      const uploader = typeof uploadMyMediaWithProgress === 'function' ? uploadMyMediaWithProgress : uploadMyMedia;\n      await uploader(file, 'portfolio', attachToPsId, (pct: number) => setUploadProgress(pct));\n      setUploadProgress(100);", 1)
+              print('call')
+          if 'setUploadProgress(null)' not in t:
+              t = t.replace("setUploadState('err');\n      setUploadErr(friendlyApiError(e));\n    }\n  }", "setUploadState('err');\n      setUploadErr(friendlyApiError(e));\n    } finally {\n      setTimeout(() => setUploadProgress(null), 800);\n    }\n  }", 1)
+              print('finally')
+          if 'uploadProgress={uploadProgress}' not in t:
+              t = t.replace('uploadState={uploadState}', 'uploadState={uploadState}\n          uploadProgress={uploadProgress}', 2)
+              print('props')
+          p.write_text(t, encoding='utf-8')
+
+          p = Path('frontend/src/app/zibagar/services/ServiceEditPanel.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'uploadProgress' not in t:
+              t = t.replace("uploadState: 'idle' | 'uploading' | 'ok' | 'err';\n  uploadErr: string | null;", "uploadState: 'idle' | 'uploading' | 'ok' | 'err';\n  uploadErr: string | null;\n  uploadProgress?: number | null;", 1)
+              t = t.replace('uploadState, uploadErr, onSavePs,', 'uploadState, uploadErr, uploadProgress, onSavePs,', 1)
+              needle = "uploadState === 'err' && uploadErr &&"
+              if needle in t:
+                  insert = "uploadState === 'uploading' && (<div className=\"mt-2 space-y-1\"><div className=\"flex justify-between text-[11px] text-gray\"><span>\u062f\u0631 \u062d\u0627\u0644 \u0622\u067e\u0644\u0648\u062f\u2026</span><span dir=\"ltr\">{uploadProgress != null ? `${uploadProgress}%` : '\u2026'}</span></div><div className=\"h-1.5 w-full overflow-hidden rounded-full bg-gray-100\"><div className=\"h-full rounded-full bg-blue-500 transition-all\" style={{ width: `${uploadProgress ?? 10}%` }} /></div></div>)}\n        {"
+                  t = t.replace('{' + needle, '{' + insert + needle, 1)
+                  print('editpanel')
+              p.write_text(t, encoding='utf-8')
+
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if "'no-show':" not in t and 'const labels: Record<string, string> = {' in t:
+              t = t.replace("const labels: Record<string, string> = {", "const labels: Record<string, string> = {\n        'no-show': '\u0639\u062f\u0645 \u062d\u0636\u0648\u0631 \u0645\u0634\u062a\u0631\u06cc \u062b\u0628\u062a \u0634\u062f.',", 1)
+              p.write_text(t, encoding='utf-8')
+              print('label')
+
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text(encoding='utf-8')
+          sig = 'export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {'
+          if sig in t:
+              t = t.replace(sig, "export async function uploadMyMedia(\n  file: File,\n  kind: string,\n  professionalServiceId?: string,\n  onProgress?: (percent: number) => void,\n) {\n  if (typeof window !== 'undefined') {\n    const { uploadMyMedia: uploadWithProgress } = await import('./media-upload');\n    return uploadWithProgress(file, kind, professionalServiceId, onProgress);\n  }", 1)
+              p.write_text(t, encoding='utf-8')
+              print('delegate')
+          print('DONE')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: upload progress % in services + no-show label" && git push; fi
