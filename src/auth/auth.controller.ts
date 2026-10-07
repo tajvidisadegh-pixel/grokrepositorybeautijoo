@@ -218,6 +218,27 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  
+  @Post('change-phone/request')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  requestChangePhone(
+    @CurrentUser('id') userId: string,
+    @Body() body: { newPhone?: string },
+  ) {
+    return this.auth.requestChangePhone(userId, body?.newPhone || '');
+  }
+
+  @Post('change-phone/verify')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  verifyChangePhone(
+    @CurrentUser('id') userId: string,
+    @Body() body: { newPhone?: string; code?: string },
+  ) {
+    return this.auth.verifyChangePhone(userId, body?.newPhone || '', body?.code || '');
+  }
+
   @Post('delete-account')
   @HttpCode(200)
   @Throttle({ default: { limit: 3, ttl: 60000 } })

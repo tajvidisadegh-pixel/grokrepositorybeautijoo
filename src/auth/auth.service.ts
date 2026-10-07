@@ -692,4 +692,50 @@ export class AuthService {
     userAuthCache.invalidate(userId);
     return { message: 'حساب کاربری با موفقیت حذف و داده‌های شخصی ناشناس شد' };
   }
+
+
+  /** #40 item 55 — change phone with OTP on the new number */
+  async requestChangePhone(userId: string, newPhoneRaw: string) {
+    const newPhone = (newPhoneRaw || '').trim();
+    if (!/^09\d{9}$/.test(newPhone)) {
+      throw new BadRequestException('شماره موبایل نامعتبر است');
+    }
+    const me = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!me) throw new UnauthorizedException();
+    if (me.phone === newPhone) {
+      throw new BadRequestException('این همان شماره فعلی شماست');
+    }
+    const taken = await this.prisma.user.findFirst({
+      where: { phone: newPhone, id: { not: userId }, status: { not: UserStatus.deleted } },
+    });
+    if (taken) {
+      throw new BadRequestException('این شماره قبلاً ثبت‌نام شده است');
+    }
+    // reuse OTP pipeline with purpose change_phone
+    return this.requestOtp({ phone: newPhone, purpose: 'change_phone', accountType: me.accountType } as any);
+  }
+
+  async verifyChangePhone(userId: string, newPhoneRaw: string, code: string) {
+    const newPhone = (newPhoneRaw || '').trim();
+    if (!/^09\d{9}$/.test(newPhone) || !code?.trim()) {
+      throw new BadRequestException('داده‌ها نامعتبر است');
+    }
+    const me = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!me) throw new UnauthorizedException();
+    const purpose = `change_phone:${me.accountType}`;
+    await this.consumeOtp(newPhone, code.trim(), purpose);
+    const taken = await this.prisma.user.findFirst({
+      where: { phone: newPhone, id: { not: userId }, status: { not: UserStatus.deleted } },
+    });
+    if (taken) {
+      throw new BadRequestException('این شماره قبلاً ثبت‌نام شده است');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { phone: newPhone, phoneVerified: true },
+    });
+    userAuthCache.invalidate(userId);
+    return { message: 'شماره موبایل با موفقیت تغییر کرد', phone: newPhone };
+  }
+
 }
