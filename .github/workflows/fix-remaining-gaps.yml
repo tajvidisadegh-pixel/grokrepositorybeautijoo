@@ -1,0 +1,76 @@
+name: fix-remaining-gaps
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text(encoding='utf-8')
+          old = "action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?"
+          new = "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show', reason?"
+          if old in t:
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+              print('panel-api OK')
+          else:
+              print('panel-api skip')
+
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace(
+              "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete') {",
+              "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show') {",
+              1,
+          )
+          if 'عدم حضور' not in t:
+              marker = "onClick={() => act(b.id, 'complete')}\n                              >\n                                تکمیل\n                              </Button>"
+              if marker in t:
+                  add = marker + "\n                              {b.status === 'confirmed' && (\n                                <Button\n                                  size=\"sm\"\n                                  variant=\"outline\"\n                                  loading={busy === `${b.id}:no-show`}\n                                  onClick={() => {\n                                    if (typeof window !== 'undefined' && !window.confirm('مشتری حضور نداشته؟ ثبت عدم حضور؟')) return;\n                                    void act(b.id, 'no-show');\n                                  }}\n                                >\n                                  عدم حضور\n                                </Button>\n                              )}"
+                  t = t.replace(marker, add, 1)
+                  print('no-show btn OK')
+              else:
+                  print('no-show marker missing')
+          else:
+              print('no-show exists')
+          p.write_text(t, encoding='utf-8')
+
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if '_pinnedServiceIds' not in t:
+              old = "{pro.professionalServices?.map((ps) => (\n                <ServiceOfferCard\n                  key={ps.id}\n                  ps={ps as ProfessionalServiceItem}\n                  slug={pro.slug}\n                />\n              ))}"
+              new = "{(() => {\n                const list = [...(pro.professionalServices || [])] as ProfessionalServiceItem[];\n                const pins = ((pro as { socialLinks?: { _pinnedServiceIds?: string[] } }).socialLinks?._pinnedServiceIds) || [];\n                const pinSet = new Set(Array.isArray(pins) ? pins : []);\n                list.sort((a, b) => (pinSet.has(a.id) ? 0 : 1) - (pinSet.has(b.id) ? 0 : 1));\n                return list.map((ps) => (\n                  <li key={ps.id} className=\"list-none\">\n                    {pinSet.has(ps.id) && (\n                      <span className=\"mb-1 inline-block rounded-full bg-coral/10 px-2 py-0.5 text-[10px] font-medium text-coral\">پین‌شده</span>\n                    )}\n                    <ServiceOfferCard ps={ps as ProfessionalServiceItem} slug={pro.slug} />\n                  </li>\n                ));\n              })()}"
+              if old in t:
+                  p.write_text(t.replace(old, new, 1), encoding='utf-8')
+                  print('pins OK')
+              else:
+                  print('pins marker missing')
+          else:
+              print('pins exists')
+
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'notes.length' not in t:
+              old = 'onChange={(e) => setNotes(e.target.value)}\n              rows={2}\n              className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"\n              placeholder="توضیح کوتاه برای زیباگر…"\n            />'
+              new = 'onChange={(e) => setNotes(e.target.value.slice(0, 500))}\n              rows={2}\n              maxLength={500}\n              className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"\n              placeholder="توضیح کوتاه برای زیباگر…"\n            />\n            <p className="mt-1 text-left text-xs text-gray" dir="ltr">{`${notes.length}/500`}</p>'
+              if old in t:
+                  p.write_text(t.replace(old, new, 1), encoding='utf-8')
+                  print('notes OK')
+              else:
+                  print('notes marker missing')
+          else:
+              print('notes exists')
+          print('DONE')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: no-show UI, public pins, notes counter" && git push; fi
