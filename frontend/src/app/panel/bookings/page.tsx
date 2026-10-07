@@ -4,30 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { 
-      <div className="flex flex-wrap gap-2" aria-label="فیلتر وضعیت">
-        {[
-          { v: '', l: 'همه' },
-          { v: 'pending', l: 'در انتظار' },
-          { v: 'confirmed', l: 'تأییدشده' },
-          { v: 'completed', l: 'انجام‌شده' },
-          { v: 'cancelled', l: 'کنسل‌شده' },
-        ].map((o) => (
-          <button
-            key={o.v || 'all'}
-            type="button"
-            onClick={() => setStatusFilter(o.v)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-              statusFilter === o.v
-                ? 'border-coral bg-coral text-white'
-                : 'border-border bg-white hover:border-coral'
-            }`}
-          >
-            {o.l}
-          </button>
-        ))}
-      </div>
-PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
+import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
 import {
   fetchMyBookings,
   createReview,
@@ -85,7 +62,7 @@ export default function PanelBookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     load();
@@ -192,6 +169,29 @@ export default function PanelBookingsPage() {
       <div>
         <h1 className="text-2xl font-bold">رزروهای من</h1>
         <p className="mt-1 text-sm text-gray">لیست واقعی از سرور</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2" aria-label="فیلتر وضعیت">
+        {[
+          { v: '', l: 'همه' },
+          { v: 'pending', l: 'در انتظار' },
+          { v: 'confirmed', l: 'تأییدشده' },
+          { v: 'completed', l: 'انجام‌شده' },
+          { v: 'cancelled', l: 'کنسل‌شده' },
+        ].map((o) => (
+          <button
+            key={o.v || 'all'}
+            type="button"
+            onClick={() => setStatusFilter(o.v)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+              statusFilter === o.v
+                ? 'border-coral bg-coral text-white'
+                : 'border-border bg-white hover:border-coral'
+            }`}
+          >
+            {o.l}
+          </button>
+        ))}
       </div>
       {(() => {
         const pending = items.filter(
