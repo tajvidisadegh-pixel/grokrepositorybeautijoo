@@ -1,6 +1,8 @@
 name: patch-item-31-35
+
 on:
   workflow_dispatch:
+
 jobs:
   patch:
     runs-on: ubuntu-latest
@@ -8,24 +10,37 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Apply patches
-        run: |
-          python3 << 'PY'
-          from pathlib import Path
 
-          # 31 bookings concurrent
+      - name: Apply item 31 concurrent booking limit
+        run: |
+          python3 -c "
+          from pathlib import Path
           p = Path('backend/src/bookings/bookings.service.ts')
           text = p.read_text()
-          if 'MAX_CONCURRENT_BOOKINGS' not in text:
-              needle = """    if (!customer.phoneVerified) {
-      throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
-    }
+          if 'MAX_CONCURRENT_BOOKINGS' in text:
+              print('already applied')
+          else:
+              old = '''    if (!customer.phoneVerified) {\n      throw new BadRequestException(\x27\u0642\u0628\u0644 \u0627\u0632 \u0631\u0632\u0631\u0648 \u0628\u0627\u06cc\u062f \u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0628\u0627\u06cc\u0644 \u0628\u0627 \u06a9\u062f \u06cc\u06a9\u0628\u0627\u0631\u0645\u0635\u0631\u0641 \u062a\u0623\u06cc\u06cc\u062f \u0634\u0648\u062f\x27);\n    }\n\n    const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });'''
+              print('needle found', old[:40] in text)
+          "
 
-    const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });"""
-              insert = """    if (!customer.phoneVerified) {
-      throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
-    }
+      - name: Patch with python file
+        run: |
+          cat > /tmp/patch.py << 'ENDPY'
+          from pathlib import Path
 
+          p = Path("backend/src/bookings/bookings.service.ts")
+          text = p.read_text()
+          if "MAX_CONCURRENT_BOOKINGS" not in text:
+              marker = "if (!customer.phoneVerified)"
+              idx = text.find(marker)
+              if idx < 0:
+                  raise SystemExit("phoneVerified marker missing")
+              # find end of that if block + blank line before const pro
+              pro_idx = text.find("const pro = await this.prisma.professional.findUnique", idx)
+              if pro_idx < 0:
+                  raise SystemExit("pro marker missing")
+              insert = '''
     // #40 item 31 — limit concurrent active bookings per customer
     const maxConcurrent = Math.max(
       1,
@@ -44,127 +59,78 @@ jobs:
       );
     }
 
-    const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });"""
-              if needle not in text:
-                  raise SystemExit('bookings needle missing')
-              p.write_text(text.replace(needle, insert, 1))
-              print('31 bookings OK')
+    '''
+              text = text[:pro_idx] + insert + text[pro_idx:]
+              p.write_text(text)
+              print("31 OK")
           else:
-              print('31 already present')
+              print("31 skip")
 
-          # 32 publicInclude lastLoginAt
-          p2 = Path('backend/src/professionals/professionals.service.ts')
-          text2 = p2.read_text()
-          if 'lastLoginAt: true' not in text2:
-              needle2 = """  private publicInclude() {
-    return {
-      user: {
-        select: {
-          profile: {
-            select: {
-              displayName: true, firstName: true, lastName: true, avatarUrl: true,
-            },
-          },
-        },
-      },"""
-              insert2 = """  private publicInclude() {
-    return {
-      user: {
-        select: {
-          lastLoginAt: true,
-          profile: {
-            select: {
-              displayName: true, firstName: true, lastName: true, avatarUrl: true,
-            },
-          },
-        },
-      },"""
-              if needle2 not in text2:
-                  raise SystemExit('publicInclude needle missing')
-              p2.write_text(text2.replace(needle2, insert2, 1))
-              print('32 publicInclude OK')
-          else:
-              print('32 publicInclude already')
-
-          # 32 auth lastLogin on password login
-          p3 = Path('backend/src/auth/auth.service.ts')
-          text3 = p3.read_text()
-          needle = """    const ok = await argon2.verify(user.passwordHash, dto.password);
-    if (!ok) {
-      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }
-    const tokens = await this.issueTokens(user.id, user.phone);
-"""
-          if needle in text3:
-              insert = """    const ok = await argon2.verify(user.passwordHash, dto.password);
-    if (!ok) {
-      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }
-    // #40 item 32 — track last activity
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    }).catch(() => undefined);
-    const tokens = await this.issueTokens(user.id, user.phone);
-"""
-              text3 = text3.replace(needle, insert, 1)
-              print('32 login lastLogin OK')
-          needle_vo = """      if (!user.phoneVerified) {
-        await this.prisma.user.update({
-          where: { id: user.id },
-          data: { phoneVerified: true },
-        });
-      }
-    }
-
-    const tokens = await this.issueTokens(user.id, user.phone);
-    const roles = user.userRoles.map((ur) => ur.role.name);
-"""
-          if needle_vo in text3:
-              insert_vo = """      if (!user.phoneVerified) {
-        await this.prisma.user.update({
-          where: { id: user.id },
-          data: { phoneVerified: true },
-        });
-      }
-    }
-
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    }).catch(() => undefined);
-    const tokens = await this.issueTokens(user.id, user.phone);
-    const roles = user.userRoles.map((ur) => ur.role.name);
-"""
-              text3 = text3.replace(needle_vo, insert_vo, 1)
-              print('32 verifyOtp lastLogin OK')
-          p3.write_text(text3)
-
-          # api-errors concurrent message
-          p4 = Path('frontend/src/lib/api-errors.ts')
-          text4 = p4.read_text()
-          if 'رزرو فعال همزمان' not in text4:
-              marker = 'phoneVerified'
-              idx = text4.find(marker)
-              if idx > 0:
-                  end = text4.find('},', idx)
-                  end = text4.find('\n', end) + 1
-                  extra = """  { test: /حداکثر.*رزرو فعال|رزرو فعال همزمان|MAX_CONCURRENT|concurrent.?booking/i,\n    fa: 'تعداد رزروهای فعال شما به سقف مجاز رسیده است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.',\n  },\n"""
-                  text4 = text4[:end] + extra + text4[end:]
-                  p4.write_text(text4)
-                  print('api-errors OK')
+          p2 = Path("backend/src/professionals/professionals.service.ts")
+          t2 = p2.read_text()
+          if "lastLoginAt: true" not in t2:
+              old = "select: {\n          profile: {"
+              # only first occurrence inside publicInclude
+              pi = t2.find("private publicInclude")
+              if pi < 0:
+                  raise SystemExit("publicInclude missing")
+              chunk = t2[pi:pi+400]
+              if "lastLoginAt" in chunk:
+                  print("32 include skip")
               else:
-                  print('api-errors marker skip')
+                  sel = t2.find("select: {", pi)
+                  # insert after select: {
+                  insert_at = sel + len("select: {")
+                  t2 = t2[:insert_at] + "\n          lastLoginAt: true," + t2[insert_at:]
+                  p2.write_text(t2)
+                  print("32 include OK")
           else:
-              print('api-errors already')
+              print("32 include skip")
 
-          print('ALL DONE')
-          PY
-      - name: Commit
+          p3 = Path("backend/src/auth/auth.service.ts")
+          t3 = p3.read_text()
+          if "item 32" not in t3:
+              needle = "const tokens = await this.issueTokens(user.id, user.phone);"
+              # password login: after argon2 verify success
+              login_idx = t3.find("async login")
+              rel = t3.find(needle, login_idx)
+              if rel > 0 and "lastLoginAt" not in t3[rel-150:rel]:
+                  block = """// #40 item 32 — track last activity\n    await this.prisma.user.update({\n      where: { id: user.id },\n      data: { lastLoginAt: new Date() },\n    }).catch(() => undefined);\n    """
+                  t3 = t3[:rel] + block + t3[rel:]
+                  print("32 login OK")
+              vo = t3.find("async verifyOtp")
+              rel2 = t3.find(needle, vo)
+              if rel2 > 0 and "lastLoginAt" not in t3[rel2-150:rel2]:
+                  block = """await this.prisma.user.update({\n      where: { id: user.id },\n      data: { lastLoginAt: new Date() },\n    }).catch(() => undefined);\n    """
+                  t3 = t3[:rel2] + block + t3[rel2:]
+                  print("32 otp OK")
+              p3.write_text(t3)
+          else:
+              print("32 auth skip")
+
+          p4 = Path("frontend/src/lib/api-errors.ts")
+          t4 = p4.read_text()
+          if "رزرو فعال همزمان" not in t4:
+              idx = t4.find("phoneVerified")
+              if idx > 0:
+                  end = t4.find("},", idx)
+                  end = t4.find("\n", end) + 1
+                  extra = "  { test: /حداکثر.*رزرو فعال|رزرو فعال همزمان|MAX_CONCURRENT|concurrent.?booking/i,\n    fa: 'تعداد رزروهای فعال شما به سقف مجاز رسیده است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.',\n  },\n"
+                  t4 = t4[:end] + extra + t4[end:]
+                  p4.write_text(t4)
+                  print("api-errors OK")
+          else:
+              print("api-errors skip")
+
+          print("DONE")
+          ENDPY
+          python3 /tmp/patch.py
+
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --stat
-          git commit -m "feat(#40): items 31-32 concurrent booking limit + last activity tracking" || echo "no changes"
+          git status
+          git commit -m "feat(#40): items 31-32 concurrent booking limit + last activity" || echo nochange
           git push
