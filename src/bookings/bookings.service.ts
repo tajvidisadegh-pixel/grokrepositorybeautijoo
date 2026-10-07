@@ -191,6 +191,19 @@ export class BookingsService {
     if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
       throw new BadRequestException('زمان شروع نامعتبر است');
     }
+    // #40 item 56 — minimum lead time before booking
+    {
+      const minLead = parseInt(process.env.BOOKING_MIN_LEAD_HOURS || '4', 10);
+      const hours = Number.isFinite(minLead) && minLead >= 0 ? minLead : 4;
+      const msLead = hours * 3600_000;
+      if (startAt.getTime() - Date.now() < msLead) {
+        throw new BadRequestException(
+          hours === 0
+            ? 'زمان شروع نامعتبر است'
+            : `حداقل ${hours} ساعت قبل از نوبت باید رزرو کنید.`,
+        );
+      }
+    }
     const endAt = new Date(startAt.getTime() + totalDuration * 60_000);
 
     const dateStr = tehranDateStr(startAt);
