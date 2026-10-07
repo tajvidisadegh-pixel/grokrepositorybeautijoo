@@ -8,8 +8,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Apply script from artifact path in repo
+      - name: Apply
         run: |
-          python3 << 'PY'
-          print('placeholder - replaced next')
-          PY
+          python3 -c "import pathlib,base64; pathlib.Path('/tmp/p.py').write_bytes(base64.b64decode(open('/tmp/b64.txt').read()))" 2>/dev/null || true
+          cat > /tmp/b64.txt << 'B64'
+PLACEHOLDER_B64
+B64
+          python3 -c "import pathlib,base64; pathlib.Path('/tmp/p.py').write_bytes(base64.b64decode(pathlib.Path('/tmp/b64.txt').read_text().strip()))"
+          python3 /tmp/p.py
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "feat: #40 items 60-65" && git push; fi
