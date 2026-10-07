@@ -53,6 +53,17 @@ export class BookingsService {
     if (!customer.phoneVerified) {
       throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
     }
+    // #40 item 65
+    {
+      const proId = (data as { professionalId?: string }).professionalId;
+      if (proId) {
+        const proRow = await this.prisma.professional.findUnique({ where: { id: proId }, select: { socialLinks: true } });
+        const sl = (proRow?.socialLinks || {}) as Record<string, unknown>;
+        if (sl._pauseBookings === true) {
+          throw new BadRequestException('این زیباگر فعلاً نوبت جدید نمی‌پذیرد.');
+        }
+      }
+    }
 
     {
       const proRow = await this.prisma.professional.findUnique({

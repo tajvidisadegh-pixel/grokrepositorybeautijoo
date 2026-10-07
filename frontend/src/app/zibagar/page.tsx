@@ -1,4 +1,5 @@
 'use client';
+import { PauseBookingsToggle } from '@/components/professionals/pause-bookings-toggle';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
@@ -237,6 +238,8 @@ export default function ZibagarDashboard() {
 
   return (
     <div className="space-y-5">
+      <div className="mb-4"><PauseBookingsToggle /></div>
+
       {pendingReviewBanner}
 
       {/* Header */}

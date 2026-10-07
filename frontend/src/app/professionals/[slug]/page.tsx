@@ -350,7 +350,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                       {pl.location.city}
                       {pl.location.province ? `، ${pl.location.province}` : ''}
                     </p>
-                    <p className="text-xs text-gray-muted">{pl.location.address}</p>
+                    <p className="text-xs text-gray-muted">آدرس دقیق پس از تأیید نوبت</p>
                     <Link
                       href={`/locations/${encodeURIComponent(pl.location.city)}`}
                       className="mt-1 inline-block text-xs text-coral hover:text-coral-dark"
@@ -370,7 +370,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                 if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
                 return (
                   <div className="mt-4">
-                    <LocationMapView position={{ lat, lng }} height="200px" precision={(loc as { precision?: string | null }).precision === "exact" ? "exact" : "approximate"} />
+                    <LocationMapView position={{ lat, lng }} height="200px" precision="approximate" />
                     <p className="mt-2 text-xs text-gray-muted">مسیریابی و نقشه از طریق نشان</p>
                   </div>
                 );
