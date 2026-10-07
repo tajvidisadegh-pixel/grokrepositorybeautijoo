@@ -285,7 +285,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       const already = await this.hasDayNotification(userId, dayKey);
       if (already) continue;
       const timeFa = this.formatTehran(info.first);
-      const result = await this.notifications.create({
+      const result = await this.notifications.notify({
         userId,
         type: NotificationType.system,
         title: 'خلاصه نوبت‌های امروز',
