@@ -1,4 +1,4 @@
-name: restore-wizard
+name: restore-wizard2
 on:
   push:
     paths:
@@ -10,35 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - run: |
           set -eux
-          # Last known good before PLACEHOLDER: 5a7537d1dfd944da76d8b765c6d24704823e748e
-          git show 5a7537d1dfd944da76d8b765c6d24704823e748e:frontend/src/components/booking/booking-wizard.tsx > frontend/src/components/booking/booking-wizard.tsx
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/5a7537d1dfd944da76d8b765c6d24704823e748e/frontend/src/components/booking/booking-wizard.tsx" -o frontend/src/components/booking/booking-wizard.tsx
+          wc -c frontend/src/components/booking/booking-wizard.tsx
+          grep -q 'export function BookingWizard' frontend/src/components/booking/booking-wizard.tsx
           python3 << 'PY'
           from pathlib import Path
           w = Path('frontend/src/components/booking/booking-wizard.tsx')
           s = w.read_text()
-          assert 'export function BookingWizard' in s
-          assert len(s) > 20000
+          assert 'RESTORE_INCOMPLETE' not in s
           s = s.replace(
               'const { isAuthenticated, loading: authLoading } = useAuth();',
               'const { isAuthenticated, loading: authLoading, user } = useAuth();',
               1,
           )
-          marker = '    setSubmitting(true);'
-          idx = s.find('async function submitBooking')
-          idx2 = s.find(marker, idx)
-          if 'user.phoneVerified' not in s[idx:idx2+80]:
-              insert = '''    if (user && user.phoneVerified === false) {
-      const draft = buildDraft();
-      saveBookingDraft(draft);
-      setSubmitError('قبل از رزرو باید شماره موبایل را تأیید کنید.');
-      router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft)));
-      return;
-    }
-'''
+          if 'user.phoneVerified' not in s:
+              marker = '    setSubmitting(true);'
+              idx = s.find('async function submitBooking')
+              idx2 = s.find(marker, idx)
+              insert = "    if (user && user.phoneVerified === false) {\n      const draft = buildDraft();\n      saveBookingDraft(draft);\n      setSubmitError('قبل از رزرو باید شماره موبایل را تأیید کنید.');\n      router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft)));\n      return;\n    }\n"
               s = s[:idx2] + insert + s[idx2:]
           if 'تأیید شماره موبایل لازم است' not in s:
               hint = '''
@@ -46,17 +37,7 @@ jobs:
             <div className="mb-3 rounded-2xl border border-coral/30 bg-coral-soft/50 px-3 py-2 text-sm">
               <p className="font-medium text-coral">تأیید شماره موبایل لازم است</p>
               <p className="mt-1 text-xs text-gray">برای ثبت رزرو ابتدا موبایل را با کد پیامکی تأیید کنید.</p>
-              <button
-                type="button"
-                className="mt-2 text-xs font-medium text-coral underline"
-                onClick={() => {
-                  const draft = buildDraft();
-                  saveBookingDraft(draft);
-                  router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft)));
-                }}
-              >
-                رفتن به تأیید موبایل
-              </button>
+              <button type="button" className="mt-2 text-xs font-medium text-coral underline" onClick={() => { const draft = buildDraft(); saveBookingDraft(draft); router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft))); }}>رفتن به تأیید موبایل</button>
             </div>
           )}
 '''
@@ -65,14 +46,13 @@ jobs:
               else:
                   s = s.replace('{submitError && (', hint + '          {submitError && (', 1)
           w.write_text(s)
-          print('restored', len(s), 'phoneVerified', s.count('phoneVerified'))
+          print(len(s), s.count('phoneVerified'))
           PY
       - run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           rm -f .github/workflows/restore-wizard.yml
           rm -f .github/workflows/item25-wizard.yml
-          git add frontend/src/components/booking/booking-wizard.tsx
           git add -A
-          git commit -m "fix: restore booking-wizard + phoneVerified gate (#40-25)"
+          git commit -m "fix: restore full booking-wizard + phoneVerified (#40-25)"
           git push
