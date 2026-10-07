@@ -264,6 +264,18 @@ export default function PanelBookingsPage() {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className="rounded-full bg-coral-soft px-3 py-1 text-xs font-medium text-coral">
+
+              {((b.status === 'confirmed' || b.status === 'completed') &&
+                (b.professional as { user?: { phone?: string | null } } | undefined)?.user?.phone) ? (
+                <a
+                  href={`tel:${(b.professional as { user?: { phone?: string | null } }).user!.phone}`}
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-coral hover:text-coral-dark"
+                  dir="ltr"
+                >
+                  تماس با زیباگر: {(b.professional as { user?: { phone?: string | null } }).user!.phone}
+                </a>
+              ) : null}
+
                         {persianBookingStatus(b.status)}
                       </span>
                       {payStatus && (

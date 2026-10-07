@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/professionals/empty-state';
 import { ApiErrorState } from '@/components/professionals/api-error';
 import { siteName } from '@/lib/seo';
 import { NearMeFields } from '@/components/search/near-me-fields';
+import { RecentSearches, RecordRecentSearch } from '@/components/search/recent-searches';
 import { FormJalaliDate } from '@/components/ui/jalali-date-input';
 import { tehranTodayIso } from '@/lib/jalali';
 
@@ -92,6 +93,11 @@ export default async function SearchPage({ searchParams }: Props) {
     <div className="mx-auto max-w-6xl px-4 py-10">
       <h1 className="text-2xl font-bold text-blue">جستجو</h1>
       <p className="mt-1 text-sm text-gray">فیلتر بر اساس متن، شهر، فاصله، دسته، امتیاز، قیمت و تاریخ در دسترس بودن</p>
+
+      <RecentSearches />
+      {(q || city) && (
+        <RecordRecentSearch q={q} city={city} href={buildHref(1)} />
+      )}
 
       <form method="get" action="/search" className="mt-6 space-y-4 rounded-3xl border border-border/90 bg-white p-4 shadow-sm">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

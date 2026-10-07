@@ -165,6 +165,38 @@ export default function ZibagarHoursPage() {
     setDirty(serverKey !== JSON.stringify(dayDrafts));
   }, [dayDrafts, workingHours, draftRestored, loading]);
 
+  
+  const scheduleConflicts = useMemo(() => {
+    const now = Date.now();
+    const out: { id: string; when: string; reason: string }[] = [];
+    for (const b of bookings) {
+      if (!b.startAt) continue;
+      const st = (b.status || '').toLowerCase();
+      if (st === 'cancelled' || st === 'rejected' || st === 'expired') continue;
+      const start = new Date(b.startAt).getTime();
+      if (start < now) continue;
+      const wd = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tehran', weekday: 'long' }).format(new Date(b.startAt)).toLowerCase();
+      const draft = dayDrafts[wd];
+      const when = formatDate(b.startAt, { style: 'long', weekday: true }) + ' ' + formatTime24(b.startAt);
+      const name = b.customer?.profile?.displayName || 'مشتری';
+      if (!draft || !draft.active) {
+        out.push({ id: b.id, when, reason: `رزرو ${name} در روز غیرفعال` });
+        continue;
+      }
+      const hm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tehran', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(b.startAt));
+      const [hh, mm] = hm.split(':').map(Number);
+      const mins = hh * 60 + mm;
+      const [sh, sm] = draft.startTime.slice(0, 5).split(':').map(Number);
+      const [eh, em] = draft.endTime.slice(0, 5).split(':').map(Number);
+      const startM = sh * 60 + sm;
+      const endM = eh * 60 + em;
+      if (mins < startM || mins >= endM) {
+        out.push({ id: b.id, when, reason: `رزرو ${name} خارج از بازه ${draft.startTime.slice(0, 5)}–${draft.endTime.slice(0, 5)}` });
+      }
+    }
+    return out;
+  }, [bookings, dayDrafts]);
+
   const monthGrid = useMemo(() => buildJalaliMonthGrid(viewJy, viewJm), [viewJy, viewJm]);
 
   const activeDays = useMemo(() => {
@@ -274,6 +306,19 @@ export default function ZibagarHoursPage() {
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:text-sm">
           تغییرات ساعات هفتگی هنوز ذخیره نشده‌اند و به‌صورت موقت روی این دستگاه نگه‌داری می‌شوند.
         </p>
+      )}
+
+      {scheduleConflicts.length > 0 && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 sm:text-sm">
+          <p className="font-medium">هشدار تداخل زمانی با رزروهای آینده ({scheduleConflicts.length} مورد)</p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5">
+            {scheduleConflicts.slice(0, 5).map((c) => (
+              <li key={c.id}>{c.when} — {c.reason}</li>
+            ))}
+            {scheduleConflicts.length > 5 && <li>و {scheduleConflicts.length - 5} مورد دیگر…</li>}
+          </ul>
+          <p className="mt-1 text-[11px] text-red-700">قبل از ذخیره، ساعات را جوری تنظیم کنید که این رزروها پوشش داده شوند یا رزروها را تغییر زمان دهید.</p>
+        </div>
       )}
 
       <Card className="space-y-2 p-3">

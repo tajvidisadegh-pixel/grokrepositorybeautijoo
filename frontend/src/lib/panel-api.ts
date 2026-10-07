@@ -12,7 +12,7 @@ import { apiClient } from './api';
 export type Paginated<T> = { items?: T[]; data?: T[]; total?: number; page?: number; limit?: number };
 export type BookingListItem = {
   id: string; status: string; startAt: string; endAt?: string; notes?: string | null; totalPrice?: number | null;
-  professional?: { id: string; slug?: string; title?: string | null; user?: { profile?: { displayName?: string | null } | null } | null } | null;
+  professional?: { id: string; slug?: string; title?: string | null; user?: { phone?: string | null; profile?: { displayName?: string | null; avatarUrl?: string | null } | null } | null } | null;
   customer?: { id: string; phone?: string | null; profile?: { displayName?: string | null } | null } | null;
   services?: { id: string; name?: string; price?: number }[];
   items?: { service?: { id?: string; name?: string } | null; price?: number }[];
