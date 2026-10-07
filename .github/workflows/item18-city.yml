@@ -1,9 +1,9 @@
-name: apply-item-32-34-fe
+name: fix-36-40-types
 
 on:
   push:
     paths:
-      - '.github/triggers/apply-32-34-fe.flag'
+      - '.github/triggers/fix-36-40.flag'
 
 jobs:
   patch:
@@ -12,12 +12,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Run patch
-        run: python3 .github/triggers/fe-patch.py
+      - name: Fix
+        run: python3 .github/triggers/fix-36-40.py
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "frontend/src/app/professionals/[slug]/page.tsx" frontend/src/app/zibagar/hours/page.tsx
-          git commit -m "feat(#40): items 32+34 last activity UI + hours draft save" || echo nochange
+          git add frontend/src/app/search/page.tsx frontend/src/app/zibagar/hours/page.tsx
+          git commit -m "fix(#40): typecheck items 38-40 pageHref + formatDate imports" || echo nochange
           git push
