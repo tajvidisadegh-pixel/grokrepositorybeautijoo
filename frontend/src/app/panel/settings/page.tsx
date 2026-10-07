@@ -134,6 +134,7 @@ export default function PanelSettingsPage() {
   }
 
   async function onLogout() {
+    if (typeof window !== 'undefined' && !window.confirm('آیا می‌خواهید از حساب خارج شوید؟')) return;
     await logout();
     router.replace('/login');
   }

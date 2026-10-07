@@ -47,6 +47,7 @@ export type SpecialtyViewProps = {
   setMsg: (v: string | null) => void;
   load: () => void | Promise<void>;
   onDeleteMedia: (id: string) => void | Promise<void>;
+  moveService?: (psId: string, dir: -1 | 1) => void;
   onUploadMedia: (file: File, attachToPsId?: string) => void | Promise<void>;
   removeRootSpecialty: (rootId: string) => void | Promise<void>;
   createAndEditCustomService?: (
@@ -82,6 +83,7 @@ export function SpecialtyView(props: SpecialtyViewProps) {
     setMsg,
     load,
     onDeleteMedia,
+    moveService,
     onUploadMedia,
     removeRootSpecialty,
   } = props;
@@ -290,7 +292,18 @@ export function SpecialtyView(props: SpecialtyViewProps) {
           ))}
         </div>
         <label className="inline-block cursor-pointer text-sm text-blue-600">
-          {uploadState === 'uploading' ? 'در حال آپلود...' : '+ افزودن نمونه‌کار'}
+                  {moveService && specialtyMenu.length > 1 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {specialtyMenu.map((ps, idx) => (
+              <div key={`ord-${ps.id}`} className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs">
+                <span className="max-w-[8rem] truncate">{ps.service?.name || 'خدمت'}</span>
+                <button type="button" className="rounded px-1 hover:bg-gray-light" disabled={idx === 0} onClick={() => moveService(ps.id, -1)}>↑</button>
+                <button type="button" className="rounded px-1 hover:bg-gray-light" disabled={idx === specialtyMenu.length - 1} onClick={() => moveService(ps.id, 1)}>↓</button>
+              </div>
+            ))}
+          </div>
+        )}
+{uploadState === 'uploading' ? 'در حال آپلود...' : '+ افزودن نمونه‌کار'}
           <input type="file" accept="image/*,video/*" className="hidden" disabled={busy || uploadState === 'uploading'} onChange={(e) => { const f = e.target.files?.[0]; if (f) { void (async () => { if (specialtyMenu.length > 0) { await onUploadMedia(f, specialtyMenu[0].id); } else { setError('ابتدا یک خدمت ثبت کنید، سپس نمونه‌کار اضافه کنید.'); } })(); } e.target.value = ''; }} />
         </label>
         {uploadState === 'uploading' && uploadProgress != null && (

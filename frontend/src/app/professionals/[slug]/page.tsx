@@ -277,7 +277,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
           />
 
           <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-foreground">خدمات و قیمت</h2>
+            <h2 className="text-lg font-bold text-foreground">خدمات و قیمت{(pro.professionalServices?.length ?? 0) > 0 && (<span className="mr-2 text-sm font-normal text-gray"> ({(pro.professionalServices?.length ?? 0).toLocaleString("fa-IR")} خدمت)</span>)}</h2>
             {(!pro.professionalServices ||
               pro.professionalServices.length === 0) && (
               <p className="mt-3 text-sm text-gray">خدمتی ثبت نشده است.</p>
@@ -286,8 +286,9 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               {(() => {
                 const list = [...(pro.professionalServices || [])] as ProfessionalServiceItem[];
                 const pins = ((pro as { socialLinks?: { _pinnedServiceIds?: string[] } }).socialLinks?._pinnedServiceIds) || [];
+                const orderIds = ((pro as { socialLinks?: { _serviceOrderIds?: string[] } }).socialLinks?._serviceOrderIds) || [];
                 const pinSet = new Set(Array.isArray(pins) ? pins : []);
-                list.sort((a, b) => (pinSet.has(a.id) ? 0 : 1) - (pinSet.has(b.id) ? 0 : 1));
+                list.sort((a, b) => { const ap = pinSet.has(a.id) ? 0 : 1; const bp = pinSet.has(b.id) ? 0 : 1; if (ap !== bp) return ap - bp; const ai = orderIds.indexOf(a.id); const bi = orderIds.indexOf(b.id); if (ai === -1 && bi === -1) return 0; if (ai === -1) return 1; if (bi === -1) return -1; return ai - bi; });
                 return list.map((ps) => (
                   <li key={ps.id} className="list-none">
                     {pinSet.has(ps.id) && (

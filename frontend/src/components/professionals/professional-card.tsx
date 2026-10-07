@@ -83,6 +83,8 @@ export function ProfessionalCard({ pro, className }: Props) {
           )}
           {services.length > 0 && (
             <p className="mt-1.5 line-clamp-1 text-xs text-gray-muted sm:mt-2">
+              <span className="font-medium text-gray-dark">{services.length.toLocaleString('fa-IR')} خدمت</span>
+              {' · '}
               {services.slice(0, 3).join(' · ')}
             </p>
           )}

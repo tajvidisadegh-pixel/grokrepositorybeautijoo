@@ -12,6 +12,7 @@ import { apiClient } from './api';
 export type Paginated<T> = { items?: T[]; data?: T[]; total?: number; page?: number; limit?: number };
 export type BookingListItem = {
   id: string; status: string; startAt: string; endAt?: string; notes?: string | null; totalPrice?: number | null;
+  rejectedReason?: string | null; cancelReason?: string | null;
   professional?: { id: string; slug?: string; title?: string | null; user?: { phone?: string | null; profile?: { displayName?: string | null; avatarUrl?: string | null } | null } | null } | null;
   customer?: { id: string; phone?: string | null; profile?: { displayName?: string | null } | null } | null;
   services?: { id: string; name?: string; price?: number }[];
@@ -206,6 +207,9 @@ export async function createReview(payload: { bookingId: string; rating: number;
 }
 export async function respondBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
   return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);
+}
+export async function setServiceOrder(serviceIds: string[]) {
+  return apiClient.patch('/professionals/me', { socialLinks: { _serviceOrderIds: serviceIds } });
 }
 export async function fetchMyServices() {
   const res = await apiClient.get<ProfessionalServiceItem[] | Paginated<ProfessionalServiceItem>>('/professionals/me/services');

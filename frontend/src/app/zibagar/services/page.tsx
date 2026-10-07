@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
 import {
   fetchMyServices,
+  setServiceOrder,
   fetchCategories,
   fetchMyProfessional,
   setMySelectedCategories,
@@ -503,6 +504,21 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
     }
   }
 
+  async function moveService(psId: string, dir: -1 | 1) {
+    const ids = mine.map((x) => x.id);
+    const i = ids.indexOf(psId);
+    if (i < 0) return;
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    const next = [...ids];
+    const tmp = next[i]; next[i] = next[j]; next[j] = tmp;
+    try {
+      await setServiceOrder(next);
+      const byId = new Map(mine.map((x) => [x.id, x]));
+      setMine(next.map((id) => byId.get(id)!).filter(Boolean));
+    } catch (e) { setError(friendlyApiError(e)); }
+  }
+
   async function onUploadMedia(file: File, attachToPsId?: string) {
     setUploadState('uploading');
     setUploadErr(null);
@@ -768,6 +784,7 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
           load={load}
           onDeleteMedia={onDeleteMedia}
           onUploadMedia={onUploadMedia}
+          moveService={moveService}
           removeRootSpecialty={removeRootSpecialty}
           createAndEditCustomService={createAndEditCustomService}
           createFeature={createFeature}

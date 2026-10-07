@@ -428,7 +428,10 @@ async function submitReview(bookingId: string) {
                   {b.totalPrice != null && (
                     <p className="text-sm text-gray">{formatPrice(b.totalPrice)}</p>
                   )}
-                  {b.status === 'cancelled' && payStatus === 'refunded' && (
+                                    {b.status === 'rejected' && b.rejectedReason && (
+                    <p className="text-xs text-red-700">دلیل رد: {b.rejectedReason}</p>
+                  )}
+{b.status === 'cancelled' && payStatus === 'refunded' && (
                     <p className="text-xs text-green-700">مبلغ این رزرو مسترد شده است.</p>
                   )}
                   {b.status === 'cancelled' && payStatus === 'paid' && (
