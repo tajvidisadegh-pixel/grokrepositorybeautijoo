@@ -1,0 +1,170 @@
+name: patch-item-31-35
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patches
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # 31 bookings concurrent
+          p = Path('backend/src/bookings/bookings.service.ts')
+          text = p.read_text()
+          if 'MAX_CONCURRENT_BOOKINGS' not in text:
+              needle = """    if (!customer.phoneVerified) {
+      throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
+    }
+
+    const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });"""
+              insert = """    if (!customer.phoneVerified) {
+      throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
+    }
+
+    // #40 item 31 — limit concurrent active bookings per customer
+    const maxConcurrent = Math.max(
+      1,
+      parseInt(process.env.MAX_CONCURRENT_BOOKINGS || '3', 10) || 3,
+    );
+    const activeCount = await this.prisma.booking.count({
+      where: {
+        customerId,
+        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+        startAt: { gte: new Date() },
+      },
+    });
+    if (activeCount >= maxConcurrent) {
+      throw new BadRequestException(
+        `حداکثر ${maxConcurrent} رزرو فعال همزمان مجاز است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.`,
+      );
+    }
+
+    const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });"""
+              if needle not in text:
+                  raise SystemExit('bookings needle missing')
+              p.write_text(text.replace(needle, insert, 1))
+              print('31 bookings OK')
+          else:
+              print('31 already present')
+
+          # 32 publicInclude lastLoginAt
+          p2 = Path('backend/src/professionals/professionals.service.ts')
+          text2 = p2.read_text()
+          if 'lastLoginAt: true' not in text2:
+              needle2 = """  private publicInclude() {
+    return {
+      user: {
+        select: {
+          profile: {
+            select: {
+              displayName: true, firstName: true, lastName: true, avatarUrl: true,
+            },
+          },
+        },
+      },"""
+              insert2 = """  private publicInclude() {
+    return {
+      user: {
+        select: {
+          lastLoginAt: true,
+          profile: {
+            select: {
+              displayName: true, firstName: true, lastName: true, avatarUrl: true,
+            },
+          },
+        },
+      },"""
+              if needle2 not in text2:
+                  raise SystemExit('publicInclude needle missing')
+              p2.write_text(text2.replace(needle2, insert2, 1))
+              print('32 publicInclude OK')
+          else:
+              print('32 publicInclude already')
+
+          # 32 auth lastLogin on password login
+          p3 = Path('backend/src/auth/auth.service.ts')
+          text3 = p3.read_text()
+          needle = """    const ok = await argon2.verify(user.passwordHash, dto.password);
+    if (!ok) {
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }
+    const tokens = await this.issueTokens(user.id, user.phone);
+"""
+          if needle in text3:
+              insert = """    const ok = await argon2.verify(user.passwordHash, dto.password);
+    if (!ok) {
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }
+    // #40 item 32 — track last activity
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    }).catch(() => undefined);
+    const tokens = await this.issueTokens(user.id, user.phone);
+"""
+              text3 = text3.replace(needle, insert, 1)
+              print('32 login lastLogin OK')
+          needle_vo = """      if (!user.phoneVerified) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { phoneVerified: true },
+        });
+      }
+    }
+
+    const tokens = await this.issueTokens(user.id, user.phone);
+    const roles = user.userRoles.map((ur) => ur.role.name);
+"""
+          if needle_vo in text3:
+              insert_vo = """      if (!user.phoneVerified) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { phoneVerified: true },
+        });
+      }
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    }).catch(() => undefined);
+    const tokens = await this.issueTokens(user.id, user.phone);
+    const roles = user.userRoles.map((ur) => ur.role.name);
+"""
+              text3 = text3.replace(needle_vo, insert_vo, 1)
+              print('32 verifyOtp lastLogin OK')
+          p3.write_text(text3)
+
+          # api-errors concurrent message
+          p4 = Path('frontend/src/lib/api-errors.ts')
+          text4 = p4.read_text()
+          if 'رزرو فعال همزمان' not in text4:
+              marker = 'phoneVerified'
+              idx = text4.find(marker)
+              if idx > 0:
+                  end = text4.find('},', idx)
+                  end = text4.find('\n', end) + 1
+                  extra = """  { test: /حداکثر.*رزرو فعال|رزرو فعال همزمان|MAX_CONCURRENT|concurrent.?booking/i,\n    fa: 'تعداد رزروهای فعال شما به سقف مجاز رسیده است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.',\n  },\n"""
+                  text4 = text4[:end] + extra + text4[end:]
+                  p4.write_text(text4)
+                  print('api-errors OK')
+              else:
+                  print('api-errors marker skip')
+          else:
+              print('api-errors already')
+
+          print('ALL DONE')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --stat
+          git commit -m "feat(#40): items 31-32 concurrent booking limit + last activity tracking" || echo "no changes"
+          git push
