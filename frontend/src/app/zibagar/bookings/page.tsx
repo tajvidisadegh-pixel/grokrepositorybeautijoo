@@ -572,6 +572,17 @@ async function submitReport(id: string) {
                           >
                             گزارش به سوپرادمین
                           </Button>
+                          {b.customer?.id ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700"
+                              loading={busy === `${b.customer.id}:block`}
+                              onClick={() => void blockCustomer(b.customer!.id)}
+                            >
+                              مسدود کردن مشتری
+                            </Button>
+                          ) : null}
                         </div>
 
                         {reportFor === b.id && (
