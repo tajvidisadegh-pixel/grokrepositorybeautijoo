@@ -54,6 +54,18 @@ export class BookingsService {
       throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
     }
 
+    {
+      const proRow = await this.prisma.professional.findUnique({
+        where: { id: professionalId },
+        select: { socialLinks: true },
+      });
+      const links = (proRow?.socialLinks as { _blockedCustomerIds?: string[] } | null) || null;
+      const blocked = Array.isArray(links?._blockedCustomerIds) ? links!._blockedCustomerIds! : [];
+      if (blocked.includes(customerId)) {
+        throw new BadRequestException('متأسفانه امکان رزرو نزد این زیباگر برای شما وجود ندارد.');
+      }
+    }
+
     
     // #40 item 31 — limit concurrent active bookings per customer
     const maxConcurrent = Math.max(

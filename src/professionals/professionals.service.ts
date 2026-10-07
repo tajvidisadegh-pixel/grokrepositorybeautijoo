@@ -888,4 +888,41 @@ export class ProfessionalsService {
       availableNet: available,
     };
   }
+
+  async listBlockedCustomers(userId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const links = (pro.socialLinks as { _blockedCustomerIds?: string[] } | null) || {};
+    const ids = Array.isArray(links._blockedCustomerIds) ? links._blockedCustomerIds : [];
+    if (!ids.length) return { items: [] as { id: string; phone?: string | null; displayName?: string | null }[] };
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, phone: true, profile: { select: { displayName: true } } },
+    });
+    return { items: users.map((u) => ({ id: u.id, phone: u.phone, displayName: u.profile?.displayName ?? null })) };
+  }
+
+  async blockCustomer(userId: string, customerId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    if (customerId === userId) throw new BadRequestException('نمی‌توانید خودتان را مسدود کنید');
+    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
+    const prev = Array.isArray(links._blockedCustomerIds) ? (links._blockedCustomerIds as string[]) : [];
+    if (!prev.includes(customerId)) {
+      links._blockedCustomerIds = [...prev, customerId];
+      await this.prisma.professional.update({ where: { id: pro.id }, data: { socialLinks: links as object } });
+    }
+    return { ok: true };
+  }
+
+  async unblockCustomer(userId: string, customerId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
+    const prev = Array.isArray(links._blockedCustomerIds) ? (links._blockedCustomerIds as string[]) : [];
+    links._blockedCustomerIds = prev.filter((id) => id !== customerId);
+    await this.prisma.professional.update({ where: { id: pro.id }, data: { socialLinks: links as object } });
+    return { ok: true };
+  }
+
 }
