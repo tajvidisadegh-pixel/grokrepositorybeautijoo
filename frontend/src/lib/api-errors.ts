@@ -11,7 +11,12 @@ const MESSAGE_MAP: Array<{ test: RegExp; fa: string }> = [
   { test: /too many|rate.?limit|تعداد درخواست/i, fa: 'تعداد درخواست‌ها بیش از حد مجاز است. کمی بعد تلاش کنید.' },
   { test: /network|failed to fetch|econnrefused|timeout|ECONNRESET/i, fa: 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.' },
   { test: /slot|بازه.*رزرو|overlap|تداخل|no_overlap|قبلاً رزرو|already booked/i, fa: 'این زمان قبلاً رزرو شده است. لطفاً زمان دیگری انتخاب کنید.' },
-  { test: /otp|کد.*یکبار|verification code|invalid code/i, fa: 'کد تأیید نامعتبر یا منقضی است.' },
+  // Before generic OTP rule — booking requires verified phone (#40 item 25)
+  {
+    test: /قبل از رزرو.*موبایل|شماره موبایل.*تأیید|phoneVerified|phone.?not.?verif|موبایل با کد/i,
+    fa: 'قبل از رزرو باید شماره موبایل خود را با کد یکبارمصرف تأیید کنید.',
+  },
+  { test: /otp|کد.*نامعتبر|verification code|invalid code/i, fa: 'کد تأیید نامعتبر یا منقضی است.' },
   { test: /password|رمز عبور/i, fa: 'رمز عبور نامعتبر است.' },
   { test: /validation|must be|should not|isString|isUUID|isInt|whitelist/i, fa: 'اطلاعات ارسالی نامعتبر است. فیلدها را بررسی کنید.' },
   { test: /file too large|payload too large|entity too large/i, fa: 'حجم فایل بیش از حد مجاز است.' },
