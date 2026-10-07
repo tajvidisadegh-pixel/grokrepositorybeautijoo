@@ -35,6 +35,7 @@ export type AuthMeResponse = {
     lastName?: string | null;
     avatarUrl?: string | null;
     bio?: string | null;
+    gender?: string | null;
   } | null;
   roles: string[];
   /** Issue #37 — granular admin permissions from role assignments */
@@ -92,4 +93,5 @@ export type UpdateProfilePayload = {
   email?: string;
   bio?: string;
   avatarUrl?: string;
+  gender?: 'female' | 'male' | 'other' | 'undisclosed';
 };
