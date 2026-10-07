@@ -482,6 +482,7 @@ export class AuthService {
       id: user.id,
       phone: user.phone,
       email: user.email,
+      status: user.status,
       accountType: user.accountType,
       phoneVerified: user.phoneVerified,
       displayName: user.profile?.displayName,

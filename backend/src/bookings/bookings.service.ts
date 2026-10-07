@@ -311,8 +311,8 @@ export class BookingsService {
 
   async listMineAsCustomer(userId: string, page = 1, limit = 20, status?: string) {
     const skip = (page - 1) * limit;
-    const where: { customerId: string; status?: string } = { customerId: userId };
-    if (status) where.status = status as never;
+    const where: { customerId: string; status?: import('@prisma/client').BookingStatus } = { customerId: userId };
+    if (status) where.status = status as import('@prisma/client').BookingStatus;
     const [items, total] = await Promise.all([
       this.prisma.booking.findMany({
         where,
