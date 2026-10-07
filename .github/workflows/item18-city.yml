@@ -12,8 +12,19 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Patch frontend
+      - name: Write and run patch script
         run: |
-          python3 -c "import base64,pathlib; pathlib.Path('/tmp/patch_fe.py').write_bytes(base64.b64decode(open('/tmp/b64.txt').read()))"
-          # placeholder replaced below
-          true
+          python3 << 'PY'
+          import base64, pathlib
+          b64 = open(".github/triggers/fe-patch.b64").read().strip()
+          pathlib.Path("/tmp/patch_fe.py").write_bytes(base64.b64decode(b64))
+          print("script size", pathlib.Path("/tmp/patch_fe.py").stat().st_size)
+          PY
+          python3 /tmp/patch_fe.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "frontend/src/app/professionals/[slug]/page.tsx" frontend/src/app/zibagar/hours/page.tsx
+          git commit -m "feat(#40): items 32+34 last activity UI + hours draft save" || echo nochange
+          git push
