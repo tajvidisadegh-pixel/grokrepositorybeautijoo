@@ -223,7 +223,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                 {(pro as { createdAt?: string }).createdAt && (
                   <span className="text-xs text-gray">
                     عضو از{' '}
-                    {new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long', timeZone: 'Asia/Tehran' }).format(new Date((pro as { createdAt?: string }).createdAt))}
+                    {new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long', timeZone: 'Asia/Tehran' }).format(new Date((pro as { createdAt?: string }).createdAt!))}
                   </span>
                 )}
               <div className="min-w-0 flex-1">
