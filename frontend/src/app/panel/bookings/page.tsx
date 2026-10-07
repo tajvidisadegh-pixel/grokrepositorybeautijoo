@@ -442,8 +442,8 @@ async function submitReview(bookingId: string) {
                         جزئیات
                       </Button>
                     </Link>
-                    {(b.status === 'completed' || b.status === 'cancelled') && (b as any).professional?.slug && (
-                      <Link href={`/professionals/${(b as any).professional.slug}?service=${(b as any).professionalServiceId || ''}`}>
+                    {(b.status === 'completed' || b.status === 'cancelled') && (b.professional as { slug?: string } | undefined)?.slug && (
+                      <Link href={`/professionals/${(b.professional as { slug?: string }).slug}?service=${(b as { professionalServiceId?: string }).professionalServiceId || ''}`}>
                         <Button size="sm" variant="secondary">
                           تکرار این رزرو
                         </Button>

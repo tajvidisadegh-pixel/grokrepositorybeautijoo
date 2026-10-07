@@ -70,7 +70,7 @@ function formatDurationFa(totalMin: number): string {
   return `حدود ${h.toLocaleString('fa-IR')} ساعت و ${r.toLocaleString('fa-IR')} دقیقه`;
 }
 
-const MAX_ADDONS = 5;
+const MAX_ADDONS = 5; void MAX_ADDONS;
 type Step = 'service' | 'datetime' | 'summary' | 'done';
 
 const STEP_LABELS: Record<Step, string> = {
