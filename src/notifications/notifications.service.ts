@@ -80,7 +80,7 @@ export class NotificationsService {
       });
 
       if (input.sms) {
-        await this.sendSmsSafe(input.userId, input.body);
+        await this.sendSmsSafe(input.userId, input.body, input.data);
       }
 
       return { id: row.id };
@@ -92,7 +92,22 @@ export class NotificationsService {
     }
   }
 
-  private async sendSmsSafe(userId: string, message: string): Promise<void> {
+  private appendSmsLink(message: string, data?: Record<string, unknown>): string {
+    const href = typeof data?.href === 'string' ? data.href.trim() : '';
+    if (!href) return message;
+    const base =
+      (process.env.FRONTEND_URL || process.env.APP_URL || process.env.PUBLIC_WEB_URL || '').replace(/\/$/, '');
+    if (!base) return message;
+    const path = href.startsWith('/') ? href : `/${href}`;
+    return `${message}
+${base}${path}`;
+  }
+
+  private async sendSmsSafe(
+    userId: string,
+    message: string,
+    data?: Record<string, unknown>,
+  ): Promise<void> {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -100,7 +115,8 @@ export class NotificationsService {
       });
       const phone = user?.phone?.trim();
       if (!phone) return;
-      await this.sms.sendNotification(phone, message);
+      const full = this.appendSmsLink(message, data);
+      await this.sms.sendNotification(phone, full);
     } catch (err) {
       this.logger.warn(`SMS failed user=${userId}: ${(err as Error)?.message}`);
     }

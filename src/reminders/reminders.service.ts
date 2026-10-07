@@ -155,7 +155,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
           bookingId: b.id,
           professionalId: b.professionalId,
           window: windowKey,
-          href: `/panel/bookings`,
+          href: `/panel/bookings?focus=${b.id}`,
         },
         sms: smsEnabled,
       });
@@ -186,7 +186,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
             data: {
               bookingId: b.id,
               window: `${windowKey}-pro`,
-              href: `/zibagar/bookings`,
+              href: `/zibagar/bookings?focus=${b.id}`,
             },
             sms: false,
           });
