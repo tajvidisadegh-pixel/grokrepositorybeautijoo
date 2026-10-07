@@ -1,0 +1,142 @@
+name: patch-40-55-60-gaps
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply additive patches
+        run: |
+          python3 << 'PY'
+          import pathlib, re, sys
+          ROOT = pathlib.Path('.')
+          changed = []
+
+          p = ROOT / 'frontend/src/app/zibagar/services/page.tsx'
+          if p.exists():
+              t = p.read_text(encoding='utf-8')
+              old = """      const [cats, services, pro] = await Promise.all([
+        fetchCategories(),
+        fetchMyServices(),
+        fetchMyProfessional().catch(() => null),
+      ]);
+      setTree(cats || []);
+      setMine(services || []);
+      const ids = (pro?.selectedCategoryIds as string[] | null) || [];
+      setSelectedRootIds(Array.isArray(ids) ? ids.filter(Boolean) : []);"""
+              new = """      const [cats, services, pro, pinsRes] = await Promise.all([
+        fetchCategories(),
+        fetchMyServices(),
+        fetchMyProfessional().catch(() => null),
+        apiClient.get<{ pinnedServiceIds?: string[] }>('/professionals/me/pinned-services').catch(() => null),
+      ]);
+      setTree(cats || []);
+      setMine(services || []);
+      const ids = (pro?.selectedCategoryIds as string[] | null) || [];
+      setSelectedRootIds(Array.isArray(ids) ? ids.filter(Boolean) : []);
+      const pinIds = (pinsRes as { pinnedServiceIds?: string[] } | null)?.pinnedServiceIds;
+      if (Array.isArray(pinIds)) setPinnedIds(pinIds.filter(Boolean).slice(0, 3));"""
+              if old in t and "pinned-services').catch" not in t:
+                  t = t.replace(old, new, 1)
+                  p.write_text(t, encoding='utf-8')
+                  changed.append(str(p))
+              else:
+                  print('services load: skip')
+
+          p = ROOT / 'backend/src/professionals/professionals.controller.ts'
+          if p.exists():
+              t = p.read_text(encoding='utf-8')
+              bad = "  @Post('me/pinned-services')\n  setPinned("
+              good = "  @ApiBearerAuth()\n  @Roles('professional', 'admin', 'SUPER_ADMIN')\n  @Post('me/pinned-services')\n  setPinned("
+              if bad in t and good not in t:
+                  t = t.replace(bad, good, 1)
+                  p.write_text(t, encoding='utf-8')
+                  changed.append(str(p))
+              else:
+                  print('controller: skip')
+
+          p = ROOT / 'frontend/src/app/zibagar/bookings/page.tsx'
+          if p.exists():
+              t = p.read_text(encoding='utf-8')
+              if 'setDatePreset' in t and 'filteredByDate' not in t:
+                  insert_after = "  const [viewMode, setViewMode] = useState<'list' | 'week'>('list');\n"
+                  helper = insert_after + (
+                      "  // #40 item 60\n"
+                      "  const filteredByDate = (() => {\n"
+                      "    if (datePreset === 'all') return items;\n"
+                      "    return items.filter((b) => {\n"
+                      "      const start = new Date(b.startAt).getTime();\n"
+                      "      if (!Number.isFinite(start)) return true;\n"
+                      "      const d = new Date(b.startAt);\n"
+                      "      const tehran = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));\n"
+                      "      const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));\n"
+                      "      const startDay = new Date(tehran.getFullYear(), tehran.getMonth(), tehran.getDate()).getTime();\n"
+                      "      const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();\n"
+                      "      if (datePreset === 'today') return startDay === todayDay;\n"
+                      "      if (datePreset === 'week') {\n"
+                      "        const weekAgo = todayDay - 6 * 86400000;\n"
+                      "        return startDay >= weekAgo && startDay <= todayDay + 7 * 86400000;\n"
+                      "      }\n"
+                      "      if (datePreset === 'month') {\n"
+                      "        return tehran.getMonth() === today.getMonth() && tehran.getFullYear() === today.getFullYear();\n"
+                      "      }\n"
+                      "      return true;\n"
+                      "    });\n"
+                      "  })();\n"
+                  )
+                  if insert_after in t:
+                      t = t.replace(insert_after, helper, 1)
+                  ui = (
+                      '\n      <div className="flex flex-wrap gap-2" aria-label="date-preset-filter">\n'
+                      '        {([\n'
+                      "          { v: 'all' as const, l: '\u0647\u0631 \u062a\u0627\u0631\u06cc\u062e' },\n"
+                      "          { v: 'today' as const, l: '\u0627\u0645\u0631\u0648\u0632' },\n"
+                      "          { v: 'week' as const, l: '\u0627\u06cc\u0646 \u0647\u0641\u062a\u0647' },\n"
+                      "          { v: 'month' as const, l: '\u0627\u06cc\u0646 \u0645\u0627\u0647' },\n"
+                      '        ]).map((o) => (\n'
+                      '          <button\n'
+                      '            key={o.v}\n'
+                      '            type="button"\n'
+                      '            onClick={() => setDatePreset(o.v)}\n'
+                      '            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${\n'
+                      '              datePreset === o.v\n'
+                      "                ? 'border-coral bg-coral text-white'\n"
+                      "                : 'border-border bg-white hover:border-coral'\n"
+                      '            }`}\n'
+                      '          >\n'
+                      '            {o.l}\n'
+                      '          </button>\n'
+                      '        ))}\n'
+                      '      </div>\n'
+                  )
+                  if 'date-preset-filter' not in t:
+                      for a in ['{actionMsg && (', '{error && (', 'viewMode ===']:
+                          idx = t.find(a)
+                          if idx > 0:
+                              t = t[:idx] + ui + '\n      ' + t[idx:]
+                              break
+                  if 'filteredByDate' in t and 'filteredByDate.map' not in t:
+                      t = t.replace('{items.length === 0', '{filteredByDate.length === 0', 1)
+                      t = t.replace('items.map((b)', 'filteredByDate.map((b)', 1)
+                      t = t.replace('items.map((b:', 'filteredByDate.map((b:', 1)
+                  p.write_text(t, encoding='utf-8')
+                  changed.append(str(p))
+              else:
+                  print('bookings: skip')
+
+          print('CHANGED:', changed)
+          PY
+      - name: Commit if changed
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No file changes"
+          else
+            git commit -m "fix(#40): complete items 55-60 gaps (pin load, date preset)"
+            git push
+          fi
