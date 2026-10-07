@@ -1,0 +1,30 @@
+name: fix-bookings-syntax
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix typo
+        run: |
+          python3 -c "
+          from pathlib import Path
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if '})(();' in t:
+              t = t.replace('})(();', '})();', 1)
+              p.write_text(t, encoding='utf-8')
+              print('fixed')
+          else:
+              print('already ok or pattern missing')
+              print(repr([line for line in t.splitlines() if 'filteredByDate' in line or '})(' in line][:10]))
+          "
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: syntax error filteredByDate IIFE (})((); -> })();)" && git push; fi
