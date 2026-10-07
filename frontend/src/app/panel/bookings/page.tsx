@@ -14,7 +14,7 @@ import {
   type BookingListItem,
 } from '@/lib/panel-api';
 import { fetchAvailability } from '@/lib/booking-api';
-import { persianBookingStatus, persianPaymentStatus } from '@/lib/persian-status';
+import { persianBookingStatus, persianPaymentStatus, effectiveBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatRelativeDate } from '@/lib/utils';
 
@@ -86,7 +86,7 @@ export default function PanelBookingsPage() {
 
   
   async function submitReport(id: string) {
-    setBusy(`${id}:report`);
+    setSubmitting(true);
     setReportMsg(null);
     setError(null);
     try {
@@ -97,7 +97,7 @@ export default function PanelBookingsPage() {
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
-      setBusy(null);
+      setSubmitting(false);
     }
   }
 
@@ -288,52 +288,49 @@ async function submitReview(bookingId: string) {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className="rounded-full bg-coral-soft px-3 py-1 text-xs font-medium text-coral">
-
-              {((b.status === 'confirmed' || b.status === 'completed') &&
-                (b.professional as { user?: { phone?: string | null } } | undefined)?.user?.phone) ? (
-                <a
-                  href={`tel:${(b.professional as { user?: { phone?: string | null } }).user!.phone}`}
-                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-coral hover:text-coral-dark"
-                  dir="ltr"
-                >
-                  تماس با زیباگر: {(b.professional as { user?: { phone?: string | null } }).user!.phone}
-                </a>
-              ) : null}
-
-              <div className="mt-2">
-                <button
-                  type="button"
-                  className="text-xs text-gray-muted hover:text-coral"
-                  onClick={() => {
-                    setReportFor(reportFor === b.id ? null : b.id);
-                    setReportText('');
-                  }}
-                >
-                  گزارش مشکل
-                </button>
-                {reportFor === b.id && (
-                  <div className="mt-2 space-y-2 rounded-xl border border-border bg-muted/40 p-3">
-                    <textarea
-                      className="w-full rounded-lg border border-border bg-white p-2 text-xs"
-                      rows={3}
-                      placeholder="توضیح مشکل (حداقل ۵ کاراکتر)"
-                      value={reportText}
-                      onChange={(e) => setReportText(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="rounded-lg bg-coral px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                      disabled={reportText.trim().length < 5 || busy === `${b.id}:report`}
-                      onClick={() => void submitReport(b.id)}
-                    >
-                      ارسال گزارش
-                    </button>
-                  </div>
-                )}
-              </div>
-
                         {persianBookingStatus(effectiveBookingStatus(b))}
                       </span>
+                      {((b.status === 'confirmed' || b.status === 'completed') &&
+                        (b.professional as { user?: { phone?: string | null } } | undefined)?.user?.phone) ? (
+                        <a
+                          href={`tel:${(b.professional as { user?: { phone?: string | null } }).user!.phone}`}
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-coral hover:text-coral-dark"
+                          dir="ltr"
+                        >
+                          تماس با زیباگر: {(b.professional as { user?: { phone?: string | null } }).user!.phone}
+                        </a>
+                      ) : null}
+                      <div className="mt-1">
+                        <button
+                          type="button"
+                          className="text-xs text-gray-muted hover:text-coral"
+                          onClick={() => {
+                            setReportFor(reportFor === b.id ? null : b.id);
+                            setReportText('');
+                          }}
+                        >
+                          گزارش مشکل
+                        </button>
+                        {reportFor === b.id && (
+                          <div className="mt-2 space-y-2 rounded-xl border border-border bg-muted/40 p-3 text-start">
+                            <textarea
+                              className="w-full rounded-lg border border-border bg-white p-2 text-xs"
+                              rows={3}
+                              placeholder="توضیح مشکل (حداقل ۵ کاراکتر)"
+                              value={reportText}
+                              onChange={(e) => setReportText(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="rounded-lg bg-coral px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                              disabled={reportText.trim().length < 5 || submitting}
+                              onClick={() => void submitReport(b.id)}
+                            >
+                              ارسال گزارش
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       {payStatus && (
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-medium ${
