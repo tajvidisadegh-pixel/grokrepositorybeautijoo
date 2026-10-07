@@ -573,7 +573,7 @@ async function submitReview(bookingId: string) {
                         onChange={(e) => setComment(e.target.value.slice(0, 500))}
                       maxLength={500}
                     />
-                    <p className="text-left text-xs text-gray" dir="ltr">{comment.length}/500</p>
+                    <p className="text-left text-xs text-gray" dir="ltr">{`${comment.length}/500`}</p>
                         rows={2}
                         placeholder="نظر شما (اختیاری)"
                         className="w-full rounded-xl border border-border px-3 py-2 text-sm"
