@@ -26,6 +26,8 @@ const DAYS: { value: DayOfWeekValue; label: string; short: string }[] = [
 ];
 const INTERVALS = [15, 30, 45, 60, 90, 120] as const;
 
+const HOURS_DRAFT_KEY = 'bj_zibagar_hours_draft_v1';
+
 const pm = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
@@ -115,6 +117,53 @@ export default function ZibagarHoursPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (loading || draftRestored) return;
+    try {
+      const raw = localStorage.getItem(HOURS_DRAFT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, { active: boolean; startTime: string; endTime: string }>;
+        if (parsed && typeof parsed === 'object') {
+          setDayDrafts((prev) => ({ ...prev, ...parsed }));
+          setDirty(true);
+        }
+      }
+    } catch { /* ignore */ }
+    setDraftRestored(true);
+  }, [loading, draftRestored]);
+
+  useEffect(() => {
+    if (!draftRestored || !dirty) return;
+    try { localStorage.setItem(HOURS_DRAFT_KEY, JSON.stringify(dayDrafts)); } catch { /* ignore */ }
+  }, [dayDrafts, dirty, draftRestored]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
+  useEffect(() => {
+    if (!draftRestored || loading) return;
+    const serverKey = JSON.stringify(
+      Object.fromEntries(
+        DAYS.map((d) => {
+          const rows = workingHours.filter(
+            (h) => String(h.dayOfWeek).toLowerCase() === d.value && h.isActive !== false,
+          );
+          if (!rows.length) return [d.value, { active: false, startTime: '09:00', endTime: '20:00' }];
+          const s = [...rows].sort((a, b) => pm(a.startTime) - pm(b.startTime));
+          return [d.value, { active: true, startTime: s[0].startTime.slice(0, 5), endTime: s[s.length - 1].endTime.slice(0, 5) }];
+        }),
+      ),
+    );
+    setDirty(serverKey !== JSON.stringify(dayDrafts));
+  }, [dayDrafts, workingHours, draftRestored, loading]);
 
   const monthGrid = useMemo(() => buildJalaliMonthGrid(viewJy, viewJm), [viewJy, viewJm]);
 
@@ -221,6 +270,11 @@ export default function ZibagarHoursPage() {
 
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700 sm:text-sm">{error}</p>}
       {success && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700 sm:text-sm">{success}</p>}
+      {dirty && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:text-sm">
+          تغییرات ساعات هفتگی هنوز ذخیره نشده‌اند و به‌صورت موقت روی این دستگاه نگه‌داری می‌شوند.
+        </p>
+      )}
 
       <Card className="space-y-2 p-3">
         <div className="flex items-center justify-between">
@@ -560,6 +614,8 @@ export default function ZibagarHoursPage() {
                     }
                   }
                   setSuccess('ساعات هفتگی ذخیره شد');
+                  try { localStorage.removeItem(HOURS_DRAFT_KEY); } catch {}
+                  setDirty(false);
                   setHoursOpen(false);
                   await load();
                 } catch (e) {

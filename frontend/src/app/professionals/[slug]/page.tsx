@@ -19,6 +19,25 @@ type Props = {
   params: Promise<{ slug: string }>;
 };
 
+
+/** Relative Persian label for last activity (#40 item 32) */
+function formatLastActivity(iso?: string | null): string | null {
+  if (!iso) return null;
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return null;
+  const diffMin = Math.floor((Date.now() - ts) / 60000);
+  if (diffMin < 0) return null;
+  if (diffMin < 15) return 'آنلاین اخیراً';
+  if (diffMin < 60) return `آخرین فعالیت: ${diffMin} دقیقه پیش`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `آخرین فعالیت: ${h} ساعت پیش`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'آخرین فعالیت: دیروز';
+  if (d < 7) return `آخرین فعالیت: ${d} روز پیش`;
+  if (d < 30) return `آخرین فعالیت: ${Math.floor(d / 7)} هفته پیش`;
+  return 'آخرین فعالیت: بیش از یک ماه پیش';
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   try {
@@ -215,6 +234,11 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                   )}
                   {pro.locations?.[0]?.location?.city && (
                     <span>{pro.locations[0].location.city}</span>
+                  )}
+                  {formatLastActivity((pro as { user?: { lastLoginAt?: string | null } }).user?.lastLoginAt) && (
+                    <span className="text-xs text-gray">
+                      {formatLastActivity((pro as { user?: { lastLoginAt?: string | null } }).user?.lastLoginAt)}
+                    </span>
                   )}
                 </div>
               </div>
