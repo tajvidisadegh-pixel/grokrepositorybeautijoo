@@ -61,11 +61,13 @@ export class BookingsController {
     @CurrentUser('id') userId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('status') status?: string,
   ) {
     return this.service.listMineAsCustomer(
       userId,
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
+      status,
     );
   }
 
