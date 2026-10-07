@@ -3,6 +3,7 @@ export function persianBookingStatus(status: string): string {
   const map: Record<string, string> = {
     pending: 'در انتظار تأیید',
     confirmed: 'تأیید شده',
+    in_progress: 'در حال انجام',
     rejected: 'رد شده',
     cancelled: 'لغو شده',
     completed: 'انجام شده',
@@ -45,3 +46,23 @@ export const WEEKDAY_FA: Record<string, string> = {
   FRIDAY: 'جمعه',
   SATURDAY: 'شنبه',
 };
+
+
+/** Display status: confirmed bookings within [startAt, endAt] show as in_progress. */
+export function effectiveBookingStatus(b: {
+  status?: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
+}): string {
+  const st = (b.status || '').toLowerCase();
+  if (st !== 'confirmed') return st || '';
+  if (!b.startAt) return st;
+  const now = Date.now();
+  const start = new Date(b.startAt).getTime();
+  const end = b.endAt ? new Date(b.endAt).getTime() : start + 60 * 60 * 1000;
+  if (Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end) {
+    return 'in_progress';
+  }
+  return st;
+}
+

@@ -9,6 +9,7 @@ import {
   fetchMyBookings,
   createReview,
   transitionBooking,
+  reportBookingToAdmin,
   rescheduleBooking,
   type BookingListItem,
 } from '@/lib/panel-api';
@@ -40,6 +41,9 @@ export default function PanelBookingsPage() {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
+  const [reportFor, setReportFor] = useState<string | null>(null);
+  const [reportText, setReportText] = useState('');
+  const [reportMsg, setReportMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
   const searchParams = useSearchParams();
@@ -80,7 +84,24 @@ export default function PanelBookingsPage() {
     setComment('');
   }, [searchParams, items, reviewedIds]);
 
-  async function submitReview(bookingId: string) {
+  
+  async function submitReport(id: string) {
+    setBusy(`${id}:report`);
+    setReportMsg(null);
+    setError(null);
+    try {
+      await reportBookingToAdmin(id, reportText.trim());
+      setReportMsg('گزارش برای پشتیبانی ارسال شد.');
+      setReportFor(null);
+      setReportText('');
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+async function submitReview(bookingId: string) {
     setSubmitting(true);
     setReviewMsg(null);
     try {
@@ -228,6 +249,9 @@ export default function PanelBookingsPage() {
       {reviewMsg && (
         <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{reviewMsg}</p>
       )}
+      {reportMsg && (
+        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{reportMsg}</p>
+      )}
       {actionMsg && (
         <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{actionMsg}</p>
       )}
@@ -276,7 +300,39 @@ export default function PanelBookingsPage() {
                 </a>
               ) : null}
 
-                        {persianBookingStatus(b.status)}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="text-xs text-gray-muted hover:text-coral"
+                  onClick={() => {
+                    setReportFor(reportFor === b.id ? null : b.id);
+                    setReportText('');
+                  }}
+                >
+                  گزارش مشکل
+                </button>
+                {reportFor === b.id && (
+                  <div className="mt-2 space-y-2 rounded-xl border border-border bg-muted/40 p-3">
+                    <textarea
+                      className="w-full rounded-lg border border-border bg-white p-2 text-xs"
+                      rows={3}
+                      placeholder="توضیح مشکل (حداقل ۵ کاراکتر)"
+                      value={reportText}
+                      onChange={(e) => setReportText(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="rounded-lg bg-coral px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                      disabled={reportText.trim().length < 5 || busy === `${b.id}:report`}
+                      onClick={() => void submitReport(b.id)}
+                    >
+                      ارسال گزارش
+                    </button>
+                  </div>
+                )}
+              </div>
+
+                        {persianBookingStatus(effectiveBookingStatus(b))}
                       </span>
                       {payStatus && (
                         <span

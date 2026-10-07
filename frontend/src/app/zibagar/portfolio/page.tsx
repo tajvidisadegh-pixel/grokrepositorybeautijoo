@@ -17,6 +17,7 @@ import { formatPrice, parsePriceInput } from '@/lib/utils';
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 const MAX_VIDEO_SEC = 60;
+const MAX_PORTFOLIO = 40;
 
 type MediaItem = {
   id: string;
@@ -131,6 +132,10 @@ export default function ZibagarPortfolioPage() {
         /* continue */
       }
     }
+    if (items.length >= MAX_PORTFOLIO) {
+      setMsg(`سقف تعداد نمونه‌کار (${MAX_PORTFOLIO}) پر است. ابتدا موردی را حذف کنید.`);
+      return;
+    }
     setBusy(true);
     setUploadProgress(0);
     setMsg(null);
@@ -228,9 +233,9 @@ export default function ZibagarPortfolioPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">پورتفولیو</h1>
+          <h1 className="text-2xl font-bold">پورتفولیو <span className="text-base font-normal text-gray">({items.length}/{MAX_PORTFOLIO})</span></h1>
           <p className="mt-1 text-sm text-gray">
-            تصویر تا ۱۰ مگ · ویدیو تا ۵۰۰ مگ (حداکثر ۱ دقیقه)
+            تصویر تا ۱۰ مگ · ویدیو تا ۵۰۰ مگ (حداکثر ۱ دقیقه) · حداکثر ۴۰ مورد
           </p>
         </div>
         <div>

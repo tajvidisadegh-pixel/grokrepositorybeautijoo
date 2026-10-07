@@ -13,7 +13,7 @@ import {
   type BookingListItem,
 } from '@/lib/panel-api';
 import { fetchAvailability } from '@/lib/booking-api';
-import { persianBookingStatus } from '@/lib/persian-status';
+import { persianBookingStatus, effectiveBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatDate, formatTime24 } from '@/lib/utils';
 import { tehranDateStr } from '@/lib/jalali';
@@ -91,6 +91,7 @@ export default function ZibagarBookingsPage() {
   const [reportFor, setReportFor] = useState<string | null>(null);
   const [reportText, setReportText] = useState('');
   const [reportMsg, setReportMsg] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'week'>('list');
   const [weekStart, setWeekStart] = useState(() => tehranWeekStartSaturday());
 
@@ -159,12 +160,20 @@ export default function ZibagarBookingsPage() {
   async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete') {
     setBusy(`${id}:${action}`);
     setError(null);
+    setActionMsg(null);
     try {
       let reason: string | undefined;
       if (action === 'reject') {
         reason = window.prompt('دلیل رد (اختیاری):') || undefined;
       }
       await transitionBooking(id, action, reason);
+      const labels: Record<string, string> = {
+        confirm: 'رزرو با موفقیت تأیید شد.',
+        reject: 'رزرو رد شد.',
+        cancel: 'رزرو لغو شد.',
+        complete: 'رزرو به عنوان انجام‌شده ثبت شد.',
+      };
+      setActionMsg(labels[action] || 'عملیات با موفقیت انجام شد.');
       await load();
     } catch (e) {
       setError(friendlyApiError(e));
@@ -310,6 +319,9 @@ export default function ZibagarBookingsPage() {
       {error && (
         <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
+      {actionMsg && (
+        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{actionMsg}</p>
+      )}
       {reportMsg && (
         <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{reportMsg}</p>
       )}
@@ -353,7 +365,7 @@ export default function ZibagarBookingsPage() {
                           <span className="font-medium">{timeFa(b.startAt)}</span>
                           <span className="mx-1 text-gray">·</span>
                           <span>{b.customer?.profile?.displayName || b.customer?.phone || 'مشتری'}</span>
-                          <div className="mt-0.5 text-[10px] text-coral">{persianBookingStatus(b.status)}</div>
+                          <div className="mt-0.5 text-[10px] text-coral">{persianBookingStatus(effectiveBookingStatus(b))}</div>
                         </li>
                       ))
                     )}
@@ -412,7 +424,7 @@ export default function ZibagarBookingsPage() {
                             )}
                           </div>
                           <span className="rounded-full bg-coral-soft px-3 py-1 text-xs font-medium text-coral">
-                            {persianBookingStatus(b.status)}
+                            {persianBookingStatus(effectiveBookingStatus(b))}
                           </span>
                         </div>
 
