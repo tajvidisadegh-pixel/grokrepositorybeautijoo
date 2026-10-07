@@ -96,7 +96,7 @@ export default async function SearchPage({ searchParams }: Props) {
 
       <RecentSearches />
       {(q || city) && (
-        <RecordRecentSearch q={q} city={city} href={buildHref(1)} />
+        <RecordRecentSearch q={q} city={city} href={pageHref(1)} />
       )}
 
       <form method="get" action="/search" className="mt-6 space-y-4 rounded-3xl border border-border/90 bg-white p-4 shadow-sm">
