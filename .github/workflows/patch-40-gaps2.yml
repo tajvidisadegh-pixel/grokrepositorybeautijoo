@@ -1,0 +1,130 @@
+name: patch-40-gaps2
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # 1) services pin load
+          p = Path('frontend/src/app/zibagar/services/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          old = """      const [cats, services, pro] = await Promise.all([
+        fetchCategories(),
+        fetchMyServices(),
+        fetchMyProfessional().catch(() => null),
+      ]);
+      setTree(cats || []);
+      setMine(services || []);
+      const ids = (pro?.selectedCategoryIds as string[] | null) || [];
+      setSelectedRootIds(Array.isArray(ids) ? ids.filter(Boolean) : []);"""
+          new = """      const [cats, services, pro, pinsRes] = await Promise.all([
+        fetchCategories(),
+        fetchMyServices(),
+        fetchMyProfessional().catch(() => null),
+        apiClient.get<{ pinnedServiceIds?: string[] }>('/professionals/me/pinned-services').catch(() => null),
+      ]);
+      setTree(cats || []);
+      setMine(services || []);
+      const ids = (pro?.selectedCategoryIds as string[] | null) || [];
+      setSelectedRootIds(Array.isArray(ids) ? ids.filter(Boolean) : []);
+      const pinIds = (pinsRes as { pinnedServiceIds?: string[] } | null)?.pinnedServiceIds;
+      if (Array.isArray(pinIds)) setPinnedIds(pinIds.filter(Boolean).slice(0, 3));"""
+          if old in t:
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+              print('services: ok')
+          else:
+              print('services: skip')
+
+          # 2) zibagar bookings date preset
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'filteredByDate' not in t and 'setDatePreset' in t:
+              needle = "  const [viewMode, setViewMode] = useState<'list' | 'week'>('list');\n  const [weekStart, setWeekStart] = useState(() => tehranWeekStartSaturday());\n"
+              helper = """  const [viewMode, setViewMode] = useState<'list' | 'week'>('list');
+  const filteredByDate = (() => {
+    if (datePreset === 'all') return items;
+    return items.filter((b) => {
+      const start = new Date(b.startAt).getTime();
+      if (!Number.isFinite(start)) return true;
+      const d = new Date(b.startAt);
+      const tehran = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));
+      const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));
+      const startDay = new Date(tehran.getFullYear(), tehran.getMonth(), tehran.getDate()).getTime();
+      const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+      if (datePreset === 'today') return startDay === todayDay;
+      if (datePreset === 'week') {
+        const weekAgo = todayDay - 6 * 86400000;
+        return startDay >= weekAgo && startDay <= todayDay + 7 * 86400000;
+      }
+      if (datePreset === 'month') {
+        return tehran.getMonth() === today.getMonth() && tehran.getFullYear() === today.getFullYear();
+      }
+      return true;
+    });
+  })();
+  const [weekStart, setWeekStart] = useState(() => tehranWeekStartSaturday());
+"""
+              if needle in t:
+                  t = t.replace(needle, helper, 1)
+                  print('bookings helper: ok')
+              else:
+                  print('bookings helper: needle missing')
+
+              # wire itemsByDay / grouped
+              t = t.replace('for (const b of items) {\n      const k = dayKey', 'for (const b of filteredByDate) {\n      const k = dayKey', 1)
+              t = t.replace('return map;\n  }, [items]);\n\n  const grouped', 'return map;\n  }, [filteredByDate]);\n\n  const grouped', 1)
+              t = t.replace('for (const b of items) {\n      const key = dateKeyFa', 'for (const b of filteredByDate) {\n      const key = dateKeyFa', 1)
+              t = t.replace('return Array.from(map.entries());\n  }, [items]);', 'return Array.from(map.entries());\n  }, [filteredByDate]);', 1)
+              t = t.replace("{viewMode === 'list' && (items.length === 0 ? (", "{viewMode === 'list' && (filteredByDate.length === 0 ? (", 1)
+
+              ui = '''\n      <div className="flex flex-wrap gap-2" aria-label="date-preset-filter">\n        {([\n          { v: \'all\' as const, l: \'\u0647\u0631 \u062a\u0627\u0631\u06cc\u062e\' },\n          { v: \'today\' as const, l: \'\u0627\u0645\u0631\u0648\u0632\' },\n          { v: \'week\' as const, l: \'\u0627\u06cc\u0646 \u0647\u0641\u062a\u0647\' },\n          { v: \'month\' as const, l: \'\u0627\u06cc\u0646 \u0645\u0627\u0647\' },\n        ]).map((o) => (\n          <button\n            key={o.v}\n            type="button"\n            onClick={() => setDatePreset(o.v)}\n            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${\n              datePreset === o.v\n                ? \'border-coral bg-coral text-white\'\n                : \'border-border bg-white hover:border-coral\'\n            }`}\n          >\n            {o.l}\n          </button>\n        ))}\n      </div>\n'''
+              # fix escaping - use proper python string
+              ui = (
+                  '\n      <div className="flex flex-wrap gap-2" aria-label="date-preset-filter">\n'
+                  '        {([\n'
+                  "          { v: 'all' as const, l: '\u0647\u0631 \u062a\u0627\u0631\u06cc\u062e' },\n"
+                  "          { v: 'today' as const, l: '\u0627\u0645\u0631\u0648\u0632' },\n"
+                  "          { v: 'week' as const, l: '\u0627\u06cc\u0646 \u0647\u0641\u062a\u0647' },\n"
+                  "          { v: 'month' as const, l: '\u0627\u06cc\u0646 \u0645\u0627\u0647' },\n"
+                  '        ]).map((o) => (\n'
+                  '          <button\n'
+                  '            key={o.v}\n'
+                  '            type="button"\n'
+                  '            onClick={() => setDatePreset(o.v)}\n'
+                  '            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${\n'
+                  '              datePreset === o.v\n'
+                  "                ? 'border-coral bg-coral text-white'\n"
+                  "                : 'border-border bg-white hover:border-coral'\n"
+                  '            }`}\n'
+                  '          >\n'
+                  '            {o.l}\n'
+                  '          </button>\n'
+                  '        ))}\n'
+                  '      </div>\n'
+              )
+              if 'date-preset-filter' not in t:
+                  for a in ['{actionMsg && (', "{viewMode === 'week'"]:
+                      idx = t.find(a)
+                      if idx > 0:
+                          t = t[:idx] + ui + '\n      ' + t[idx:]
+                          print('UI inserted')
+                          break
+              p.write_text(t, encoding='utf-8')
+              print('bookings: written')
+          else:
+              print('bookings: skip')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix(#40): pin load + date preset filter (55-60 gaps)" && git push; fi
