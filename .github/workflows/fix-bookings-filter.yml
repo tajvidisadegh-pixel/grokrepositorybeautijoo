@@ -1,0 +1,8 @@
+name: disabled-fix-bookings-filter
+on:
+  workflow_dispatch:
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo disabled
