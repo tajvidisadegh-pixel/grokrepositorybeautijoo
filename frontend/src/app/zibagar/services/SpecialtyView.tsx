@@ -38,6 +38,7 @@ export type SpecialtyViewProps = {
   busy: boolean;
   uploadState: 'idle' | 'uploading' | 'ok' | 'err';
   uploadErr: string | null;
+  uploadProgress?: number | null;
   ensureAndEditService: (serviceId: string, nameHint?: string) => void | Promise<void>;
   setSelectedPsId: (id: string | null) => void;
   setMode: (m: 'home' | 'specialty' | 'edit' | 'add') => void;
@@ -72,6 +73,7 @@ export function SpecialtyView(props: SpecialtyViewProps) {
     busy,
     uploadState,
     uploadErr,
+    uploadProgress,
     ensureAndEditService,
     setSelectedPsId,
     setMode,
@@ -291,6 +293,11 @@ export function SpecialtyView(props: SpecialtyViewProps) {
           {uploadState === 'uploading' ? 'در حال آپلود...' : '+ افزودن نمونه‌کار'}
           <input type="file" accept="image/*,video/*" className="hidden" disabled={busy || uploadState === 'uploading'} onChange={(e) => { const f = e.target.files?.[0]; if (f) { void (async () => { if (specialtyMenu.length > 0) { await onUploadMedia(f, specialtyMenu[0].id); } else { setError('ابتدا یک خدمت ثبت کنید، سپس نمونه‌کار اضافه کنید.'); } })(); } e.target.value = ''; }} />
         </label>
+        {uploadState === 'uploading' && uploadProgress != null && (
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        )}
         {uploadState === 'err' && uploadErr && <p className="mt-2 text-xs text-red-600">آپلود ناموفق بود: {uploadErr}</p>}
       </div>
 
