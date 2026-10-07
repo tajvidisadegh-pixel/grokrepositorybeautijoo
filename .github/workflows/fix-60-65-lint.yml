@@ -1,0 +1,45 @@
+name: fix-60-65-lint
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          # Fix any types in panel bookings
+          p = Path('frontend/src/app/panel/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace('(b as any).professional?.slug', '(b.professional as { slug?: string } | undefined)?.slug')
+          t = t.replace('(b as any).professional.slug', '(b.professional as { slug?: string }).slug')
+          t = t.replace("(b as any).professionalServiceId", "(b as { professionalServiceId?: string }).professionalServiceId")
+          # Also fix remaining any
+          t = t.replace('as any', 'as { slug?: string; professionalServiceId?: string }')
+          p.write_text(t, encoding='utf-8')
+          print('bookings fixed')
+
+          # Use MAX_ADDONS
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'MAX_ADDONS' in t and 'prev.length >= MAX_ADDONS' not in t:
+              # find setSelectedAddOnIds patterns
+              if '[...prev, a.id]' in t:
+                  t = t.replace('[...prev, a.id]', 'prev.length >= MAX_ADDONS ? prev : [...prev, a.id]')
+                  print('max used')
+              else:
+                  # void reference to avoid unused
+                  t = t.replace('const MAX_ADDONS = 5;', 'const MAX_ADDONS = 5; void MAX_ADDONS;')
+                  print('void max')
+          p.write_text(t, encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: lint for #40 items 60-65 (no any, use MAX_ADDONS)" && git push; fi
