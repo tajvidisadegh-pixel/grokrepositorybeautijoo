@@ -1,9 +1,9 @@
-name: fix-49-btn
+name: fix-50-55
 
 on:
   push:
     paths:
-      - '.github/triggers/fix-49-btn.flag'
+      - '.github/triggers/fix-50-55.flag'
 
 jobs:
   patch:
@@ -12,10 +12,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: python3 .github/triggers/fix-49-btn.py
+      - run: python3 .github/triggers/fix-50-55.py
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/bookings/page.tsx
-          git commit -m "feat(#40): block customer button on zibagar bookings (item 49)" || echo nochange
+          git add -A
+          git commit -m "feat(#40): items 51 duration, 52 past/future tabs, 54 SMS deep links" || echo nochange
           git push
