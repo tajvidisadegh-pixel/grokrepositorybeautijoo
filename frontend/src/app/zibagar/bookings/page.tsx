@@ -95,6 +95,27 @@ export default function ZibagarBookingsPage() {
   const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'week'>('list');
+  const filteredByDate = (() => {
+    if (datePreset === 'all') return items;
+    return items.filter((b) => {
+      const start = new Date(b.startAt).getTime();
+      if (!Number.isFinite(start)) return true;
+      const d = new Date(b.startAt);
+      const tehran = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));
+      const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));
+      const startDay = new Date(tehran.getFullYear(), tehran.getMonth(), tehran.getDate()).getTime();
+      const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+      if (datePreset === 'today') return startDay === todayDay;
+      if (datePreset === 'week') {
+        const weekAgo = todayDay - 6 * 86400000;
+        return startDay >= weekAgo && startDay <= todayDay + 7 * 86400000;
+      }
+      if (datePreset === 'month') {
+        return tehran.getMonth() === today.getMonth() && tehran.getFullYear() === today.getFullYear();
+      }
+      return true;
+    });
+  })(();
   const [weekStart, setWeekStart] = useState(() => tehranWeekStartSaturday());
 
   const load = useCallback(async () => {
@@ -232,23 +253,23 @@ async function submitReport(id: string) {
 
   const itemsByDay = useMemo(() => {
     const map = new Map<string, BookingListItem[]>();
-    for (const b of items) {
+    for (const b of filteredByDate) {
       const k = dayKey(new Date(b.startAt));
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(b);
     }
     return map;
-  }, [items]);
+  }, [filteredByDate]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, BookingListItem[]>();
-    for (const b of items) {
+    for (const b of filteredByDate) {
       const key = dateKeyFa(b.startAt);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(b);
     }
     return Array.from(map.entries());
-  }, [items]);
+  }, [filteredByDate]);
 
   function shiftWeek(delta: number) {
     setWeekStart((prev) => {
@@ -337,6 +358,29 @@ async function submitReport(id: string) {
       {error && (
         <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
+      
+      <div className="flex flex-wrap gap-2" aria-label="date-preset-filter">
+        {([
+          { v: 'all' as const, l: 'هر تاریخ' },
+          { v: 'today' as const, l: 'امروز' },
+          { v: 'week' as const, l: 'این هفته' },
+          { v: 'month' as const, l: 'این ماه' },
+        ]).map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => setDatePreset(o.v)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+              datePreset === o.v
+                ? 'border-coral bg-coral text-white'
+                : 'border-border bg-white hover:border-coral'
+            }`}
+          >
+            {o.l}
+          </button>
+        ))}
+      </div>
+
       {actionMsg && (
         <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{actionMsg}</p>
       )}
@@ -395,7 +439,7 @@ async function submitReport(id: string) {
         </Card>
       )}
 
-      {viewMode === 'list' && (items.length === 0 ? (
+      {viewMode === 'list' && (filteredByDate.length === 0 ? (
         <PanelEmpty
         title="رزروی یافت نشد"
         description="هنوز نوبتی برای شما ثبت نشده یا با فیلتر فعلی نتیجه‌ای نیست."

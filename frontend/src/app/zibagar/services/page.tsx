@@ -102,15 +102,18 @@ export default function ZibagarServicesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [cats, services, pro] = await Promise.all([
+      const [cats, services, pro, pinsRes] = await Promise.all([
         fetchCategories(),
         fetchMyServices(),
         fetchMyProfessional().catch(() => null),
+        apiClient.get<{ pinnedServiceIds?: string[] }>('/professionals/me/pinned-services').catch(() => null),
       ]);
       setTree(cats || []);
       setMine(services || []);
       const ids = (pro?.selectedCategoryIds as string[] | null) || [];
       setSelectedRootIds(Array.isArray(ids) ? ids.filter(Boolean) : []);
+      const pinIds = (pinsRes as { pinnedServiceIds?: string[] } | null)?.pinnedServiceIds;
+      if (Array.isArray(pinIds)) setPinnedIds(pinIds.filter(Boolean).slice(0, 3));
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
