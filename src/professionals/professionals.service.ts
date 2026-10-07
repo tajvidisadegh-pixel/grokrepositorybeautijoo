@@ -614,6 +614,7 @@ export class ProfessionalsService {
     return {
       user: {
         select: {
+          lastLoginAt: true,
           profile: {
             select: {
               displayName: true, firstName: true, lastName: true, avatarUrl: true,
