@@ -510,6 +510,20 @@ export class ProfessionalsService {
     } catch {
       /* non-blocking */
     }
+    
+    // #40 item 63
+    try {
+      const adminRoles = await this.prisma.role.findMany({ where: { name: { in: ['admin', 'SUPER_ADMIN', 'super_admin'] } }, select: { id: true } });
+      const roleIds = adminRoles.map((r) => r.id);
+      if (roleIds.length) {
+        const admins = await this.prisma.userRole.findMany({ where: { roleId: { in: roleIds } }, select: { userId: true }, distinct: ['userId'] });
+        for (const a of admins) {
+          if (a.userId === userId) continue;
+          await this.prisma.notification.create({ data: { userId: a.userId, type: 'system', title: 'زیباگر جدید در انتظار بررسی', body: `پروفایل «${pro.title || 'زیباگر'}» برای تأیید ارسال شد.`, data: { professionalId: pro.id, status: 'pending_review', href: '/admin/professionals' } } }).catch(() => undefined);
+        }
+      }
+    } catch { /* non-blocking */ }
+
     return { ...updated, completion };
   }
 
