@@ -494,13 +494,13 @@ export function BookingWizard({
           <div>
             <label className="mb-1 block text-sm font-medium">تاریخ</label>
             <JalaliDateInput
-    value={date}
-    min={todayISO()}
-    onChange={(iso) => {
-      setDate(iso);
-      setSlotStart('');
-    }}
-  />
+              value={date}
+              min={todayISO()}
+              onChange={(iso) => {
+                setDate(iso);
+                setSlotStart('');
+              }}
+            />
           </div>
           {locations.length > 0 && (
             <div>
@@ -513,51 +513,44 @@ export function BookingWizard({
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name} — {l.city}
+                    {l.isPrimary ? ' (اصلی)' : ''}
                   </option>
                 ))}
               </select>
             </div>
           )}
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <label className="text-sm font-medium">ساعت</label>
-              {slotsLoading && <span className="text-xs text-gray">در حال بارگذاری...</span>}
-            </div>
-            {slotsError && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{slotsError}</p>
-            )}
-            {!slotsLoading && !slotsError && slots.length === 0 && (
-              <p className="text-sm text-gray">ساعت آزادی برای این تاریخ نیست.</p>
-            )}
-            {!slotsLoading && !slotsError && slots.length > 0 && slots.every((s) => s.available === false) && (
-              <p className="text-sm text-gray">همه ساعت‌های این روز پر یا مسدود هستند.</p>
-            )}
-            <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
-              {slots.map((s) => {
-                const free = s.available !== false;
-                return (
-                  <button
-                    key={s.start}
-                    type="button"
-                    dir="ltr"
-                    disabled={!free}
-                    title={free ? s.start : 'پر / مسدود'}
-                    onClick={() => free && setSlotStart(s.start)}
-                    className={`rounded-xl border py-2 text-sm transition ${
-                      !free
-                        ? 'cursor-not-allowed border-red-300 bg-red-50 text-red-700 line-through opacity-90'
-                        : slotStart === s.start
+            <label className="mb-1 block text-sm font-medium">ساعت</label>
+            {slotsLoading ? (
+              <p className="text-sm text-gray">در حال بارگذاری…</p>
+            ) : slotsError ? (
+              <p className="text-sm text-red-600">{slotsError}</p>
+            ) : slots.length === 0 ? (
+              <p className="text-sm text-gray">ساعت آزادی برای این روز نیست.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {slots.map((s) => {
+                  const available = s.available !== false;
+                  const on = slotStart === s.start;
+                  return (
+                    <button
+                      key={s.start}
+                      type="button"
+                      disabled={!available}
+                      onClick={() => available && setSlotStart(s.start)}
+                      className={`rounded-xl border px-3 py-2 text-sm ${
+                        on
                           ? 'border-coral bg-coral text-white'
-                          : 'border-border hover:border-coral-light'
-                    }`}
-                  >
-                    {free ? s.start : `${s.start} پر`}
-                  </button>
-                );
-              })}
-            </div>
-            {slots.some((s) => s.available === false) && (
-              <p className="mt-2 text-xs text-red-600">ساعت‌های قرمز پر یا مسدود هستند و قابل انتخاب نیستند.</p>
+                          : available
+                            ? 'border-border bg-white hover:border-coral'
+                            : 'cursor-not-allowed border-border bg-gray-light text-gray-muted'
+                      }`}
+                    >
+                      {s.start}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
           <Button className="w-full" disabled={!slotStart} onClick={goSummary}>
@@ -608,32 +601,30 @@ export function BookingWizard({
               <dt className="text-gray">مدت</dt>
               <dd>{totalDuration} دقیقه</dd>
             </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-gray">مدت</dt>
-              <dd>{totalDuration} دقیقه</dd>
-            </div>
           </dl>
           <div className="space-y-2 rounded-2xl border border-border bg-gray-light/40 p-3 text-sm">
             <p className="font-medium">جزئیات مبلغ</p>
             <div className="flex justify-between gap-2">
-              <span className="text-gray">{selected.name}{selectedRuleLabel ? ` (${selectedRuleLabel})` : ''}</span>
+              <span className="text-gray">
+                {selected.name}
+                {selectedRuleLabel ? ` (${selectedRuleLabel})` : ''}
+              </span>
               <span>{formatPrice(basePrice)}</span>
             </div>
-            {(selected.addOns || []).filter((a) => selectedAddOnIds.includes(a.id)).map((a) => (
-              <div key={a.id} className="flex justify-between gap-2">
-                <span className="text-gray">+ {a.name}</span>
-                <span>{formatPrice(a.price)}</span>
-              </div>
-            ))}
+            {(selected.addOns || [])
+              .filter((a) => selectedAddOnIds.includes(a.id))
+              .map((a) => (
+                <div key={a.id} className="flex justify-between gap-2">
+                  <span className="text-gray">+ {a.name}</span>
+                  <span>{formatPrice(a.price)}</span>
+                </div>
+              ))}
             <div className="flex justify-between gap-2 border-t border-border pt-2 text-base font-bold">
               <span>مبلغ قابل پرداخت</span>
               <span className="text-coral">{formatPrice(displayPrice)}</span>
             </div>
             <p className="text-xs text-gray">هیچ هزینه پنهانی اضافه نمی‌شود.</p>
-<p className="rounded-xl bg-gray-light/60 px-3 py-2 text-xs text-gray">
-  سیاست لغو: تا حدود ۲ ساعت قبل از نوبت می‌توانید رزرو را لغو کنید. پس از پرداخت موفق،
-  با لغو به‌موقع درخواست استرداد ثبت می‌شود.
-</p>
+            <CancelPolicyNotice className="mb-0" />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">یادداشت (اختیاری)</label>
@@ -642,54 +633,44 @@ export function BookingWizard({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"
+              placeholder="توضیح کوتاه برای زیباگر…"
             />
           </div>
-          {isAuthenticated && user && user.phoneVerified === false && (
-  <div
-    className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
-    role="status"
-  >
-    <p className="font-medium">تأیید موبایل لازم است</p>
-    <p className="mt-1 text-xs leading-6 text-amber-900/90">
-      قبل از ثبت رزرو باید شماره موبایل را با کد پیامکی تأیید کنید. با زدن دکمه زیر به صفحه تأیید هدایت می‌شوید.
-    </p>
-  </div>
-)}
-<CancelPolicyNotice className="mb-3" />
+          {user && user.phoneVerified === false && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              قبل از ثبت رزرو باید شماره موبایل را تأیید کنید.
+              <Link
+                href="/otp?reason=booking"
+                className="ms-2 font-medium text-coral underline"
+              >
+                تأیید موبایل
+              </Link>
+            </div>
+          )}
           {submitError && (
             <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</p>
           )}
-          <Button className="w-full" loading={submitting || authLoading} onClick={() => void submitBooking()}>
-            {isAuthenticated ? 'ادامه به پرداخت' : 'ورود و ادامه'}
+          <Button className="w-full" loading={submitting} onClick={() => void submitBooking()}>
+            تأیید و پرداخت
           </Button>
         </Card>
       )}
 
       {step === 'done' && booking && (
         <Card className="mt-6 space-y-4 text-center">
-          <h2 className="text-xl font-bold text-coral">رزرو ذخیره شد — هنوز نهایی نیست</h2>
+          <h2 className="text-xl font-bold text-blue">رزرو ثبت شد</h2>
           <p className="text-sm text-gray">
-            وضعیت رزرو: <strong>{persianBookingStatus(booking.status)}</strong>
+            وضعیت: {persianBookingStatus(booking.status)}
           </p>
-          <p className="text-sm font-bold text-coral">{formatPrice(booking.totalPrice)}</p>
-          {paymentInfo && (
-            <p className="rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-900">{paymentInfo}</p>
-          )}
-          <p className="text-xs text-gray">
-            رزرو فقط پس از تأیید پرداخت از سرور قطعی می‌شود. موفقیت را از روی ظاهر مرورگر فرض نکنید.
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <Link
-              href={`/booking/confirmation/${booking.id}`}
-              className="inline-flex h-11 items-center justify-center rounded-2xl bg-coral px-6 text-sm font-medium text-white"
-            >
-              بررسی وضعیت رزرو
+          {paymentInfo && <p className="text-sm text-amber-800">{paymentInfo}</p>}
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link href={`/booking/confirmation/${booking.id}`}>
+              <Button size="sm">جزئیات رزرو</Button>
             </Link>
-            <Link
-              href={`/professionals/${professional.slug}`}
-              className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-6 text-sm"
-            >
-              بازگشت به پروفایل
+            <Link href="/panel/bookings">
+              <Button size="sm" variant="outline">
+                رزروهای من
+              </Button>
             </Link>
           </div>
         </Card>
