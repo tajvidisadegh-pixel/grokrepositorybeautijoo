@@ -925,4 +925,28 @@ export class ProfessionalsService {
     return { ok: true };
   }
 
+
+  /** #40 item 58 — pin up to 3 services for public ordering */
+  async listPinnedServices(userId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const links = (pro.socialLinks as { _pinnedServiceIds?: string[] } | null) || {};
+    const ids = Array.isArray(links._pinnedServiceIds) ? links._pinnedServiceIds : [];
+    return { pinnedServiceIds: ids.slice(0, 3) };
+  }
+
+  async setPinnedServices(userId: string, serviceIds: string[]) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const cleaned = Array.from(new Set((serviceIds || []).filter(Boolean))).slice(0, 3);
+    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
+    if (cleaned.length) links._pinnedServiceIds = cleaned;
+    else delete links._pinnedServiceIds;
+    await this.prisma.professional.update({
+      where: { id: pro.id },
+      data: { socialLinks: (Object.keys(links).length ? links : null) as object },
+    });
+    return { pinnedServiceIds: cleaned };
+  }
+
 }

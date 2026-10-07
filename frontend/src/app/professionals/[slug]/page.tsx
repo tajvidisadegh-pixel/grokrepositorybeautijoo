@@ -320,6 +320,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
             <h2 className="font-bold text-foreground">رزرو نوبت</h2>
             <p className="mt-2 text-sm text-gray">
               برای انتخاب زمان و ثبت نوبت وارد جریان رزرو شوید.
+              حداقل ۴ ساعت قبل از نوبت باید رزرو کنید.
             </p>
             <Link
               href={`/booking/${pro.slug}`}

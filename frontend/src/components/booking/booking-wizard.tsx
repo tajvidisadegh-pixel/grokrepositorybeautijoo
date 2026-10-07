@@ -502,6 +502,7 @@ export function BookingWizard({
             {formatDurationFa(totalDuration)} — {formatPrice(displayPrice)}
           </p>
           <div>
+            <p className="mb-2 text-xs text-gray">حداقل ۴ ساعت قبل از نوبت باید رزرو کنید.</p>
             <label className="mb-1 block text-sm font-medium">تاریخ</label>
             <JalaliDateInput
               value={date}

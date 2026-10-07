@@ -601,6 +601,18 @@ export class AdminService {
       data.publishedAt = null;
     }
 
+    if (status === ProfessionalStatus.rejected && reason && String(reason).trim()) {
+      const links = { ...((existing.socialLinks as Record<string, unknown>) || {}) };
+      links._rejectionReason = String(reason).trim().slice(0, 500);
+      data.socialLinks = links as object;
+    } else if (status === ProfessionalStatus.approved) {
+      const links = { ...((existing.socialLinks as Record<string, unknown>) || {}) };
+      if ('_rejectionReason' in links) {
+        delete links._rejectionReason;
+        data.socialLinks = (Object.keys(links).length ? links : null) as object;
+      }
+    }
+
     const updated = await this.prisma.professional.update({ where: { id }, data });
     this.cache.invalidateCatalog();
 

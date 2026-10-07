@@ -92,6 +92,7 @@ export default function ZibagarBookingsPage() {
   const [reportFor, setReportFor] = useState<string | null>(null);
   const [reportText, setReportText] = useState('');
   const [reportMsg, setReportMsg] = useState<string | null>(null);
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'week'>('list');
   const [weekStart, setWeekStart] = useState(() => tehranWeekStartSaturday());

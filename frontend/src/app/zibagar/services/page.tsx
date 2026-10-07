@@ -28,6 +28,7 @@ import {
   type DurationRuleItem,
   type MediaAssetItem,
 } from '@/lib/panel-api';
+import { apiClient } from '@/lib/api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, parsePriceInput, formatPriceDigits } from '@/lib/utils';
 import {
@@ -51,6 +52,7 @@ export default function ZibagarServicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
   const [editDirty, setEditDirty] = useState(false);
 
   const [mode, setMode] = useState<'home' | 'specialty' | 'edit' | 'add'>('home');
@@ -459,7 +461,20 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  async function onToggleActive(ps: ProfessionalServiceItem) {
+  
+  async function togglePin(psId: string) {
+    const next = pinnedIds.includes(psId)
+      ? pinnedIds.filter((id) => id !== psId)
+      : [...pinnedIds, psId].slice(0, 3);
+    setPinnedIds(next);
+    try {
+      await apiClient.post('/professionals/me/pinned-services', { serviceIds: next });
+      setMsg(next.includes(psId) ? 'خدمت پین شد' : 'پین برداشته شد');
+    } catch (e) {
+      setError(friendlyApiError(e));
+    }
+  }
+async function onToggleActive(ps: ProfessionalServiceItem) {
     setBusy(true);
     try {
       await patchMyService(ps.id, { isActive: !(ps.isActive !== false) });

@@ -152,6 +152,22 @@ export default function ZibagarProfilePage() {
 
   return (
     <div className="space-y-6">
+      {pro?.status === 'rejected' && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p className="font-semibold">پروفایل رد شده — نیاز به تکمیل مدارک/اطلاعات</p>
+          <p className="mt-1 text-xs">
+            {((pro as { socialLinks?: { _rejectionReason?: string } }).socialLinks?._rejectionReason) ||
+              'لطفاً اطلاعات پروفایل، خدمات و مدارک را تکمیل و دوباره برای بررسی ارسال کنید.'}
+          </p>
+        </div>
+      )}
+      {pro?.status === 'pending_review' && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">در انتظار بررسی ادمین</p>
+          <p className="mt-1 text-xs">پروفایل شما ثبت شده و معمولاً طی ۱ تا ۳ روز کاری بررسی می‌شود.</p>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">پروفایل زیباگر</h1>

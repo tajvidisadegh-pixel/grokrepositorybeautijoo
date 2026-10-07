@@ -136,6 +136,17 @@ export class ProfessionalsController {
   
   @ApiBearerAuth()
   @Roles('professional', 'admin', 'SUPER_ADMIN')
+  
+  @Get('me/pinned-services')
+  listPinned(@CurrentUser('id') userId: string) {
+    return this.service.listPinnedServices(userId);
+  }
+
+  @Post('me/pinned-services')
+  setPinned(@CurrentUser('id') userId: string, @Body() body: { serviceIds?: string[] }) {
+    return this.service.setPinnedServices(userId, body?.serviceIds || []);
+  }
+
   @Get('me/blocked-customers')
   listBlocked(@CurrentUser('id') userId: string) {
     return this.service.listBlockedCustomers(userId);

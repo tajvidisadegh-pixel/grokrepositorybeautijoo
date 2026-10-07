@@ -35,6 +35,7 @@ function canCustomerCancel(b: BookingWithReview): boolean {
 export default function PanelBookingsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [timeScope, setTimeScope] = useState<'upcoming' | 'past' | 'all'>('upcoming');
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [items, setItems] = useState<BookingWithReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +215,29 @@ async function submitReview(bookingId: string) {
         ))}
       </div>
 
+      
+      <div className="flex flex-wrap gap-2" aria-label="فیلتر تاریخ">
+        {([
+          { v: 'all' as const, l: 'هر تاریخ' },
+          { v: 'today' as const, l: 'امروز' },
+          { v: 'week' as const, l: 'این هفته' },
+          { v: 'month' as const, l: 'این ماه' },
+        ]).map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => setDatePreset(o.v)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+              datePreset === o.v
+                ? 'border-coral bg-coral text-white'
+                : 'border-border bg-white hover:border-coral'
+            }`}
+          >
+            {o.l}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2" aria-label="فیلتر وضعیت">
         {[
           { v: '', l: 'همه' },
@@ -280,16 +304,33 @@ async function submitReview(bookingId: string) {
       {(() => {
         const now = Date.now();
         const visibleItems = items.filter((b) => {
-          if (timeScope === 'all') return true;
           const start = new Date(b.startAt).getTime();
-          const isPast =
-            Number.isFinite(start) &&
-            (start < now ||
-              b.status === 'completed' ||
-              b.status === 'cancelled' ||
-              b.status === 'rejected' ||
-              b.status === 'expired');
-          return timeScope === 'past' ? isPast : !isPast;
+          if (timeScope !== 'all') {
+            const isPast =
+              Number.isFinite(start) &&
+              (start < now ||
+                b.status === 'completed' ||
+                b.status === 'cancelled' ||
+                b.status === 'rejected' ||
+                b.status === 'expired');
+            if (timeScope === 'past' ? !isPast : isPast) return false;
+          }
+          if (datePreset !== 'all' && Number.isFinite(start)) {
+            const d = new Date(b.startAt);
+            const tehran = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));
+            const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tehran' }));
+            const startDay = new Date(tehran.getFullYear(), tehran.getMonth(), tehran.getDate()).getTime();
+            const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+            if (datePreset === 'today' && startDay !== todayDay) return false;
+            if (datePreset === 'week') {
+              const weekAgo = todayDay - 6 * 86400000;
+              if (startDay < weekAgo || startDay > todayDay + 7 * 86400000) return false;
+            }
+            if (datePreset === 'month') {
+              if (tehran.getMonth() !== today.getMonth() || tehran.getFullYear() !== today.getFullYear()) return false;
+            }
+          }
+          return true;
         });
         return visibleItems.length === 0 ? (
         <PanelEmpty
@@ -529,7 +570,10 @@ async function submitReview(bookingId: string) {
                       </div>
                       <textarea
                         value={comment}
-                        onChange={(e) => setComment(e.target.value)}
+                        onChange={(e) => setComment(e.target.value.slice(0, 500))}
+                      maxLength={500}
+                    />
+                    <p className="text-left text-xs text-gray" dir="ltr">{comment.length}/500</p>
                         rows={2}
                         placeholder="نظر شما (اختیاری)"
                         className="w-full rounded-xl border border-border px-3 py-2 text-sm"
