@@ -10,64 +10,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Apply
         run: |
-          python3 << 'PY'
-          from pathlib import Path
-
-          p = Path('frontend/src/lib/panel-api.ts')
-          t = p.read_text(encoding='utf-8')
-          old = "action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?"
-          new = "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show', reason?"
-          if old in t and "| 'no-show'" not in t:
-              p.write_text(t.replace(old, new, 1), encoding='utf-8')
-              print('panel-api ok')
-          else:
-              print('panel-api skip')
-
-          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
-          t = p.read_text(encoding='utf-8')
-          t = t.replace(
-              "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete') {",
-              "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show') {",
-              1,
-          )
-          if '\u0639\u062f\u0645 \u062d\u0636\u0648\u0631' not in t and 'عدم حضور' not in t:
-              needle = (
-                  '                              <Button\n'
-                  '                                size="sm"\n'
-                  '                                loading={busy === `${b.id}:complete`}\n'
-                  "                                onClick={() => act(b.id, 'complete')}\n"
-                  '                              >\n'
-                  '                                \u062a\u06a9\u0645\u06cc\u0644\n'
-                  '                              </Button>\n'
-                  '                            </>\n'
-                  '                          )}'
-              )
-              # use UTF-8 directly in next block via bytes
-              pass
-          print('bookings phase1')
-          p.write_text(t, encoding='utf-8')
-          PY
-          python3 -c "
-          from pathlib import Path
-          p=Path('frontend/src/app/zibagar/bookings/page.tsx')
-          t=p.read_text(encoding='utf-8')
-          if 'عدم حضور' in t:
-              print('btn exists')
-          else:
-              needle='''                              <Button
-                                size=\"sm\"
-                                loading={busy === \`${b.id}:complete\`}
-                                onClick={() => act(b.id, 'complete')}
-                              >
-                                تکمیل
-                              </Button>
-                            </>
-                          )}'''
-              print('needle', needle in t)
-          "
+          echo 'CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aApwID0gUGF0aCgiZnJvbnRlbmQvc3JjL2xpYi9wYW5lbC1hcGkudHMiKQp0ID0gcC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKb2xkID0gImFjdGlvbjogJ2NvbmZpcm0nIHwgJ3JlamVjdCcgfCAnY2FuY2VsJyB8ICdjb21wbGV0ZScsIHJlYXNvbj8iCm5ldyA9ICJhY3Rpb246ICdjb25maXJtJyB8ICdyZWplY3QnIHwgJ2NhbmNlbCcgfCAnY29tcGxldGUnIHwgJ25vLXNob3cnLCByZWFzb24/IgppZiBvbGQgaW4gdCBhbmQgIm5vLXNob3ciIG5vdCBpbiB0LnNwbGl0KCJ0cmFuc2l0aW9uQm9va2luZyIpWzFdWzoyMDBdOgogICAgdCA9IHQucmVwbGFjZShvbGQsIG5ldywgMSkKICAgIHAud3JpdGVfdGV4dCh0LCBlbmNvZGluZz0idXRmLTgiKQogICAgcHJpbnQoInBhbmVsLWFwaSBvayIpCmVsc2U6CiAgICBwcmludCgicGFuZWwtYXBpIHNraXAiLCAibm8tc2hvdyIgaW4gdCkKCgpmcm9tIHBhdGhsaWIgaW1wb3J0IFBhdGgKcCA9IFBhdGgoImZyb250ZW5kL3NyYy9hcHAvemliYWdhci9ib29raW5ncy9wYWdlLnRzeCIpCnQgPSBwLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQp0MiA9IHQucmVwbGFjZSgKICAiYXN5bmMgZnVuY3Rpb24gYWN0KGlkOiBzdHJpbmcsIGFjdGlvbjogJ2NvbmZpcm0nIHwgJ3JlamVjdCcgfCAnY2FuY2VsJyB8ICdjb21wbGV0ZScpIHsiLAogICJhc3luYyBmdW5jdGlvbiBhY3QoaWQ6IHN0cmluZywgYWN0aW9uOiAnY29uZmlybScgfCAncmVqZWN0JyB8ICdjYW5jZWwnIHwgJ2NvbXBsZXRlJyB8ICduby1zaG93JykgeyIsCiAgMSwKKQppZiB0MiAhPSB0OgogICAgdCA9IHQyCiAgICBwcmludCgiYWN0IHR5cGUgb2siKQpwLndyaXRlX3RleHQodCwgZW5jb2Rpbmc9InV0Zi04IikKcHJpbnQoImJvb2tpbmdzIHR5cGUgZG9uZSIpCgpmcm9tIHBhdGhsaWIgaW1wb3J0IFBhdGgKcCA9IFBhdGgoImZyb250ZW5kL3NyYy9hcHAvcHJvZmVzc2lvbmFscy9bc2x1Z10vcGFnZS50c3giKQp0ID0gcC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKaWYgIl9waW5uZWRTZXJ2aWNlSWRzIiBpbiB0OgoicHJpbnQoImV4aXN0cyIpCmVsc2U6CiAgICBwcmludCgibmVlZCBzbHVnIHBhdGNoIikKcHJpbnQoInNsdWcgcGhhc2UiKQoKZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnAgPSBQYXRoKCJmcm9udGVuZC9zcmMvY29tcG9uZW50cy9ib29raW5nL2Jvb2tpbmctd2l6YXJkLnRzeCIpCnQgPSBwLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQppZiAibm90ZXMubGVuZ3RoIiBpbiB0OgoicHJpbnQoIm5vdGVzIGV4aXN0cyIpCmVsc2U6CiAgICBwcmludCgibmVlZCBub3RlcyIpCnByaW50KCJkb25lIikK' | base64 -d > /tmp/p.py
+          python3 /tmp/p.py
       - name: Commit
         run: |
           git config user.name "beautijoo-bot"
           git config user.email "bot@beautijoo.ir"
           git add -A
-          if git diff --staged --quiet; then echo none; else git commit -m "fix: audit gaps partial" && git push; fi
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: panel-api no-show type" && git push; fi
