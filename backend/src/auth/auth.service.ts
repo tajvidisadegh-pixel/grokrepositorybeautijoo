@@ -208,6 +208,8 @@ export class AuthService {
     if (!ok) {
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
     }
+    // #40 item 32
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => undefined);
     const tokens = await this.issueTokens(user.id, user.phone);
     const roles = user.userRoles.map((ur) => ur.role.name);
     return {
@@ -370,6 +372,7 @@ export class AuthService {
       }
     }
 
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => undefined);
     const tokens = await this.issueTokens(user.id, user.phone);
     const roles = user.userRoles.map((ur) => ur.role.name);
     return {

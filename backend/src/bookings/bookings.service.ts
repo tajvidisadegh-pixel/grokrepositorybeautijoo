@@ -54,6 +54,25 @@ export class BookingsService {
       throw new BadRequestException('قبل از رزرو باید شماره موبایل با کد یکبارمصرف تأیید شود');
     }
 
+    
+    // #40 item 31 — limit concurrent active bookings per customer
+    const maxConcurrent = Math.max(
+      1,
+      parseInt(process.env.MAX_CONCURRENT_BOOKINGS || '3', 10) || 3,
+    );
+    const activeCount = await this.prisma.booking.count({
+      where: {
+        customerId,
+        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+        startAt: { gte: new Date() },
+      },
+    });
+    if (activeCount >= maxConcurrent) {
+      throw new BadRequestException(
+        `حداکثر ${maxConcurrent} رزرو فعال همزمان مجاز است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.`,
+      );
+    }
+
     const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });
     if (!pro || pro.status !== 'approved') throw new NotFoundException('زیباگر یافت نشد');
 
