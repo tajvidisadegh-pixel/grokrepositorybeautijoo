@@ -1,9 +1,9 @@
-name: apply-item-41-45
+name: apply-item-46-50
 
 on:
   push:
     paths:
-      - '.github/triggers/apply-41-45.flag'
+      - '.github/triggers/apply-46-50.flag'
 
 jobs:
   patch:
@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run patch
-        run: python3 .github/triggers/patch-41-45.py
+        run: python3 .github/triggers/patch-46-50.py
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "feat(#40): items 41-45 in_progress display, portfolio limits, success msgs, report" || echo nochange
+          git commit -m "feat(#40): items 46-50 capacity, membership, block customer, daily summary" || echo nochange
           git push
