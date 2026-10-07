@@ -1,0 +1,165 @@
+name: items-66-70
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          changed = []
+
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text(encoding='utf-8')
+          if 'rejectedReason' not in t.split('BookingListItem')[1][:600]:
+              t = t.replace(
+                  'export type BookingListItem = {\n  id: string; status: string; startAt: string; endAt?: string; notes?: string | null; totalPrice?: number | null;',
+                  'export type BookingListItem = {\n  id: string; status: string; startAt: string; endAt?: string; notes?: string | null; totalPrice?: number | null;\n  rejectedReason?: string | null; cancelReason?: string | null;',
+                  1,
+              )
+              p.write_text(t, encoding='utf-8')
+              changed.append('66-type')
+
+          p = Path('frontend/src/app/panel/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if '\u062f\u0644\u06cc\u0644 \u0631\u062f' not in t:
+              idx = t.find("{b.status === 'cancelled' && payStatus === 'refunded'")
+              if idx > 0:
+                  block = """                  {b.status === 'rejected' && b.rejectedReason && (\n                    <p className=\"text-xs text-red-700\">\u062f\u0644\u06cc\u0644 \u0631\u062f: {b.rejectedReason}</p>\n                  )}\n"""
+                  t = t[:idx] + block + t[idx:]
+                  p.write_text(t, encoding='utf-8')
+                  changed.append('66-ui')
+
+          # 67 persist filters component
+          comp = Path('frontend/src/components/search/persist-search-filters.tsx')
+          if not comp.exists():
+              comp.parent.mkdir(parents=True, exist_ok=True)
+              comp.write_text("'use client';\nimport { useEffect } from 'react';\nimport { useRouter, useSearchParams } from 'next/navigation';\n\nconst KEY = 'beautijoo:lastSearchFilters';\n\nexport function PersistSearchFilters() {\n  const router = useRouter();\n  const sp = useSearchParams();\n  useEffect(() => {\n    const keys = ['q', 'city', 'category', 'minRating', 'minPrice', 'maxPrice', 'sort', 'gender', 'verifiedOnly', 'availableToday', 'minDuration'];\n    const hasAny = keys.some((k) => { const v = sp.get(k); return v != null && v !== ''; });\n    if (hasAny) {\n      const saved: Record<string, string> = {};\n      keys.forEach((k) => { const v = sp.get(k); if (v) saved[k] = v; });\n      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch {}\n      return;\n    }\n    try {\n      const raw = localStorage.getItem(KEY);\n      if (!raw) return;\n      const saved = JSON.parse(raw) as Record<string, string>;\n      const params = new URLSearchParams();\n      Object.entries(saved).forEach(([k, v]) => { if (v) params.set(k, v); });\n      const qs = params.toString();\n      if (qs) router.replace(`/search?${qs}`);\n    } catch {}\n  }, [sp, router]);\n  return null;\n}\n")
+              changed.append('67-comp')
+
+          p = Path('frontend/src/app/search/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'PersistSearchFilters' not in t:
+              t = t.replace("import Link from 'next/link';", "import Link from 'next/link';\nimport { Suspense } from 'react';\nimport { PersistSearchFilters } from '@/components/search/persist-search-filters';", 1)
+              if '<RecordRecentSearch' in t:
+                  t = t.replace('{(q || city) && (\n        <RecordRecentSearch', '<Suspense fallback={null}><PersistSearchFilters /></Suspense>\n      {(q || city) && (\n        <RecordRecentSearch', 1)
+                  changed.append('67-wire')
+              p.write_text(t, encoding='utf-8')
+
+          # 68 logout confirm
+          p = Path('frontend/src/app/panel/settings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          old = "async function onLogout() {\n    await logout();\n    router.replace('/login');\n  }"
+          new = "async function onLogout() {\n    if (typeof window !== 'undefined' && !window.confirm('\u0622\u06cc\u0627 \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u06cc\u062f \u0627\u0632 \u062d\u0633\u0627\u0628 \u062e\u0627\u0631\u062c \u0634\u0648\u06cc\u062f\u061f')) return;\n    await logout();\n    router.replace('/login');\n  }"
+          if old in t:
+              t = t.replace(old, new, 1)
+              p.write_text(t, encoding='utf-8')
+              changed.append('68')
+
+          # 69 card service count
+          p = Path('frontend/src/components/professionals/professional-card.tsx')
+          t = p.read_text(encoding='utf-8')
+          old = "{services.length > 0 && (\n            <p className=\"mt-1.5 line-clamp-1 text-xs text-gray-muted sm:mt-2\">\n              {services.slice(0, 3).join(' \u00b7 ')}\n            </p>\n          )}"
+          new = "{services.length > 0 && (\n            <p className=\"mt-1.5 line-clamp-1 text-xs text-gray-muted sm:mt-2\">\n              <span className=\"font-medium text-gray-dark\">{services.length.toLocaleString('fa-IR')} \u062e\u062f\u0645\u062a</span>\n              {' \u00b7 '}\n              {services.slice(0, 3).join(' \u00b7 ')}\n            </p>\n          )}"
+          if old in t:
+              t = t.replace(old, new, 1)
+              p.write_text(t, encoding='utf-8')
+              changed.append('69-card')
+          elif "services.slice(0, 3).join" in t and 'toLocaleString' not in t:
+              t = t.replace(
+                  "{services.slice(0, 3).join(' \u00b7 ')}",
+                  "<span className=\"font-medium text-gray-dark\">{services.length.toLocaleString('fa-IR')} \u062e\u062f\u0645\u062a</span>{' \u00b7 '}{services.slice(0, 3).join(' \u00b7 ')}",
+                  1,
+              )
+              p.write_text(t, encoding='utf-8')
+              changed.append('69-card-loose')
+
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if '\u062e\u062f\u0645\u062a)' not in t and 'خدمات و قیمت' in t:
+              t = t.replace(
+                  '<h2 className="text-lg font-bold text-foreground">خدمات و قیمت</h2>',
+                  '<h2 className="text-lg font-bold text-foreground">خدمات و قیمت{(pro.professionalServices?.length ?? 0) > 0 && (<span className="mr-2 text-sm font-normal text-gray"> ({(pro.professionalServices?.length ?? 0).toLocaleString("fa-IR")} خدمت)</span>)}</h2>',
+                  1,
+              )
+              p.write_text(t, encoding='utf-8')
+              changed.append('69-profile')
+
+          # 70 setServiceOrder API
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text(encoding='utf-8')
+          if 'setServiceOrder' not in t:
+              t = t.replace(
+                  'export async function fetchMyServices()',
+                  "export async function setServiceOrder(serviceIds: string[]) {\n  return apiClient.patch('/professionals/me', { socialLinks: { _serviceOrderIds: serviceIds } });\n}\nexport async function fetchMyServices()",
+                  1,
+              )
+              p.write_text(t, encoding='utf-8')
+              changed.append('70-api')
+
+          # 70 public sort by order
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if '_serviceOrderIds' not in t and '_pinnedServiceIds' in t:
+              t = t.replace(
+                  'const pins = ((pro as { socialLinks?: { _pinnedServiceIds?: string[] } }).socialLinks?._pinnedServiceIds) || [];',
+                  "const pins = ((pro as { socialLinks?: { _pinnedServiceIds?: string[] } }).socialLinks?._pinnedServiceIds) || [];\n                const orderIds = ((pro as { socialLinks?: { _serviceOrderIds?: string[] } }).socialLinks?._serviceOrderIds) || [];",
+                  1,
+              )
+              t = t.replace(
+                  'list.sort((a, b) => (pinSet.has(a.id) ? 0 : 1) - (pinSet.has(b.id) ? 0 : 1));',
+                  'list.sort((a, b) => { const ap = pinSet.has(a.id) ? 0 : 1; const bp = pinSet.has(b.id) ? 0 : 1; if (ap !== bp) return ap - bp; const ai = orderIds.indexOf(a.id); const bi = orderIds.indexOf(b.id); if (ai === -1 && bi === -1) return 0; if (ai === -1) return 1; if (bi === -1) return -1; return ai - bi; });',
+                  1,
+              )
+              p.write_text(t, encoding='utf-8')
+              changed.append('70-public')
+
+          # 70 moveService on services page
+          p = Path('frontend/src/app/zibagar/services/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'setServiceOrder' not in t:
+              if 'fetchMyServices,' in t:
+                  t = t.replace('fetchMyServices,', 'fetchMyServices,\n  setServiceOrder,', 1)
+              if 'async function onUploadMedia' in t:
+                  t = t.replace(
+                      'async function onUploadMedia',
+                      "async function moveService(psId: string, dir: -1 | 1) {\n    const ids = mine.map((x) => x.id);\n    const i = ids.indexOf(psId);\n    if (i < 0) return;\n    const j = i + dir;\n    if (j < 0 || j >= ids.length) return;\n    const next = [...ids];\n    const tmp = next[i]; next[i] = next[j]; next[j] = tmp;\n    try {\n      await setServiceOrder(next);\n      const byId = new Map(mine.map((x) => [x.id, x]));\n      setMine(next.map((id) => byId.get(id)!).filter(Boolean));\n    } catch (e) { setError(friendlyApiError(e)); }\n  }\n\n  async function onUploadMedia",
+                      1,
+                  )
+                  changed.append('70-move')
+              p.write_text(t, encoding='utf-8')
+
+          # SpecialtyView moveService
+          p = Path('frontend/src/app/zibagar/services/SpecialtyView.tsx')
+          if p.exists():
+              t = p.read_text(encoding='utf-8')
+              if 'moveService' not in t:
+                  t = t.replace('onUploadMedia:', 'moveService?: (psId: string, dir: -1 | 1) => void;\n  onUploadMedia:', 1)
+                  t = t.replace('onUploadMedia,', 'moveService,\n    onUploadMedia,', 1)
+                  if "uploadState === 'uploading'" in t and 'specialtyMenu' in t:
+                      ui = """        {moveService && specialtyMenu.length > 1 && (\n          <div className=\"mt-2 flex flex-wrap gap-2\">\n            {specialtyMenu.map((ps, idx) => (\n              <div key={`ord-${ps.id}`} className=\"flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs\">\n                <span className=\"max-w-[8rem] truncate\">{ps.service?.name || '\u062e\u062f\u0645\u062a'}</span>\n                <button type=\"button\" className=\"rounded px-1 hover:bg-gray-light\" disabled={idx === 0} onClick={() => moveService(ps.id, -1)}>\u2191</button>\n                <button type=\"button\" className=\"rounded px-1 hover:bg-gray-light\" disabled={idx === specialtyMenu.length - 1} onClick={() => moveService(ps.id, 1)}>\u2193</button>\n              </div>\n            ))}\n          </div>\n        )}\n"""
+                      t = t.replace("{uploadState === 'uploading'", ui + "{uploadState === 'uploading'", 1)
+                      changed.append('70-ui')
+                  p.write_text(t, encoding='utf-8')
+
+          p = Path('frontend/src/app/zibagar/services/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'moveService={moveService}' not in t and 'moveService' in t:
+              t = t.replace('onUploadMedia={onUploadMedia}', 'onUploadMedia={onUploadMedia}\n          moveService={moveService}', 1)
+              p.write_text(t, encoding='utf-8')
+              changed.append('70-wire')
+
+          print('CHANGED', changed)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "feat: #40 items 66-70 (reject reason, search persist, logout confirm, service count, reorder)" && git push; fi
