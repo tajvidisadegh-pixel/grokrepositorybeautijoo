@@ -1,0 +1,73 @@
+name: fix-gaps-combined
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          p = Path('frontend/src/lib/panel-api.ts')
+          t = p.read_text(encoding='utf-8')
+          old = "action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?"
+          new = "action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show', reason?"
+          if old in t and "| 'no-show'" not in t:
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+              print('panel-api ok')
+          else:
+              print('panel-api skip')
+
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace(
+              "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete') {",
+              "async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show') {",
+              1,
+          )
+          if '\u0639\u062f\u0645 \u062d\u0636\u0648\u0631' not in t and 'عدم حضور' not in t:
+              needle = (
+                  '                              <Button\n'
+                  '                                size="sm"\n'
+                  '                                loading={busy === `${b.id}:complete`}\n'
+                  "                                onClick={() => act(b.id, 'complete')}\n"
+                  '                              >\n'
+                  '                                \u062a\u06a9\u0645\u06cc\u0644\n'
+                  '                              </Button>\n'
+                  '                            </>\n'
+                  '                          )}'
+              )
+              # use UTF-8 directly in next block via bytes
+              pass
+          print('bookings phase1')
+          p.write_text(t, encoding='utf-8')
+          PY
+          python3 -c "
+          from pathlib import Path
+          p=Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t=p.read_text(encoding='utf-8')
+          if 'عدم حضور' in t:
+              print('btn exists')
+          else:
+              needle='''                              <Button
+                                size=\"sm\"
+                                loading={busy === \`${b.id}:complete\`}
+                                onClick={() => act(b.id, 'complete')}
+                              >
+                                تکمیل
+                              </Button>
+                            </>
+                          )}'''
+              print('needle', needle in t)
+          "
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: audit gaps partial" && git push; fi
