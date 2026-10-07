@@ -262,8 +262,8 @@ export function BookingWizard({
     if (user && user.phoneVerified === false) {
       const draft = buildDraft();
       saveBookingDraft(draft);
-      setSubmitError('Phone verification required');
-      router.push('/otp?reason=booking');
+      setSubmitError('قبل از رزرو باید شماره موبایل را تأیید کنید.');
+      router.push('/otp?reason=booking&next=' + encodeURIComponent(bookingLoginReturnPath(draft)));
       return;
     }
     setSubmitting(true);
