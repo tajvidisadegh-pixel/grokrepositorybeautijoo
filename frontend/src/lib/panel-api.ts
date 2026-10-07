@@ -175,7 +175,7 @@ export async function rescheduleBooking(id: string, startAt: string) {
   return apiClient.patch(`/bookings/${id}/reschedule`, { startAt });
 }
 
-export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
+export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show', reason?: string) {
   return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);
 }
 export async function reportBookingToAdmin(id: string, message: string) {

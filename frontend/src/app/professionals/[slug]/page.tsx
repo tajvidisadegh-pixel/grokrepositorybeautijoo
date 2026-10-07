@@ -283,13 +283,20 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               <p className="mt-3 text-sm text-gray">خدمتی ثبت نشده است.</p>
             )}
             <ul className="mt-4 space-y-3">
-              {pro.professionalServices?.map((ps) => (
-                <ServiceOfferCard
-                  key={ps.id}
-                  ps={ps as ProfessionalServiceItem}
-                  slug={pro.slug}
-                />
-              ))}
+              {(() => {
+                const list = [...(pro.professionalServices || [])] as ProfessionalServiceItem[];
+                const pins = ((pro as { socialLinks?: { _pinnedServiceIds?: string[] } }).socialLinks?._pinnedServiceIds) || [];
+                const pinSet = new Set(Array.isArray(pins) ? pins : []);
+                list.sort((a, b) => (pinSet.has(a.id) ? 0 : 1) - (pinSet.has(b.id) ? 0 : 1));
+                return list.map((ps) => (
+                  <li key={ps.id} className="list-none">
+                    {pinSet.has(ps.id) && (
+                      <span className="mb-1 inline-block rounded-full bg-coral/10 px-2 py-0.5 text-[10px] font-medium text-coral">پین‌شده</span>
+                    )}
+                    <ServiceOfferCard ps={ps as ProfessionalServiceItem} slug={pro.slug} />
+                  </li>
+                ));
+              })()}
             </ul>
           </section>
 

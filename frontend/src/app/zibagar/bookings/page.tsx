@@ -180,7 +180,7 @@ export default function ZibagarBookingsPage() {
     }
   }
 
-  async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete') {
+  async function act(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no-show') {
     setBusy(`${id}:${action}`);
     setError(null);
     setActionMsg(null);
@@ -553,6 +553,19 @@ async function submitReport(id: string) {
                               >
                                 تکمیل
                               </Button>
+                              {b.status === 'confirmed' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  loading={busy === `${b.id}:no-show`}
+                                  onClick={() => {
+                                    if (typeof window !== 'undefined' && !window.confirm('مشتری حضور نداشته؟ ثبت عدم حضور؟')) return;
+                                    void act(b.id, 'no-show');
+                                  }}
+                                >
+                                  عدم حضور
+                                </Button>
+                              )}
                             </>
                           )}
 

@@ -652,11 +652,13 @@ export function BookingWizard({
             <label className="mb-1 block text-sm font-medium">یادداشت (اختیاری)</label>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => setNotes(e.target.value.slice(0, 500))}
               rows={2}
+              maxLength={500}
               className="w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:border-coral"
               placeholder="توضیح کوتاه برای زیباگر…"
             />
+            <p className="mt-1 text-left text-xs text-gray" dir="ltr">{`${notes.length}/500`}</p>
           </div>
           {user && user.phoneVerified === false && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
