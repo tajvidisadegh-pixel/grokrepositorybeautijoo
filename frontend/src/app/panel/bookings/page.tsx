@@ -571,13 +571,12 @@ async function submitReview(bookingId: string) {
                       <textarea
                         value={comment}
                         onChange={(e) => setComment(e.target.value.slice(0, 500))}
-                      maxLength={500}
-                    />
-                    <p className="text-left text-xs text-gray" dir="ltr">{`${comment.length}/500`}</p>
+                        maxLength={500}
                         rows={2}
                         placeholder="نظر شما (اختیاری)"
                         className="w-full rounded-xl border border-border px-3 py-2 text-sm"
                       />
+                      <p className="text-left text-xs text-gray" dir="ltr">{`${comment.length}/500`}</p>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
