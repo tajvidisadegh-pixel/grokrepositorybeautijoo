@@ -1,9 +1,9 @@
-name: fix-46-fe
+name: fix-orphan-zb
 
 on:
   push:
     paths:
-      - '.github/triggers/fix-46-fe.flag'
+      - '.github/triggers/fix-orphan.flag'
 
 jobs:
   patch:
@@ -12,10 +12,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: python3 .github/triggers/fix-46-fe.py
+      - run: python3 .github/triggers/fix-orphan.py
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/professionals/[slug]/page.tsx frontend/src/app/zibagar/bookings/page.tsx
-          git commit -m "fix(#40): typecheck createdAt cast + block button scope" || echo nochange
+          git add frontend/src/app/zibagar/bookings/page.tsx
+          git commit -m "fix(#40): remove orphan JSX after zibagar bookings" || echo nochange
           git push
