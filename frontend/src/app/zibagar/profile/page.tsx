@@ -40,6 +40,17 @@ export default function ZibagarProfilePage() {
   const [socialForm, setSocialForm] = useState<SocialLinks>({});
   const [socialBusy, setSocialBusy] = useState(false);
   const [socialMsg, setSocialMsg] = useState<string | null>(null);
+  const [socialDirty, setSocialDirty] = useState(false);
+  useEffect(() => {
+    if (!socialDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [socialDirty]);
+
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -118,8 +129,10 @@ export default function ZibagarProfilePage() {
   const locations = pro?.locations || [];
 
   async function saveSocialLinks() {
+    // clear dirty after save
     setSocialBusy(true);
     setSocialMsg(null);
+      setSocialDirty(false);
     setError(null);
     try {
       const payload: SocialLinks = {};

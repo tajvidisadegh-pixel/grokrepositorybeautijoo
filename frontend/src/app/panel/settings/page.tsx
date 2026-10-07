@@ -11,6 +11,8 @@ import {
   revokeSession,
   revokeAllSessions,
   deleteAccount,
+  requestChangePhone,
+  verifyChangePhone,
   type SessionItem,
 } from '@/lib/panel-api';
 import { formatDateTime } from '@/lib/utils';
@@ -71,6 +73,13 @@ export default function PanelSettingsPage() {
   const [delMsg, setDelMsg] = useState<string | null>(null);
   const [delErr, setDelErr] = useState<string | null>(null);
   const [delLoading, setDelLoading] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneStep, setPhoneStep] = useState<'idle' | 'code'>('idle');
+  const [phoneMsg, setPhoneMsg] = useState<string | null>(null);
+  const [phoneErr, setPhoneErr] = useState<string | null>(null);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+
 
   const refreshSessions = useCallback(async () => {
     setSessLoading(true);
@@ -88,6 +97,39 @@ export default function PanelSettingsPage() {
     setPrefs(loadPrefs());
     refreshSessions();
   }, [refreshSessions]);
+
+  
+  async function onRequestPhoneChange() {
+    setPhoneMsg(null);
+    setPhoneErr(null);
+    setPhoneLoading(true);
+    try {
+      await requestChangePhone(newPhone.trim());
+      setPhoneStep('code');
+      setPhoneMsg('کد تأیید به شماره جدید ارسال شد');
+    } catch (e: unknown) {
+      setPhoneErr(e instanceof Error ? e.message : 'خطا در ارسال کد');
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
+
+  async function onVerifyPhoneChange() {
+    setPhoneMsg(null);
+    setPhoneErr(null);
+    setPhoneLoading(true);
+    try {
+      const res = await verifyChangePhone(newPhone.trim(), phoneCode.trim());
+      setPhoneMsg(res.message || 'شماره تغییر کرد');
+      setPhoneStep('idle');
+      setPhoneCode('');
+      setNewPhone('');
+    } catch (e: unknown) {
+      setPhoneErr(e instanceof Error ? e.message : 'کد نامعتبر است');
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
 
   async function onLogout() {
     await logout();
@@ -179,7 +221,41 @@ export default function PanelSettingsPage() {
     } catch (err: unknown) {
       const msg =
         (err as { message?: string })?.message ||
-        'خطا در حذف حساب';
+        'خطا در 
+      <Card className="space-y-3 p-4">
+        <h2 className="text-base font-semibold">تغییر شماره موبایل</h2>
+        <p className="text-xs text-gray">شماره فعلی: {user?.phone || '—'} — شماره جدید با کد تأیید می‌شود.</p>
+        <input
+          className="h-11 w-full rounded-2xl border border-border px-3 text-sm"
+          placeholder="09xxxxxxxxx"
+          value={newPhone}
+          onChange={(e) => setNewPhone(e.target.value)}
+          dir="ltr"
+        />
+        {phoneStep === 'code' && (
+          <input
+            className="h-11 w-full rounded-2xl border border-border px-3 text-sm"
+            placeholder="کد تأیید"
+            value={phoneCode}
+            onChange={(e) => setPhoneCode(e.target.value)}
+            dir="ltr"
+          />
+        )}
+        {phoneMsg && <p className="text-sm text-emerald-700">{phoneMsg}</p>}
+        {phoneErr && <p className="text-sm text-red-600">{phoneErr}</p>}
+        <div className="flex gap-2">
+          {phoneStep === 'idle' ? (
+            <Button size="sm" loading={phoneLoading} onClick={() => void onRequestPhoneChange()} disabled={newPhone.trim().length < 11}>
+              ارسال کد
+            </Button>
+          ) : (
+            <Button size="sm" loading={phoneLoading} onClick={() => void onVerifyPhoneChange()} disabled={phoneCode.trim().length < 4}>
+              تأیید و تغییر
+            </Button>
+          )}
+        </div>
+      </Card>
+حذف حساب';
       setDelErr(String(msg));
     } finally {
       setDelLoading(false);

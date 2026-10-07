@@ -581,3 +581,11 @@ export async function revokeAllSessions() {
 export async function deleteAccount(payload?: { password?: string }) {
   return apiClient.post<{ message: string }>('/auth/delete-account', payload ?? {});
 }
+
+export async function requestChangePhone(newPhone: string) {
+  return apiClient.post<{ message: string; expiresIn?: number }>('/auth/change-phone/request', { newPhone });
+}
+
+export async function verifyChangePhone(newPhone: string, code: string) {
+  return apiClient.post<{ message: string; phone: string }>('/auth/change-phone/verify', { newPhone, code });
+}

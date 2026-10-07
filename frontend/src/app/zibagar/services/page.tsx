@@ -51,6 +51,7 @@ export default function ZibagarServicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editDirty, setEditDirty] = useState(false);
 
   const [mode, setMode] = useState<'home' | 'specialty' | 'edit' | 'add'>('home');
   const [activeRootId, setActiveRootId] = useState<string | null>(null);
@@ -116,6 +117,25 @@ export default function ZibagarServicesPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  
+  useEffect(() => {
+    if (mode !== 'edit') {
+      setEditDirty(false);
+      return;
+    }
+    setEditDirty(true);
+  }, [price, durationMin, priceRules, durationRules, mode]);
+
+  useEffect(() => {
+    if (!editDirty || mode !== 'edit') return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [editDirty, mode]);
 
   const selectedPs = useMemo(
     () => (selectedPsId ? mine.find((m) => m.id === selectedPsId) || null : null),
@@ -366,6 +386,7 @@ export default function ZibagarServicesPage() {
   }
 
   async function onSavePs() {
+    // #40 item 53
     if (!selectedPs) return;
     setBusy(true);
     setError(null);
