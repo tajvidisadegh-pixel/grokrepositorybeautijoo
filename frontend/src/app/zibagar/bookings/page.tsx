@@ -115,7 +115,7 @@ export default function ZibagarBookingsPage() {
       }
       return true;
     });
-  })(();
+  })();
   const [weekStart, setWeekStart] = useState(() => tehranWeekStartSaturday());
 
   const load = useCallback(async () => {
