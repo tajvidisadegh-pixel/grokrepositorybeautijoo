@@ -1,0 +1,65 @@
+name: fix-86-search
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/search/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          # add durationBand to Props type
+          t = t.replace(
+              'verifiedOnly?: string; gender?: string; minDuration?: string;',
+              'verifiedOnly?: string; gender?: string; minDuration?: string; maxDuration?: string; durationBand?: string;',
+              1,
+          )
+          # remove second const minDuration line that redeclares
+          old = "  const minDuration = sp.minDuration != null && sp.minDuration !== '' ? parseInt(sp.minDuration, 10) : undefined;\n"
+          if old in t:
+              t = t.replace(old, '', 1)
+          # also handle if durationBand didn't set minDuration from sp - merge logic:
+          # after durationBand block, if still undefined use sp.minDuration
+          if "else if (durationBand === 'over120') { minDuration = 121; }" in t:
+              t = t.replace(
+                  "else if (durationBand === 'over120') { minDuration = 121; }",
+                  "else if (durationBand === 'over120') { minDuration = 121; }\n"
+                  "  else {\n"
+                  "    if (sp.minDuration != null && sp.minDuration !== '') minDuration = parseInt(sp.minDuration, 10);\n"
+                  "    if (sp.maxDuration != null && sp.maxDuration !== '') maxDuration = parseInt(sp.maxDuration, 10);\n"
+                  "  }",
+                  1,
+              )
+          # remove duplicate minDuration key in searchProfessionals call
+          # first occurrence is old, second is ours - remove the first standalone one
+          lines = t.split('\n')
+          seen = 0
+          out = []
+          for line in lines:
+              if 'minDuration:' in line and 'searchProfessionals' not in line and 'Number.isFinite(minDuration' in line:
+                  seen += 1
+                  if seen == 1 and 'minDuration != null' not in line:
+                      continue  # skip first duplicate short form
+              out.append(line)
+          t = '\n'.join(out)
+          # simpler: remove exact duplicate line
+          t = t.replace(
+              "      minDuration: Number.isFinite(minDuration as number) ? minDuration : undefined,\n      minPrice:",
+              "      minPrice:",
+              1,
+          )
+          p.write_text(t, encoding='utf-8')
+          print('fixed')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: search durationBand types (#40.86)" && git push; fi
