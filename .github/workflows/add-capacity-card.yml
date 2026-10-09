@@ -1,0 +1,16 @@
+name: add-capacity-card
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -c "from pathlib import Path;p=Path('frontend/src/app/zibagar/page.tsx');t=p.read_text();c='''\n      <Card className=\"space-y-2 p-4\">\n        <h2 className=\"text-sm font-bold\">سقف ظرفیت روزانه</h2>\n        <p className=\"text-xs text-gray\">هشدار داشبورد وقتی تعداد نوبت امروز به این عدد برسد.</p>\n        <input type=\"number\" min={1} max={50} className=\"h-10 w-32 rounded-xl border border-border px-2 text-sm\" defaultValue={5} onFocus={(e)=>{try{const v=localStorage.getItem('bj_daily_cap');if(v)e.currentTarget.value=v}catch{}}} onChange={(e)=>{try{localStorage.setItem('bj_daily_cap',String(Math.max(1,Math.min(50,Number(e.target.value)||5))))}catch{}}} />\n      </Card>\n''';\n\nif 'سقف ظرفیت روزانه' not in t and '{pendingReviewBanner}' in t:\n t=t.replace('{pendingReviewBanner}', c+'{pendingReviewBanner}',1);p.write_text(t);print('ok')\nelse: print('skip', 'سقف ظرفیت روزانه' in t)"
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'feat: daily capacity control on zibagar dashboard (#61.21)' && git push)
