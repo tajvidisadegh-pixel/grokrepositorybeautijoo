@@ -212,11 +212,7 @@ export default function ZibagarBookingsPage() {
       let reason: string | undefined;
       if (action === 'reject') {
         const preset = window.prompt(
-          'دلیل رد (اختیاری):
-1) پر بودن
-2) مرخصی
-3) خارج از تخصص
-4) سایر — متن بنویسید',
+          'دلیل رد (اختیاری): 1) پر بودن  2) مرخصی  3) خارج از تخصص  4) سایر',
           '1',
         );
         const map: Record<string, string> = {
