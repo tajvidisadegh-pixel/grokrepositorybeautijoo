@@ -704,11 +704,27 @@ export default function ZibagarHoursPage() {
                     setError('ساعت نامعتبر');
                     return;
                   }
-                  setSubmitting(true);
+                  const range = tehranRange(blockDate, blockFrom, blockTo);
+        const rs = new Date(range.startAt).getTime();
+        const re = new Date(range.endAt).getTime();
+        const conflicts = bookings.filter((b) => {
+          const st = String(b.status || '');
+          if (st === 'cancelled' || st === 'rejected') return false;
+          const bs = new Date(b.startAt).getTime();
+          const be = b.endAt ? new Date(b.endAt).getTime() : bs + 3600000;
+          return bs < re && be > rs;
+        });
+        if (conflicts.length > 0) {
+          const ok = window.confirm(
+            `این بازه با ${conflicts.length.toLocaleString('fa-IR')} نوبت تداخل دارد. ادامه می‌دهید؟`,
+          );
+          if (!ok) return;
+        }
+        setSubmitting(true);
                   setError(null);
                   try {
                     await addTimeOff({
-                      ...tehranRange(blockDate, blockFrom, blockTo),
+                      ...range,
                       reason: blockReason.trim() || undefined,
                     });
                     setBlockOpen(false);
