@@ -538,7 +538,17 @@ export function BookingWizard({
             ) : slotsError ? (
               <p className="text-sm text-red-600">{slotsError}</p>
             ) : slots.length === 0 ? (
-              <p className="text-sm text-gray">ساعت آزادی برای این روز نیست.</p>
+              <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+                <p className="font-medium">در این تاریخ نوبت خالی نیست</p>
+                <p className="text-xs">تاریخ دیگری انتخاب کنید یا روز بعد را امتحان کنید.</p>
+                <button type="button" className="text-xs font-medium text-coral underline" onClick={() => {
+                  if (!date) return;
+                  const d = new Date(date + "T12:00:00");
+                  d.setDate(d.getDate() + 1);
+                  setDate(d.toISOString().slice(0, 10));
+                  setSlotStart("");
+                }}>امتحان روز بعد</button>
+              </div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {(() => {

@@ -34,6 +34,12 @@ export default async function SearchPage({ searchParams }: Props) {
   const category = sp.category?.trim() || undefined;
   const page = Math.max(1, parseInt(sp.page || '1', 10) || 1);
   const minRating = sp.minRating != null && sp.minRating !== '' ? parseFloat(sp.minRating) : undefined;
+  const durationBand = (sp.durationBand || '').trim();
+  let minDuration: number | undefined;
+  let maxDuration: number | undefined;
+  if (durationBand === 'under60') { minDuration = 1; maxDuration = 60; }
+  else if (durationBand === '60to120') { minDuration = 61; maxDuration = 120; }
+  else if (durationBand === 'over120') { minDuration = 121; }
   const minPrice = sp.minPrice != null && sp.minPrice !== '' ? parseInt(sp.minPrice, 10) : undefined;
   const maxPrice = sp.maxPrice != null && sp.maxPrice !== '' ? parseInt(sp.maxPrice, 10) : undefined;
   const sort = sp.sort?.trim() || 'featured';
@@ -58,6 +64,8 @@ export default async function SearchPage({ searchParams }: Props) {
       minRating: Number.isFinite(minRating as number) ? minRating : undefined,
       minDuration: Number.isFinite(minDuration as number) ? minDuration : undefined,
       minPrice: Number.isFinite(minPrice as number) ? minPrice : undefined,
+      minDuration: minDuration != null && Number.isFinite(minDuration) ? minDuration : undefined,
+      maxDuration: maxDuration != null && Number.isFinite(maxDuration) ? maxDuration : undefined,
       maxPrice: Number.isFinite(maxPrice as number) ? maxPrice : undefined,
       sort, availableDate, lat, lng, radiusKm,
       verifiedOnly: verifiedOnly || undefined,
@@ -75,6 +83,9 @@ export default async function SearchPage({ searchParams }: Props) {
     if (city) params.set('city', city);
     if (category) params.set('category', category);
     if (minRating != null && Number.isFinite(minRating)) params.set('minRating', String(minRating));
+    if (minDuration != null && Number.isFinite(minDuration)) params.set('minDuration', String(minDuration));
+    if (maxDuration != null && Number.isFinite(maxDuration)) params.set('maxDuration', String(maxDuration));
+    if (durationBand) params.set('durationBand', durationBand);
     if (minPrice != null && Number.isFinite(minPrice)) params.set('minPrice', String(minPrice));
     if (maxPrice != null && Number.isFinite(maxPrice)) params.set('maxPrice', String(maxPrice));
     if (sort && sort !== 'featured') params.set('sort', sort);
@@ -146,18 +157,27 @@ export default async function SearchPage({ searchParams }: Props) {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray">حداقل قیمت (ریال)</label>
+            <label className="mb-1 block text-xs font-medium text-gray">حداقل قیمت (تومان)</label>
             <input name="minPrice" type="number" min={0} step={1000}
               defaultValue={minPrice != null && Number.isFinite(minPrice) ? String(minPrice) : ''}
               placeholder="مثلاً ۲۰۰۰۰۰" dir="ltr" className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray">حداکثر قیمت (ریال)</label>
+            <label className="mb-1 block text-xs font-medium text-gray">حداکثر قیمت (تومان)</label>
             <input name="maxPrice" type="number" min={0} step={1000}
               defaultValue={maxPrice != null && Number.isFinite(maxPrice) ? String(maxPrice) : ''}
               placeholder="مثلاً ۲۰۰۰۰۰۰" dir="ltr" className={inputCls} />
           </div>
-          <div>
+                    <div>
+            <label className="mb-1 block text-xs font-medium text-gray">مدت خدمت</label>
+            <select name="durationBand" defaultValue={durationBand || ""} className={inputCls}>
+              <option value="">همه مدت‌ها</option>
+              <option value="under60">زیر ۶۰ دقیقه</option>
+              <option value="60to120">۶۰ تا ۱۲۰ دقیقه</option>
+              <option value="over120">بیش از ۲ ساعت</option>
+            </select>
+          </div>
+<div>
             <label className="mb-1 block text-xs font-medium text-gray">تاریخ در دسترس بودن</label>
             <FormJalaliDate name="availableDate" defaultValue={availableDate || ''} className={inputCls} />
           </div>

@@ -22,6 +22,23 @@ export function NearMeFields({ defaultLat, defaultLng }: Props) {
     setLng(defaultLng || '');
   }, [defaultLat, defaultLng]);
 
+  useEffect(() => {
+    if (defaultLat || defaultLng) return;
+    try {
+      const raw = localStorage.getItem('bj_saved_geo');
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { lat?: string; lng?: string; ts?: number };
+      if (!parsed.lat || !parsed.lng) return;
+      if (parsed.ts && Date.now() - parsed.ts > 30 * 86400000) {
+        localStorage.removeItem('bj_saved_geo');
+        return;
+      }
+      setLat(parsed.lat);
+      setLng(parsed.lng);
+      setStatus('موقعیت ذخیره‌شده بارگذاری شد');
+    } catch { /* ignore */ }
+  }, [defaultLat, defaultLng]);
+
   function requestNearMe() {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setStatus('موقعیت مکانی در این مرورگر پشتیبانی نمی‌شود');
@@ -35,6 +52,11 @@ export function NearMeFields({ defaultLat, defaultLng }: Props) {
         const ln = pos.coords.longitude.toFixed(6);
         setLat(la);
         setLng(ln);
+        try {
+          if (window.confirm('موقعیت شما برای دفعات بعد ذخیره شود؟')) {
+            localStorage.setItem('bj_saved_geo', JSON.stringify({ lat: la, lng: ln, ts: Date.now() }));
+          }
+        } catch { /* ignore */ }
         setStatus('موقعیت دریافت شد. در حال اعمال فیلتر نزدیک‌ترین…');
         setBusy(false);
         const form = document.querySelector('form[action="/search"]') as HTMLFormElement | null;
@@ -56,6 +78,7 @@ export function NearMeFields({ defaultLat, defaultLng }: Props) {
     setLat('');
     setLng('');
     setStatus(null);
+    try { localStorage.removeItem('bj_saved_geo'); } catch { /* ignore */ }
   }
 
   return (

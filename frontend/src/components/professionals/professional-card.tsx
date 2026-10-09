@@ -53,6 +53,18 @@ export function ProfessionalCard({ pro, className }: Props) {
                   ویژه
                 </span>
               )}
+              {(() => {
+                const created = (pro as { createdAt?: string | null }).createdAt
+                  || (pro as { verifiedAt?: string | null }).verifiedAt;
+                if (!created) return null;
+                const days = (Date.now() - new Date(created).getTime()) / 86400000;
+                if (days < 0 || days > 21) return null;
+                return (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:text-xs">
+                    جدید
+                  </span>
+                );
+              })()}
               <TrustBadge status={pro.status} verifiedAt={verifiedAt} />
             </div>
           </div>

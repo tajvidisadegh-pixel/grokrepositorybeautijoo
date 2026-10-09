@@ -57,6 +57,7 @@ export type SearchParams = {
   minPrice?: number;
   maxPrice?: number;
   minDuration?: number;
+  maxDuration?: number;
   sort?: string;
   availableDate?: string;
   lat?: number | string;
@@ -77,6 +78,7 @@ export function searchProfessionals(params: SearchParams = {}) {
   if (params.minPrice != null) sp.set('minPrice', String(params.minPrice));
   if (params.maxPrice != null) sp.set('maxPrice', String(params.maxPrice));
   if (params.minDuration != null) sp.set('minDuration', String(params.minDuration));
+  if (params.maxDuration != null) sp.set('maxDuration', String(params.maxDuration));
   if (params.sort) sp.set('sort', params.sort);
   if (params.availableDate) sp.set('availableDate', params.availableDate);
   if (params.lat != null && params.lat !== '') sp.set('lat', String(params.lat));
