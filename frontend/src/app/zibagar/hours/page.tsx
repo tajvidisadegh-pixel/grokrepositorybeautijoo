@@ -701,7 +701,7 @@ export default function ZibagarHoursPage() {
                   const start = new Date(a + 'T00:00:00');
                   const end = new Date(b + 'T00:00:00');
                   if (end < start) { window.alert('بازه نامعتبر است'); return; }
-                  let cur = new Date(start);
+                  const cur = new Date(start);
                   let n = 0;
                   while (cur <= end && n < 31) {
                     const iso = cur.toISOString().slice(0, 10);
