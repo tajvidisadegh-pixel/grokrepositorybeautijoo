@@ -232,13 +232,14 @@ function OtpForm() {
             </Link>
           </p>
           <p>
-          ورود با رمز عبور؟{' '}
-          <Link
-            href={`/login?as=${accountType}${next ? `&next=${encodeURIComponent(next)}` : ''}`}
-            className="font-medium text-coral hover:text-coral-dark"
-          >
-            صفحه ورود
-          </Link>
+            ورود با رمز عبور؟{' '}
+            <Link
+              href={`/login?as=${accountType}${next ? `&next=${encodeURIComponent(next)}` : ''}`}
+              className="font-medium text-coral hover:text-coral-dark"
+            >
+              صفحه ورود
+            </Link>
+          </p>
         </div>
       </Card>
     </div>
