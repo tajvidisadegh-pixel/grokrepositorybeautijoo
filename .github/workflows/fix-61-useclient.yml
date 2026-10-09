@@ -1,0 +1,41 @@
+name: fix-61-useclient
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text(encoding='utf-8')
+          for line in [
+              "import { HelpFab } from '@/components/help/help-fab';\n",
+              "import { trackFunnel } from '@/lib/funnel';\n",
+          ]:
+              t = t.replace(line, '')
+          if not t.startswith("'use client'"):
+              # ensure directive first
+              pass
+          # after use client block, add imports with other imports
+          needle = "import { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';\n"
+          if needle in t and "HelpFab" not in t.split("'use client'")[1][:500]:
+              t = t.replace(
+                  needle,
+                  needle
+                  + "import { HelpFab } from '@/components/help/help-fab';\n"
+                  + "import { trackFunnel } from '@/lib/funnel';\n",
+                  1,
+              )
+          p.write_text(t, encoding='utf-8')
+          print(t[:200])
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: use client import order in booking-wizard (#61)' && git push)
