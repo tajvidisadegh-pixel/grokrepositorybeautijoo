@@ -1,0 +1,82 @@
+name: fix-61-11-15
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # Fix near-me duplicate error callbacks
+          p = Path('frontend/src/components/search/near-me-fields.tsx')
+          t = p.read_text(encoding='utf-8')
+          bad = '''      () => {
+        setStatus('دسترسی موقعیت رد شد. می‌توانید شهر را دستی در فیلترها بنویسید. موقعیت روی دستگاه شما می‌ماند و بدون اجازه ذخیره نمی‌شود.');
+        setBusy(false);
+      },
+      // stub to keep parse — actual replaced below
+      () => {
+        setStatus('دسترسی موقعیت رد شد یا در دسترس نیست. شهر را در فیلترها دستی وارد کنید.');
+        setBusy(false);
+      },'''
+          good = '''      () => {
+        setStatus('دسترسی موقعیت رد شد یا در دسترس نیست. شهر را در فیلترها دستی وارد کنید.');
+        setBusy(false);
+      },'''
+          if bad in t:
+              t = t.replace(bad, good, 1)
+              p.write_text(t, encoding='utf-8')
+              print('fixed near-me')
+          else:
+              # broader cleanup
+              if 'stub to keep parse' in t:
+                  import re
+                  t = re.sub(
+                      r"\(\) => \{\s*setStatus\('دسترسی موقعیت رد شد\. می‌توانید شهر[^']*'\);\s*setBusy\(false\);\s*\},\s*// stub[^\n]*\n\s*\(\) => \{\s*setStatus\('دسترسی موقعیت رد شد یا در دسترس نیست\. شهر را در فیلترها دستی وارد کنید\.'\);\s*setBusy\(false\);\s*\},",
+                      "() => {\n        setStatus('دسترسی موقعیت رد شد یا در دسترس نیست. شهر را در فیلترها دستی وارد کنید.');\n        setBusy(false);\n      },",
+                      t,
+                      count=1,
+                  )
+                  p.write_text(t, encoding='utf-8')
+                  print('fixed near-me regex')
+              else:
+                  print('near-me ok or unknown')
+
+          # Fix confirmation pay query from callback (?pay=paid|failed)
+          conf = next(Path('frontend/src/app/booking/confirmation').rglob('page.tsx'), None)
+          if conf:
+              t = conf.read_text(encoding='utf-8')
+              old = "  const payHint = searchParams.get('paid');\n\n  return (\n    <div className=\"mx-auto max-w-lg px-4 py-10\" dir=\"rtl\">\n      <h1 className=\"text-2xl font-bold text-foreground\">تأیید رزرو</h1>\n      <p className=\"mt-1 text-sm text-gray\">\n        وضعیت: {persianBookingStatus(booking.status)}\n      </p>\n      {payHint === '1' && (\n        <p className=\"mt-3 rounded-xl bg-blue-light px-3 py-2 text-sm text-blue\">\n          پرداخت با موفقیت ثبت شد.\n        </p>\n      )}"
+              new = "  const payHint = searchParams.get('paid');\n  const payQ = (searchParams.get('pay') || '').toLowerCase();\n  const payOk = payHint === '1' || payQ === 'paid' || payQ === 'success' || payQ === 'ok';\n  const payFail = payQ === 'failed' || payQ === 'cancelled' || payQ === 'canceled' || payQ === 'error' || payQ === 'unpaid';\n\n  return (\n    <div className=\"mx-auto max-w-lg px-4 py-10\" dir=\"rtl\">\n      <h1 className=\"text-2xl font-bold text-foreground\">تأیید رزرو</h1>\n      <p className=\"mt-1 text-sm text-gray\">\n        وضعیت: {persianBookingStatus(booking.status)}\n      </p>\n      {payOk && (\n        <div className=\"mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900\">\n          <p className=\"font-bold\">پرداخت با موفقیت ثبت شد</p>\n          <p className=\"mt-1 text-xs\">وضعیت رزرو را اینجا یا از «رزروهای من» ببینید.</p>\n          <a href=\"/panel/bookings\" className=\"mt-2 inline-block text-xs font-medium text-coral underline\">مشاهده رزروهای من</a>\n        </div>\n      )}\n      {payFail && (\n        <div className=\"mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900\">\n          <p className=\"font-bold\">پرداخت کامل نشد</p>\n          <p className=\"mt-1 text-xs\">می‌توانید دوباره پرداخت کنید یا بعداً از رزروهای من اقدام کنید.</p>\n        </div>\n      )}"
+              if old in t:
+                  t = t.replace(old, new, 1)
+                  conf.write_text(t, encoding='utf-8')
+                  print('fixed confirm')
+              else:
+                  print('confirm pattern miss')
+                  if "const payHint = searchParams.get('paid');" in t and 'payQ' not in t:
+                      t = t.replace(
+                          "const payHint = searchParams.get('paid');",
+                          "const payHint = searchParams.get('paid');\n  const payQ = (searchParams.get('pay') || '').toLowerCase();\n  const payOk = payHint === '1' || payQ === 'paid' || payQ === 'success' || payQ === 'ok';\n  const payFail = payQ === 'failed' || payQ === 'cancelled' || payQ === 'canceled' || payQ === 'error' || payQ === 'unpaid';",
+                          1,
+                      )
+                      t = t.replace(
+                          "{payHint === '1' && (\n        <p className=\"mt-3 rounded-xl bg-blue-light px-3 py-2 text-sm text-blue\">\n          پرداخت با موفقیت ثبت شد.\n        </p>\n      )}",
+                          "{payOk && (\n        <div className=\"mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900\">\n          <p className=\"font-bold\">پرداخت با موفقیت ثبت شد</p>\n          <p className=\"mt-1 text-xs\">وضعیت رزرو را اینجا یا از «رزروهای من» ببینید.</p>\n          <a href=\"/panel/bookings\" className=\"mt-2 inline-block text-xs font-medium text-coral underline\">مشاهده رزروهای من</a>\n        </div>\n      )}\n      {payFail && (\n        <div className=\"mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900\">\n          <p className=\"font-bold\">پرداخت کامل نشد</p>\n          <p className=\"mt-1 text-xs\">می‌توانید دوباره پرداخت کنید یا بعداً از رزروهای من اقدام کنید.</p>\n        </div>\n      )}",
+                          1,
+                      )
+                      conf.write_text(t, encoding='utf-8')
+                      print('fixed confirm soft')
+          else:
+              print('no conf')
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: #61 near-me syntax and payment result banners' && git push)
