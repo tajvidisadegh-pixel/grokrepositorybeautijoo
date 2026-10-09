@@ -9,13 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Apply
-        run: |
-          python3 -c "import pathlib,base64; pathlib.Path('/tmp/p.py').write_bytes(base64.b64decode(pathlib.Path('/tmp/b64').read_text()))" 2>/dev/null || true
-          cat > /tmp/b64 << 'B64EOF'
-PLACEHOLDER
-B64EOF
-          python3 -c "import pathlib,base64; pathlib.Path('/tmp/p.py').write_bytes(base64.b64decode(pathlib.Path('/tmp/b64').read_text().strip()))"
-          python3 /tmp/p.py
+        run: python3 scripts/patch_71_75.py
       - name: Commit
         run: |
           git config user.name "beautijoo-bot"
