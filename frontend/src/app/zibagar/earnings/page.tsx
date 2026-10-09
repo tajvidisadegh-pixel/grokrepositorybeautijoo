@@ -52,14 +52,13 @@ export default function ZibagarEarningsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  
   function exportCsv() {
     const rows = [['id', 'amount', 'status', 'createdAt']];
     for (const it of items) {
       rows.push([it.id, String(it.professionalNetAmount ?? it.amount), it.status, it.createdAt]);
     }
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('
-');
+    const nl = String.fromCharCode(10);
+    const csv = rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join(nl);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -93,23 +92,20 @@ export default function ZibagarEarningsPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
-  async function submitPayout() {
-    const n = Math.floor(Number(amount));
-    if (!Number.isFinite(n) || n < 10000) {
-      setMsg('حداقل مبلغ ۱۰٬۰۰۰ ریال است.');
+  async function requestPayout() {
+    const n = Number(amount);
+    if (!Number.isFinite(n) || n <= 0) {
+      setMsg('مبلغ معتبر وارد کنید');
       return;
     }
     setBusy(true);
     setMsg(null);
     try {
-      const res = await apiClient.post<{ message?: string }>('/professionals/me/payout-request', {
-        amount: n,
-        note: note.trim() || undefined,
-      });
-      setMsg(res.message || 'درخواست ثبت شد.');
+      await apiClient.post('/professionals/me/payout-requests', { amount: n, note: note.trim() || undefined });
+      setMsg('درخواست تسویه ثبت شد');
       setAmount('');
       setNote('');
       await load();
@@ -121,147 +117,80 @@ export default function ZibagarEarningsPage() {
   }
 
   if (loading) return <PanelLoading />;
-  if (error) return <PanelError message={error} onRetry={load} />;
+  if (error) return <PanelError message={error} onRetry={() => void load()} />;
 
-  const available = summary?.available ?? summary?.professionalNet ?? 0;
-  const earned = summary?.totalEarned ?? summary?.professionalNet ?? 0;
-  const paidOut = summary?.totalPaidOut ?? 0;
-  const pending = summary?.totalPendingPayout ?? 0;
+  const bars = [
+    { key: 'today', label: 'امروز', earned: periods?.today?.earned ?? 0 },
+    { key: 'week', label: 'هفته', earned: periods?.week?.earned ?? 0 },
+    { key: 'month', label: 'ماه', earned: periods?.month?.earned ?? 0 },
+  ];
+  const maxE = Math.max(1, ...bars.map((b) => b.earned));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">درآمد و تسویه</h1>
-        <button type="button" onClick={exportCsv} className="text-xs text-coral underline">خروجی CSV</button>
-        <p className="mt-1 text-sm text-gray">
-          محاسبه خودکار از رزروهای پرداخت‌شده — تفکیک پرداخت‌شده و پرداخت‌نشده
-        </p>
+    <div className="space-y-6" dir="rtl">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">درآمد</h1>
+        <button type="button" onClick={exportCsv} className="text-xs text-coral underline">
+          خروجی CSV
+        </button>
+      </div>
+      {notice && <p className="text-sm text-gray">{notice}</p>}
+      {msg && <p className="rounded-xl bg-gray-light px-3 py-2 text-sm">{msg}</p>}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {bars.map((b) => {
+          const pct = Math.round((b.earned / maxE) * 100);
+          return (
+            <Card key={b.key} className="space-y-1 p-4">
+              <div className="flex justify-between text-xs text-gray">
+                <span>{b.label}</span>
+                <span className="font-medium text-foreground">{formatPrice(b.earned)}</span>
+              </div>
+              <div className="h-3 overflow-hidden rounded-full bg-gray-light">
+                <div className="h-full rounded-full bg-coral" style={{ width: `${pct}%` }} />
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
-      {notice && (
-        <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">{notice}</p>
+      {summary && (
+        <Card className="grid gap-3 p-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-gray">خالص حرفه‌ای</p>
+            <p className="text-lg font-bold text-coral">{formatPrice(summary.professionalNet)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray">تعداد پرداخت‌شده</p>
+            <p className="text-lg font-bold">{summary.paidCount.toLocaleString('fa-IR')}</p>
+          </div>
+        </Card>
       )}
-      {msg && <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{msg}</p>}
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-4">
-          <p className="text-xs text-gray">کل درآمد</p>
-          <p className="mt-1 text-lg font-bold">{formatPrice(earned)}</p>
-          <p className="text-xs text-gray">{summary?.paidCount ?? 0} تراکنش پرداخت‌شده مشتری</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs text-gray">تسویه‌شده (پرداخت به شما)</p>
-          <p className="mt-1 text-lg font-bold text-emerald-700">{formatPrice(paidOut)}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs text-gray">در صف تسویه</p>
-          <p className="mt-1 text-lg font-bold text-amber-700">{formatPrice(pending)}</p>
-        </Card>
-        <Card className="p-4 border-coral/30">
-          <p className="text-xs text-gray">قابل برداشت</p>
-          <p className="mt-1 text-lg font-bold text-coral">{formatPrice(available)}</p>
-        </Card>
-      </div>
-
-      {periods && (() => {
-        const bars = [
-          { key: 'today', label: 'امروز', earned: periods.today?.earned ?? 0, count: periods.today?.count ?? 0 },
-          { key: 'week', label: 'این هفته', earned: periods.week?.earned ?? 0, count: periods.week?.count ?? 0 },
-          { key: 'month', label: 'این ماه', earned: periods.month?.earned ?? 0, count: periods.month?.count ?? 0 },
-          { key: 'allTime', label: 'کل دوره', earned: periods.allTime?.earned ?? 0, count: periods.allTime?.count ?? 0 },
-        ];
-        const maxEarned = Math.max(1, ...bars.map((b) => b.earned));
-        return (
-          <Card className="space-y-4 p-4">
-            <h2 className="font-semibold">درآمد بر اساس بازه زمانی</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {bars.map((b) => (
-                <div key={b.key} className="rounded-xl border border-border/80 bg-gray-light/20 p-3">
-                  <p className="text-xs text-gray">{b.label}</p>
-                  <p className="mt-1 font-bold">{formatPrice(b.earned)}</p>
-                  <p className="text-xs text-gray">{b.count} نوبت</p>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-2" dir="ltr">
-              {bars.map((b) => {
-                const pct = Math.round((b.earned / maxEarned) * 100);
-                return (
-                  <div key={`bar-${b.key}`} className="space-y-1">
-                    <div className="flex justify-between text-xs text-gray" dir="rtl">
-                      <span>{b.label}</span>
-                      <span className="font-medium text-foreground">{formatPrice(b.earned)}</span>
-                    </div>
-                    <div className="h-3 overflow-hidden rounded-full bg-gray-light">
-                      <div className="h-full rounded-full bg-coral" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        );
-      })()}
 
       <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">درخواست تسویه</h2>
-        <p className="text-xs text-gray">
-          فقط از مبلغ «قابل برداشت» می‌توانید درخواست دهید. پس از پرداخت مدیریت، وضعیت به تسویه‌شده می‌رود.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs text-gray">مبلغ (ریال)</label>
-            <Input
-              type="number"
-              min={10000}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              dir="ltr"
-              placeholder="مثلاً ۵۰۰۰۰۰"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray">یادداشت (اختیاری)</label>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="شماره کارت / توضیح" />
-          </div>
-        </div>
-        <Button size="sm" loading={busy} onClick={submitPayout} disabled={available < 10000}>
-          ثبت درخواست تسویه
+        <h2 className="font-bold">درخواست تسویه</h2>
+        <Input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="مبلغ" dir="ltr" />
+        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="یادداشت (اختیاری)" />
+        <Button loading={busy} onClick={() => void requestPayout()}>
+          ثبت درخواست
         </Button>
       </Card>
 
-      <div>
-        <h2 className="mb-3 font-semibold">تراکنش‌های درآمد</h2>
-        {items.length === 0 ? (
-          <PanelEmpty title="تراکنشی نیست" description="پس از پرداخت موفق رزروها، اینجا نمایش داده می‌شوند." />
-        ) : (
-          <ul className="space-y-2">
-            {items.map((p) => {
-              const customer =
-                p.booking?.customer?.profile?.displayName ||
-                p.booking?.customer?.phone ||
-                'مشتری';
-              const net = p.professionalNetAmount != null && p.professionalNetAmount >= 0 ? p.professionalNetAmount : p.amount;
-              return (
-                <li key={p.id}>
-                  <Card className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-                    <div>
-                      <p className="font-medium">{customer}</p>
-                      <p className="text-xs text-gray">
-                        {formatDate(p.paidAt || p.createdAt, { style: 'short', includeTime: true })}
-                      </p>
-                    </div>
-                    <div className="text-left" dir="ltr">
-                      <p className="font-semibold text-coral">{formatPrice(net)}</p>
-                      <p className="text-xs text-gray">درآمد</p>
-                    </div>
-                  </Card>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      {items.length === 0 ? (
+        <PanelEmpty title="پرداختی ثبت نشده" description="پس از تکمیل نوبت‌ها، تراکنش‌ها اینجا می‌آیند." />
+      ) : (
+        <ul className="space-y-2">
+          {items.map((it) => (
+            <li key={it.id}>
+              <Card className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
+                <span>{formatPrice(it.professionalNetAmount ?? it.amount)}</span>
+                <span className="text-gray">{it.status}</span>
+                <span className="text-xs text-gray">{formatDate(it.createdAt)}</span>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
