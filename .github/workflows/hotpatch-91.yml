@@ -1,0 +1,33 @@
+name: hotpatch-91
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 -c "
+          from pathlib import Path
+          p=Path('frontend/src/app/zibagar/hours/page.tsx')
+          t=p.read_text(encoding='utf-8')
+          bad=\"if (match) if (!window.confirm('این بازه مسدود حذف شود؟')) return; await removeTimeOff(match.id);\"
+          good=\"if (match) {\\n                      if (!window.confirm('این بازه مسدود حذف شود؟')) return;\\n                      await removeTimeOff(match.id);\\n                    }\"
+          assert bad in t, 'hours pattern missing'
+          p.write_text(t.replace(bad,good,1),encoding='utf-8')
+          p=Path('backend/src/professionals/professionals.service.ts')
+          t=p.read_text(encoding='utf-8')
+          if 'completedBookingsCount' not in t:
+            old='''    const safe = this.sanitizePublicLocations(pro);\n    const withMedia = this.attachMediaPublicUrls(safe);\n    this.cache.set(cacheKey, withMedia, 120_000);\n    return withMedia;'''
+            new='''    const safe = this.sanitizePublicLocations(pro);\n    const withMedia = this.attachMediaPublicUrls(safe);\n    const completedBookingsCount = await this.prisma.booking.count({\n      where: { professionalId: pro.id, status: \\"completed\\" as any },\n    }).catch(() => 0);\n    const payload = { ...withMedia, completedBookingsCount };\n    this.cache.set(cacheKey, payload, 120_000);\n    return payload;'''
+            assert old in t
+            p.write_text(t.replace(old,new,1),encoding='utf-8')
+          print('done')
+          "
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: hours confirm + completedBookingsCount' && git push)
