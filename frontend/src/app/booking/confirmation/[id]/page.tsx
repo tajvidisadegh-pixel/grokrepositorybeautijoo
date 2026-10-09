@@ -139,7 +139,7 @@ function ConfirmationBody() {
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">مبلغ</span>
-          <span className="font-bold text-coral">{formatPrice(booking.totalPrice ?? booking.price)}</span>
+          <span className="font-bold text-coral">{formatPrice(booking.totalPrice)}</span>
         </div>
         {booking.items && booking.items.length > 0 && (
           <div>
