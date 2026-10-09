@@ -98,6 +98,9 @@ function ConfirmationBody() {
     booking.payment.status === 'pending' ||
     booking.payment.status === 'failed';
   const payHint = searchParams.get('paid');
+  const payQ = (searchParams.get('pay') || '').toLowerCase();
+  const payOk = payHint === '1' || payQ === 'paid' || payQ === 'success' || payQ === 'ok';
+  const payFail = payQ === 'failed' || payQ === 'cancelled' || payQ === 'canceled' || payQ === 'error' || payQ === 'unpaid';
 
   return (
     <div className="mx-auto max-w-lg px-4 py-10" dir="rtl">
@@ -105,10 +108,18 @@ function ConfirmationBody() {
       <p className="mt-1 text-sm text-gray">
         وضعیت: {persianBookingStatus(booking.status)}
       </p>
-      {payHint === '1' && (
-        <p className="mt-3 rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">
-          پرداخت با موفقیت ثبت شد.
-        </p>
+      {payOk && (
+        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <p className="font-bold">پرداخت با موفقیت ثبت شد</p>
+          <p className="mt-1 text-xs">وضعیت رزرو را اینجا یا از «رزروهای من» ببینید.</p>
+          <a href="/panel/bookings" className="mt-2 inline-block text-xs font-medium text-coral underline">مشاهده رزروهای من</a>
+        </div>
+      )}
+      {payFail && (
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <p className="font-bold">پرداخت کامل نشد</p>
+          <p className="mt-1 text-xs">می‌توانید دوباره پرداخت کنید یا بعداً از رزروهای من اقدام کنید.</p>
+        </div>
       )}
       {payMsg && (
         <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">{payMsg}</p>
@@ -128,77 +139,35 @@ function ConfirmationBody() {
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">مبلغ</span>
-          <span className="font-bold text-coral">{formatPrice(booking.totalPrice)}</span>
+          <span className="font-bold text-coral">{formatPrice(booking.price)}</span>
         </div>
-        {booking.items && booking.items.length > 0 && (
-          <div>
-            <p className="mb-1 text-gray">خدمات</p>
-            <ul className="list-inside list-disc">
-              {booking.items.map((it) => (
-                <li key={it.id}>
-                  {it.service?.name || 'خدمت'} — {formatPrice(it.price)}
-                </li>
-              ))}
-            </ul>
+        {booking.payment && (
+          <div className="flex justify-between gap-2">
+            <span className="text-gray">پرداخت</span>
+            <span>{persianPaymentStatus(booking.payment.status)}</span>
           </div>
         )}
-        <div className="flex justify-between gap-2 border-t border-border pt-3">
-          <span className="text-gray">وضعیت پرداخت</span>
-          <span className="font-medium">
-            {booking.payment
-              ? persianPaymentStatus(booking.payment.status)
-              : 'پرداخت نشده'}
-          </span>
-        </div>
       </Card>
 
-      {(booking.status === 'confirmed' || booking.status === 'pending') && (
-        <div className="mt-4">
-          <p className="mb-2 text-xs font-medium text-gray">افزودن به تقویم و کپی جزئیات</p>
-          <AddToCalendarActions
-            booking={{
-              id: booking.id,
-              startAt: booking.startAt,
-              endAt: booking.endAt,
-              totalPrice: booking.totalPrice,
-              status: booking.status,
-            }}
-            proName={proName}
-            serviceNames={(booking.items || []).map((it) => it.service?.name).filter(Boolean) as string[]}
-          />
-        </div>
-      )}
-
-      <div className="mt-6 flex flex-wrap gap-3">
+      <div className="mt-4 space-y-3">
+        <AddToCalendarActions booking={booking} />
         {canPay && (
           <button
             type="button"
             disabled={paying}
             onClick={onPay}
-            className="inline-flex h-11 items-center rounded-2xl bg-coral px-5 text-sm font-medium text-white disabled:opacity-60"
+            className="flex h-11 w-full items-center justify-center rounded-2xl bg-coral text-sm font-medium text-white disabled:opacity-60"
           >
             {paying ? 'در حال اتصال به درگاه…' : 'پرداخت آنلاین'}
           </button>
         )}
         <Link
           href="/panel/bookings"
-          className="inline-flex h-11 items-center rounded-2xl border border-border px-5 text-sm"
+          className="flex h-11 w-full items-center justify-center rounded-2xl border border-border text-sm"
         >
           رزروهای من
         </Link>
-        <Link
-          href="/"
-          className="inline-flex h-11 items-center rounded-2xl border border-border px-5 text-sm"
-        >
-          صفحه اصلی
-        </Link>
       </div>
-
-      <p className="mt-6 text-xs text-gray">
-        درگاه فعال با متغیر محیطی سرور تعیین می‌شود (مثلاً{' '}
-        <code className="rounded bg-gray-light px-1">PAYMENT_PROVIDER=zarinpal</code>
-        ). بدون پیکربندی، پرداخت آنلاین غیرفعال است.
-      </p>
     </div>
   );
 }
