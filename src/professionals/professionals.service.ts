@@ -53,6 +53,7 @@ export class ProfessionalsService {
     minPrice?: number;
     maxPrice?: number;
     minDuration?: number;
+    maxDuration?: number;
     sort?: string;
     availableDate?: string;
     ids?: string[];
@@ -157,7 +158,8 @@ export class ProfessionalsService {
     if (params.minPrice != null && Number.isFinite(params.minPrice)) priceFilter.gte = params.minPrice;
     if (params.maxPrice != null && Number.isFinite(params.maxPrice)) priceFilter.lte = params.maxPrice;
     const hasPrice = Object.keys(priceFilter).length > 0;
-    const hasDuration = params.minDuration != null && Number.isFinite(params.minDuration) && params.minDuration > 0;
+    const hasDuration = (params.minDuration != null && Number.isFinite(params.minDuration) && params.minDuration > 0)
+      || (params.maxDuration != null && Number.isFinite(params.maxDuration) && params.maxDuration > 0);
     if (params.category || hasPrice || hasDuration) {
       const svcSome: Prisma.ProfessionalServiceWhereInput = { isActive: true };
       if (params.category) {
@@ -167,7 +169,10 @@ export class ProfessionalsService {
         svcSome.price = priceFilter;
       }
       if (hasDuration) {
-        svcSome.durationMin = { gte: params.minDuration };
+        svcSome.durationMin = {
+          ...(params.minDuration != null ? { gte: params.minDuration } : {}),
+          ...(params.maxDuration != null ? { lte: params.maxDuration } : {}),
+        };
       }
       where.professionalServices = { some: svcSome };
     }

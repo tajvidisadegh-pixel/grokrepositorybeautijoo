@@ -58,6 +58,7 @@ export class ProfessionalsController {
     @Query('minPrice') minPrice?: string,
     @Query('maxPrice') maxPrice?: string,
     @Query('minDuration') minDuration?: string,
+    @Query('maxDuration') maxDuration?: string,
     @Query('sort') sort?: string,
     @Query('availableDate') availableDate?: string,
     @Query('lat') lat?: string,
