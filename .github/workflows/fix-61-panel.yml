@@ -1,0 +1,28 @@
+name: fix-61-panel
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/panel/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace("import { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';\n", '')
+          # insert after use client and some imports
+          needle = "import { Button } from '@/components/ui/button';\n"
+          if needle in t and 'CancelPolicyNotice' not in t.split("'use client'")[1][:300]:
+              t = t.replace(needle, needle + "import { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';\n", 1)
+          p.write_text(t, encoding='utf-8')
+          print(t[:120])
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: use client order panel bookings (#61.5)' && git push)
