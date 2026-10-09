@@ -1,0 +1,56 @@
+name: fix-83b
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path('frontend/src/app/zibagar/hours/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'conflicts.length > 0' in t and 'blockDate' in t[t.find('conflicts'):t.find('conflicts')+400]:
+              print('ok already')
+          else:
+              pat = r"(if \(pm\(blockTo\) <= pm\(blockFrom\)\) \{[\s\S]*?return;\s*\}\s*)(setSubmitting\(true\);)"
+              repl = r'''\1const range = tehranRange(blockDate, blockFrom, blockTo);
+                  const rs = new Date(range.startAt).getTime();
+                  const re = new Date(range.endAt).getTime();
+                  const conflicts = bookings.filter((b) => {
+                    const st = String(b.status || '');
+                    if (st === 'cancelled' || st === 'rejected') return false;
+                    const bs = new Date(b.startAt).getTime();
+                    const be = b.endAt ? new Date(b.endAt).getTime() : bs + 3600000;
+                    return bs < re && be > rs;
+                  });
+                  if (conflicts.length > 0) {
+                    const ok = window.confirm(
+                      `این بازه با ${conflicts.length.toLocaleString('fa-IR')} نوبت تداخل دارد. ادامه می‌دهید؟`,
+                    );
+                    if (!ok) return;
+                  }
+                  \2'''
+              t2, n = re.subn(pat, repl, t, count=1)
+              if n:
+                  t2 = t2.replace(
+                      '...tehranRange(blockDate, blockFrom, blockTo),',
+                      '...range,',
+                      1,
+                  )
+                  p.write_text(t2, encoding='utf-8')
+                  print('fixed', n)
+              else:
+                  print('miss')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: confirm time-off conflicts before block (#40.83)" && git push; fi
