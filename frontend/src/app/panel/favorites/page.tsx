@@ -34,8 +34,8 @@ export default function PanelFavoritesPage() {
       <div><h1 className="text-2xl font-bold">علاقه‌مندی‌ها</h1>
         <p className="mt-1 text-sm text-gray">زیباگرهای ذخیره‌شده شما</p></div>
       {items.length === 0 ? (
-        <PanelEmpty title="لیست خالی است" description="هنوز زیباگری اضافه نکرده‌اید."
-          action={<Link href="/professionals"><Button size="sm">مشاهده زیباگرها</Button></Link>} />
+        <PanelEmpty title="هنوز کسی را ذخیره نکرده‌اید" description="زیباگرهای مورد علاقه را اینجا ذخیره کنید."
+          action={<Link href="/search"><Button size="sm">جستجوی زیباگر</Button></Link>} />
       ) : (
         <ul className="space-y-3">{items.map((f) => {
           const pro = f.professional;

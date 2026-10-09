@@ -211,6 +211,20 @@ export async function respondBooking(id: string, action: 'confirm' | 'reject' | 
 export async function setServiceOrder(serviceIds: string[]) {
   return apiClient.patch('/professionals/me', { socialLinks: { _serviceOrderIds: serviceIds } });
 }
+
+/** #40 item 79 */
+export async function setCustomerNote(customerId: string, note: string) {
+  const me = await apiClient.get<{ socialLinks?: Record<string, unknown> }>('/professionals/me');
+  const prev = (me?.socialLinks || {}) as Record<string, unknown>;
+  const notes = { ...((prev._customerNotes as Record<string, string>) || {}) };
+  if (note.trim()) notes[customerId] = note.trim().slice(0, 500);
+  else delete notes[customerId];
+  return apiClient.patch('/professionals/me', { socialLinks: { _customerNotes: notes } });
+}
+export async function getCustomerNotes(): Promise<Record<string, string>> {
+  const me = await apiClient.get<{ socialLinks?: { _customerNotes?: Record<string, string> } }>('/professionals/me');
+  return me?.socialLinks?._customerNotes || {};
+}
 export async function fetchMyServices() {
   const res = await apiClient.get<ProfessionalServiceItem[] | Paginated<ProfessionalServiceItem>>('/professionals/me/services');
   return unwrapList(res as Paginated<ProfessionalServiceItem>);

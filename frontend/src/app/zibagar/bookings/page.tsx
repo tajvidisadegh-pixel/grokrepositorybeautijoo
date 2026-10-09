@@ -1,3 +1,4 @@
+import { setCustomerNote, getCustomerNotes } from '@/lib/panel-api';
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -78,6 +79,9 @@ export default function ZibagarBookingsPage() {
   const [items, setItems] = useState<BookingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [customerNotes, setCustomerNotes] = useState<Record<string, string>>({});
+  const [noteEdit, setNoteEdit] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [rescheduleFor, setRescheduleFor] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
@@ -137,6 +141,8 @@ export default function ZibagarBookingsPage() {
     }
   }, [applied]);
 
+  
+  useEffect(() => { void getCustomerNotes().then(setCustomerNotes).catch(() => undefined); }, []);
   useEffect(() => {
     load();
   }, [load]);
@@ -471,6 +477,21 @@ async function submitReport(id: string) {
                   return (
                     <li key={b.id}>
                     <div className="mb-1 flex items-center gap-2 text-xs text-gray-muted" dir="ltr"><span>#{shortBookingCode(b.id)}</span><button type="button" className="rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-gray-light" onClick={() => void copyBookingCode(b.id)}>کپی</button></div>
+                    {b.customer?.id && (
+                      <div className="mt-1 text-xs">
+                        {noteEdit === b.customer.id ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <input className="h-8 flex-1 rounded-lg border border-border px-2 text-xs" value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="یادداشت خصوصی..." maxLength={500} />
+                            <button type="button" className="rounded bg-coral px-2 py-1 text-[10px] text-white" onClick={() => { void (async () => { try { await setCustomerNote(b.customer!.id, noteText); setCustomerNotes((prev) => { const n = { ...prev }; if (noteText.trim()) n[b.customer!.id] = noteText.trim(); else delete n[b.customer!.id]; return n; }); setNoteEdit(null); } catch { /* ignore */ } })(); }}>ذخیره</button>
+                          </div>
+                        ) : (
+                          <button type="button" className="text-gray-muted hover:text-coral" onClick={() => { setNoteEdit(b.customer!.id); setNoteText(customerNotes[b.customer!.id] || ''); }}>
+                            {customerNotes[b.customer.id] ? `یادداشت: ${customerNotes[b.customer.id].slice(0, 40)}` : 'یادداشت خصوصی'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                       <Card className="space-y-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>

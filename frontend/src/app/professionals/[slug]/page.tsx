@@ -21,6 +21,17 @@ type Props = {
 
 
 /** Relative Persian label for last activity (#40 item 32) */
+
+function formatProfileUpdated(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return 'پروفایل امروز به‌روز شده';
+  if (days === 1) return 'پروفایل دیروز به‌روز شده';
+  if (days < 30) return `پروفایل آخرین بار ${days.toLocaleString('fa-IR')} روز پیش به‌روز شده`;
+  return null;
+}
 function formatLastActivity(iso?: string | null): string | null {
   if (!iso) return null;
   const ts = new Date(iso).getTime();
@@ -247,6 +258,12 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                       {formatLastActivity((pro as { user?: { lastLoginAt?: string | null } }).user?.lastLoginAt)}
                     </span>
                   )}
+                  {formatProfileUpdated((pro as { updatedAt?: string | null }).updatedAt) && (
+                    <span className="text-xs text-gray">
+                      {formatProfileUpdated((pro as { updatedAt?: string | null }).updatedAt)}
+                    </span>
+                  )}
+
                 </div>
               </div>
             </div>

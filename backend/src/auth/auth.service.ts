@@ -245,7 +245,11 @@ export class AuthService {
       const wait = Math.ceil(
         (recent.createdAt.getTime() + cooldown * 1000 - Date.now()) / 1000,
       );
-      throw new BadRequestException(`لطفاً ${wait} ثانیه صبر کنید و دوباره تلاش کنید`);
+      throw new BadRequestException(
+        wait >= 55
+          ? 'لطفاً یک دقیقه صبر کنید و دوباره تلاش کنید'
+          : `لطفاً ${wait} ثانیه صبر کنید و دوباره تلاش کنید`,
+      );
     }
 
     const hourAgo = new Date(Date.now() - 3600_000);
