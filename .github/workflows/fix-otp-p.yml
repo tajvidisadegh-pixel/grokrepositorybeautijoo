@@ -1,0 +1,57 @@
+name: fix-otp-p
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/otp/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          old = """          <p>
+          ورود با رمز عبور؟{' '}
+          <Link
+            href={`/login?as=${accountType}${next ? `&next=${encodeURIComponent(next)}` : ''}`}
+            className="font-medium text-coral hover:text-coral-dark"
+          >
+            صفحه ورود
+          </Link>
+        </div>"""
+          new = """          <p>
+            ورود با رمز عبور؟{' '}
+            <Link
+              href={`/login?as=${accountType}${next ? `&next=${encodeURIComponent(next)}` : ''}`}
+              className="font-medium text-coral hover:text-coral-dark"
+            >
+              صفحه ورود
+            </Link>
+          </p>
+        </div>"""
+          if old in t:
+              t = t.replace(old, new, 1)
+              p.write_text(t, encoding='utf-8')
+              print('fixed')
+          else:
+              print('marker miss')
+              # fallback: insert </p> before </div> after صفحه ورود
+              if 'صفحه ورود' in t and '</p>\n        </div>' not in t:
+                  t = t.replace(
+                      'صفحه ورود\n          </Link>\n        </div>',
+                      'صفحه ورود\n          </Link>\n          </p>\n        </div>',
+                      1,
+                  )
+                  p.write_text(t, encoding='utf-8')
+                  print('fixed-fallback')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: close p tag on OTP forgot-password footer" && git push; fi
