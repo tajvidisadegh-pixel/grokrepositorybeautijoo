@@ -1,10 +1,10 @@
-import { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
 import {
   fetchMyBookings,
