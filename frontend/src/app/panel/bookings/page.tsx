@@ -33,6 +33,22 @@ function canCustomerCancel(b: BookingWithReview): boolean {
   return start - Date.now() > 2 * 3600_000;
 }
 
+
+function bookingTimeline(b: { status?: string; createdAt?: string; startAt?: string; updatedAt?: string }) {
+  const steps: { label: string; at?: string }[] = [{ label: 'ثبت شد', at: b.createdAt }];
+  const st = String(b.status || '');
+  if (['confirmed', 'completed', 'in_progress', 'done'].includes(st)) {
+    steps.push({ label: 'تأیید شد', at: b.updatedAt || b.createdAt });
+  }
+  if (st === 'completed' || st === 'done') {
+    steps.push({ label: 'انجام شد', at: b.updatedAt || b.startAt });
+  }
+  if (st === 'cancelled' || st === 'rejected') {
+    steps.push({ label: st === 'rejected' ? 'رد شد' : 'لغو شد', at: b.updatedAt });
+  }
+  return steps;
+}
+
 export default function PanelBookingsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [timeScope, setTimeScope] = useState<'upcoming' | 'past' | 'all'>('upcoming');
@@ -372,6 +388,15 @@ async function submitReview(bookingId: string) {
                         کپی
                       </button>
                     </div>
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-gray-muted">
+                      {bookingTimeline(b).map((s, i) => (
+                        <span key={i} className="rounded bg-gray-light px-1.5 py-0.5">
+                          {s.label}
+                          {s.at ? ` · ${new Date(s.at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                        </span>
+                      ))}
+                    </div>
+
 
                       <p className="text-xs text-gray">
                         {formatRelativeDate(b.startAt)}

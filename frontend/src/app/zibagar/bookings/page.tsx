@@ -76,6 +76,22 @@ function tehranWeekStartSaturday(): Date {
   return base;
 }
 
+
+function bookingTimeline(b: { status?: string; createdAt?: string; startAt?: string; updatedAt?: string }) {
+  const steps: { label: string; at?: string }[] = [{ label: 'ثبت شد', at: b.createdAt }];
+  const st = String(b.status || '');
+  if (['confirmed', 'completed', 'in_progress', 'done'].includes(st)) {
+    steps.push({ label: 'تأیید شد', at: b.updatedAt || b.createdAt });
+  }
+  if (st === 'completed' || st === 'done') {
+    steps.push({ label: 'انجام شد', at: b.updatedAt || b.startAt });
+  }
+  if (st === 'cancelled' || st === 'rejected') {
+    steps.push({ label: st === 'rejected' ? 'رد شد' : 'لغو شد', at: b.updatedAt });
+  }
+  return steps;
+}
+
 export default function ZibagarBookingsPage() {
   const [items, setItems] = useState<BookingListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -478,6 +494,15 @@ async function submitReport(id: string) {
                   return (
                     <li key={b.id}>
                     <div className="mb-1 flex items-center gap-2 text-xs text-gray-muted" dir="ltr"><span>#{shortBookingCode(b.id)}</span><button type="button" className="rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-gray-light" onClick={() => void copyBookingCode(b.id)}>کپی</button></div>
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-gray-muted">
+                      {bookingTimeline(b).map((s, i) => (
+                        <span key={i} className="rounded bg-gray-light px-1.5 py-0.5">
+                          {s.label}
+                          {s.at ? ` · ${new Date(s.at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                        </span>
+                      ))}
+                    </div>
+
                     {b.customer?.id && (
                       <div className="mt-1 text-xs">
                         {noteEdit === b.customer.id ? (

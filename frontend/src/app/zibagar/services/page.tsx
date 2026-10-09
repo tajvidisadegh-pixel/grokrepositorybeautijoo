@@ -699,6 +699,7 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
                             <div className="flex items-center gap-2">
                               <button type="button" className="text-xs font-medium text-[#2D6CDF] hover:underline" onClick={() => { setSelectedPsId(ps.id); setMode('edit'); }}>جزئیات</button>
                               <button type="button" className="text-xs text-red-600 hover:underline" onClick={async () => { if (!window.confirm(`حذف «${serviceLabel(ps)}»؟`)) return; setBusy(true); try { await deactivateMyService(ps.id); setMsg('حذف شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>حذف</button>
+                              <button type="button" className="text-xs text-amber-700 hover:underline" onClick={async () => { setBusy(true); try { const inactive = ps.isActive === false; await patchMyService(ps.id, { isActive: inactive }); setMsg(inactive ? 'فعال شد' : 'موقتاً غیرفعال شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>{ps.isActive === false ? 'فعال‌سازی' : 'موقتاً غیرفعال'}</button>
                             </div>
                           </td>
                         </tr>

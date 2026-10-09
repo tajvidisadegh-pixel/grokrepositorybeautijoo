@@ -1,3 +1,4 @@
+import { ScrollToTop } from '@/components/ui/scroll-to-top';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { PersistSearchFilters } from '@/components/search/persist-search-filters';
@@ -110,7 +111,8 @@ export default async function SearchPage({ searchParams }: Props) {
       <p className="mt-1 text-sm text-gray">فیلتر بر اساس متن، شهر، فاصله، دسته، امتیاز، قیمت و تاریخ در دسترس بودن</p>
 
       <RecentSearches />
-      <Suspense fallback={null}><PersistSearchFilters /></Suspense>
+      <Suspense fallback={null}><ScrollToTop />
+      <PersistSearchFilters /></Suspense>
       {(q || city) && (
         <RecordRecentSearch q={q} city={city} href={pageHref(1)} />
       )}

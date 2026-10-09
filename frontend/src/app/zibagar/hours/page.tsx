@@ -530,7 +530,7 @@ export default function ZibagarHoursPage() {
                       const be = Math.min(1440, Math.round((new Date(t.endAt).getTime() - ds) / 60000));
                       return pm(start) < be && pm(end) > bs;
                     });
-                    if (match) await removeTimeOff(match.id);
+                    if (match) if (!window.confirm('این بازه مسدود حذف شود؟')) return; await removeTimeOff(match.id);
                   }
                   setSelectedSlots([]);
                   setSuccess('اسلات‌های انتخاب‌شده باز شد');

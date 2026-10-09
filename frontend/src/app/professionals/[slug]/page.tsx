@@ -247,7 +247,13 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                   {rating && (pro.ratingCount ?? 0) > 0 && (
                     <span className="text-amber-500">
                       ★ {rating}{' '}
-                      <span className="text-gray">({pro.ratingCount} نظر)</span>
+                      <span className="text-gray">({pro.ratingCount} نظر)
+                      {(pro as { completedBookingsCount?: number }).completedBookingsCount != null &&
+                        Number((pro as { completedBookingsCount?: number }).completedBookingsCount) > 0 && (
+                        <span className="ms-2 text-xs text-gray">
+                          بیش از {Number((pro as { completedBookingsCount?: number }).completedBookingsCount).toLocaleString("fa-IR")} نوبت موفق
+                        </span>
+                      )}</span>
                     </span>
                   )}
                   {pro.locations?.[0]?.location?.city && (
