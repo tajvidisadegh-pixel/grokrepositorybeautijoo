@@ -23,7 +23,7 @@ type Props = {
     minRating?: string; minPrice?: string; maxPrice?: string;
     sort?: string; availableDate?: string; availableToday?: string;
     lat?: string; lng?: string;
-    verifiedOnly?: string; gender?: string; minDuration?: string;
+    verifiedOnly?: string; gender?: string; minDuration?: string; maxDuration?: string; durationBand?: string;
   }>;
 };
 
@@ -40,12 +40,15 @@ export default async function SearchPage({ searchParams }: Props) {
   if (durationBand === 'under60') { minDuration = 1; maxDuration = 60; }
   else if (durationBand === '60to120') { minDuration = 61; maxDuration = 120; }
   else if (durationBand === 'over120') { minDuration = 121; }
+  else {
+    if (sp.minDuration != null && sp.minDuration !== '') minDuration = parseInt(sp.minDuration, 10);
+    if (sp.maxDuration != null && sp.maxDuration !== '') maxDuration = parseInt(sp.maxDuration, 10);
+  }
   const minPrice = sp.minPrice != null && sp.minPrice !== '' ? parseInt(sp.minPrice, 10) : undefined;
   const maxPrice = sp.maxPrice != null && sp.maxPrice !== '' ? parseInt(sp.maxPrice, 10) : undefined;
   const sort = sp.sort?.trim() || 'featured';
   const availableToday = sp.availableToday === '1' || sp.availableToday === 'true';
   const availableDate = availableToday ? tehranTodayIso() : (sp.availableDate?.trim() || undefined);
-  const minDuration = sp.minDuration != null && sp.minDuration !== '' ? parseInt(sp.minDuration, 10) : undefined;
   const lat = sp.lat?.trim() || undefined;
   const lng = sp.lng?.trim() || undefined;
   // Near-me uses a fixed technical maximum; the customer no longer chooses a radius.
@@ -62,7 +65,6 @@ export default async function SearchPage({ searchParams }: Props) {
     result = await searchProfessionals({
       q, city, category, filterCategory: true, page, limit: 12,
       minRating: Number.isFinite(minRating as number) ? minRating : undefined,
-      minDuration: Number.isFinite(minDuration as number) ? minDuration : undefined,
       minPrice: Number.isFinite(minPrice as number) ? minPrice : undefined,
       minDuration: minDuration != null && Number.isFinite(minDuration) ? minDuration : undefined,
       maxDuration: maxDuration != null && Number.isFinite(maxDuration) ? maxDuration : undefined,
