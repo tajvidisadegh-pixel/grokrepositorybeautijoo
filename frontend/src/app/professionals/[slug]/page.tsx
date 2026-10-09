@@ -1,3 +1,4 @@
+import { ProfileViewTracker } from '@/components/analytics/profile-view-tracker';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
@@ -220,6 +221,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
+          <ProfileViewTracker proId={pro.id} />
           <header className="flex flex-col gap-4 overflow-hidden rounded-3xl border border-border/90 bg-white shadow-[0_1px_3px_rgba(31,41,55,0.05)] sm:flex-row sm:items-start">
             <div className="flex w-full items-center gap-4 bg-gradient-to-l from-coral-soft/80 to-white p-6 sm:flex-1">
               <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-soft text-2xl font-bold text-coral ring-2 ring-coral/20 sm:size-24">

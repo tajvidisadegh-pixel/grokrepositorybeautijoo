@@ -73,6 +73,7 @@ export function ServicePortfolioGallery({
   return (
     <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
       <h2 className="text-lg font-bold">نمونه‌کار خدمات</h2>
+      <p className="text-xs text-gray">نمونه کارها · پس از تأیید زیباگر</p>
       <p className="mt-1 text-xs text-gray">روی هر عکس بزنید تا بزرگ شود و ورق بزنید</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button

@@ -79,6 +79,10 @@ export function ProfessionalCard({ pro, className }: Props) {
               </span>
             )}
             {city && <span>{city}</span>}
+            {(pro as { completedBookingsCount?: number }).completedBookingsCount != null &&
+              Number((pro as { completedBookingsCount?: number }).completedBookingsCount) > 0 && (
+              <span className="text-xs text-gray">بیش از {Number((pro as { completedBookingsCount?: number }).completedBookingsCount).toLocaleString('fa-IR')} نوبت موفق</span>
+            )}
             {pro.distanceKm != null && Number.isFinite(pro.distanceKm) && (
               <span className="text-coral">
                 {formatDistanceFromYou(

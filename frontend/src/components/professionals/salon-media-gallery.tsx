@@ -36,6 +36,7 @@ export function SalonMediaGallery({ media }: { media: Media[] }) {
   return (
     <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
       <h2 className="text-lg font-bold text-foreground">عکس‌های محل</h2>
+      <p className="text-xs text-gray">نمونه کارها · پس از تأیید زیباگر</p>
       <p className="mt-1 text-xs text-gray">برای بزرگ‌نمایی روی عکس بزنید</p>
       <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
         {items.map((m, i) => (

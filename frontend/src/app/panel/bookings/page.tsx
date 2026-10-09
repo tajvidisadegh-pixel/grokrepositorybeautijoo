@@ -1,3 +1,4 @@
+import { CancelPolicyNotice } from '@/components/booking/cancel-policy-notice';
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -206,6 +207,8 @@ async function submitReview(bookingId: string) {
 
   return (
     <div className="space-y-6">
+      <CancelPolicyNotice />
+
       <div>
         <h1 className="text-2xl font-bold">رزروهای من</h1>
         <p className="mt-1 text-sm text-gray">لیست واقعی از سرور</p>

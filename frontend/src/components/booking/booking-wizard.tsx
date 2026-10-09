@@ -1,3 +1,5 @@
+import { HelpFab } from '@/components/help/help-fab';
+import { trackFunnel } from '@/lib/funnel';
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -192,12 +194,16 @@ export function BookingWizard({
     setSlots([]);
     try {
       const res = await fetchAvailability(professional.id, date, totalDuration);
-      setSlots(res.slots || []);
+      const list = res.slots || [];
+      setSlots(list);
+      const firstAvail = list.find((s) => s.available !== false);
+      if (firstAvail && !slotStart) setSlotStart(firstAvail.start);
       if (
         slotStart &&
         !res.slots.some((s) => s.start === slotStart && s.available !== false)
       ) {
-        setSlotStart('');
+        trackFunnel('datetime_select', { pro: professional.id });
+                        setSlotStart('');
       }
     } catch (e) {
       const status = (e as { status?: number }).status;
@@ -214,7 +220,7 @@ export function BookingWizard({
   }, [step, selected, date, loadSlots]);
 
   useEffect(() => {
-    if (initialServiceId && initialDate && initialSlot) setStep('summary');
+    if (initialServiceId && initialDate && initialSlot) trackFunnel('summary_view', { pro: professional.id }); setStep('summary');
     else if (initialServiceId) setStep('datetime');
   }, [initialServiceId, initialDate, initialSlot]);
 
@@ -262,6 +268,7 @@ export function BookingWizard({
   }
 
   async function submitBooking() {
+    trackFunnel('payment_click', { pro: professional.id });
     if (!selected || !date || !slotStart) return;
     setSubmitError(null);
     if (!isAuthenticated) {
@@ -292,7 +299,7 @@ export function BookingWizard({
       });
       clearBookingDraft();
       setBooking(created);
-      setStep('done');
+      trackFunnel('booking_done', { pro: professional.id }); setStep('done');
       try {
         const appUrl =
           process.env.NEXT_PUBLIC_APP_URL ||
@@ -367,6 +374,22 @@ export function BookingWizard({
       {step === 'service' && (
         <Card className="mt-6 space-y-3">
           <h2 className="font-bold">انتخاب خدمت</h2>
+          {services[0] && (
+            <button type="button"
+              className="w-full rounded-2xl border border-coral/40 bg-coral-soft px-4 py-3 text-sm font-medium text-coral"
+              onClick={() => {
+                const s = services[0];
+                setServiceId(s.serviceId);
+                trackFunnel('service_select', { serviceId: s.serviceId, pro: professional.id, quick: 1 });
+                const d = new Date();
+                d.setDate(d.getDate() + 1);
+                setDate(d.toISOString().slice(0, 10));
+                setSlotStart('');
+                setStep('datetime');
+              }}
+            >رزرو سریع: {services[0].name} · اولین نوبت ممکن</button>
+          )}
+
           <ul className="space-y-2">
             {services.map((s) => (
               <li key={s.serviceId}>
@@ -374,6 +397,7 @@ export function BookingWizard({
                   type="button"
                   onClick={() => {
                     setServiceId(s.serviceId);
+                    trackFunnel('service_select', { serviceId: s.serviceId, pro: professional.id });
                     if (!(s.priceRules || []).length) setStep('datetime');
                   }}
                   className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-right text-sm transition ${
@@ -653,10 +677,10 @@ export function BookingWizard({
                 </div>
               ))}
             <div className="flex justify-between gap-2 border-t border-border pt-2 text-base font-bold">
-              <span>مبلغ قابل پرداخت</span>
+              <span>مبلغ نهایی قابل پرداخت</span>
               <span className="text-coral">{formatPrice(displayPrice)}</span>
             </div>
-            <p className="text-xs text-gray">هیچ هزینه پنهانی اضافه نمی‌شود.</p>
+            <p className="text-xs text-gray">مبلغ نهایی همین است؛ هزینه پنهان، مالیات جدا یا کارمزد اضافه در درگاه ندارید.</p>
             <CancelPolicyNotice className="mb-0" />
           </div>
           <div>
@@ -710,6 +734,7 @@ export function BookingWizard({
           </div>
         </Card>
       )}
+      <HelpFab />
     </div>
   );
 }
