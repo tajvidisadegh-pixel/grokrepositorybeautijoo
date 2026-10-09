@@ -1,0 +1,17 @@
+name: fix-confirm-price
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 -c "from pathlib import Path; p=next(Path('frontend/src/app/booking/confirmation').rglob('page.tsx')); t=p.read_text(); t=t.replace('formatPrice(booking.totalPrice ?? booking.price)','formatPrice(booking.totalPrice)'); p.write_text(t); print('ok')"
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: confirmation totalPrice type (#61.12)' && git push)
