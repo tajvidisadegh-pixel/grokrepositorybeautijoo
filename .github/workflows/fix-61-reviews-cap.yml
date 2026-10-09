@@ -1,0 +1,115 @@
+name: fix-61-reviews-cap
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # Fix reviews JSX: close fragment before ternary else
+          p = Path('frontend/src/app/zibagar/reviews/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          # Broken pattern: opens <> after ? ( but closes with ) : (
+          old = '''                      {replyFor === r.id ? (
+                      <>
+                        <div className="space-y-2">'''
+          # simpler replace of closing before else
+          if 'replyFor === r.id' in t and 'قالب پاسخ' in t:
+              # Ensure closing </> before ) : (
+              t2 = t.replace(
+                  '''                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setReplyFor(r.id);''',
+                  '''                            </Button>
+                          </div>
+                        </div>
+                      </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setReplyFor(r.id);''',
+                  1,
+              )
+              if t2 == t:
+                  # try alternate whitespace
+                  import re
+                  t2 = re.sub(
+                      r'(</div>\s*</div>\s*)\) : \(\s*<Button\s+size="sm"\s+variant="outline"\s+onClick=\{\(\) => \{\s*setReplyFor\(r\.id\);',
+                      r'\1</>\n                      ) : (\n                        <Button\n                          size="sm"\n                          variant="outline"\n                          onClick={() => {\n                            setReplyFor(r.id);',
+                      t,
+                      count=1,
+                  )
+              p.write_text(t2, encoding='utf-8')
+              print('reviews fixed', t2 != t)
+
+          # Capacity settings card
+          sp = Path('frontend/src/app/zibagar/settings/page.tsx')
+          if sp.exists():
+              st = sp.read_text(encoding='utf-8')
+              if 'حداکثر نوبت روزانه' not in st:
+                  # Client component needed for localStorage - wrap simple
+                  if "'use client'" not in st[:40]:
+                      st = "'use client';\n" + st
+                  card = '''
+      <div className="rounded-3xl border border-border bg-white p-4 space-y-3">
+        <h2 className="font-bold">سقف ظرفیت روزانه</h2>
+        <p className="text-xs text-gray">اگر نوبت‌های امروز به این عدد برسد در داشبورد هشدار می‌بینید.</p>
+        <label className="block text-sm">حداکثر نوبت روزانه
+          <input
+            type="number"
+            min={1}
+            max={50}
+            className="mt-1 h-11 w-full rounded-2xl border border-border px-3"
+            defaultValue={5}
+            onFocus={(e) => {
+              try {
+                const v = localStorage.getItem('bj_daily_cap');
+                if (v) e.currentTarget.value = v;
+              } catch {}
+            }}
+            onChange={(e) => {
+              try {
+                const n = Math.max(1, Math.min(50, Number(e.target.value) || 5));
+                localStorage.setItem('bj_daily_cap', String(n));
+              } catch {}
+            }}
+          />
+        </label>
+      </div>
+'''
+                  if 'space-y-6' in st:
+                      st = st.replace('space-y-6', 'space-y-6', 1)
+                      # insert after opening div with space-y
+                      import re
+                      st = re.sub(
+                          r'(<div[^>]*space-y-6[^>]*>)',
+                          r'\1' + card,
+                          st,
+                          count=1,
+                      )
+                      sp.write_text(st, encoding='utf-8')
+                      print('settings capacity added')
+                  else:
+                      print('settings no space-y-6')
+          else:
+              print('no settings page')
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: #61 reviews JSX and daily capacity setting' && git push)
