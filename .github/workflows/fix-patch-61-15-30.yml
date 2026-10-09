@@ -1,0 +1,27 @@
+name: fix-patch-61-15-30
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('scripts/patch_61_15_30.py')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace('if m and pro_slug_hint_ok := True:', 'if m:', 1)
+          p.write_text(t, encoding='utf-8')
+          print('fixed script')
+          # run it
+          import runpy
+          runpy.run_path('scripts/patch_61_15_30.py')
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m "feat: #61 items 15-30 zibagar operations polish" && git push)
