@@ -1,0 +1,41 @@
+name: hotpatch-92
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/professionals/professionals.service.ts')
+          t = p.read_text(encoding='utf-8')
+          t2 = t.replace("status: \\completed\\ as any", "status: 'completed' as any")
+          t2 = t2.replace('status: \\completed\\ as any', "status: 'completed' as any")
+          # also fix common broken forms
+          import re
+          t2 = re.sub(r"status:\s*\\completed\\s+as any", "status: 'completed' as any", t2)
+          t2 = re.sub(r"status:\s*['\"]?\\?completed\\?['\"]?\s+as any", "status: 'completed' as any", t2)
+          if "status: 'completed' as any" not in t2:
+              # last resort read line
+              for i, line in enumerate(t2.splitlines()):
+                  if 'completedBookingsCount' in line or 'professionalId: pro.id' in line:
+                      print(i, repr(line))
+              # force replace around professionalId: pro.id
+              t2 = re.sub(
+                  r"where:\s*\{\s*professionalId:\s*pro\.id,\s*status:\s*[^}]+\}",
+                  "where: { professionalId: pro.id, status: 'completed' as any }",
+                  t2,
+                  count=1,
+              )
+          p.write_text(t2, encoding='utf-8')
+          print('ok', "status: 'completed' as any" in t2)
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: completed status string quote' && git push)
