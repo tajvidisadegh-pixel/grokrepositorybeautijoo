@@ -1,0 +1,38 @@
+name: fix-61-wizard
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace(
+              "if (initialServiceId && initialDate && initialSlot) trackFunnel('summary_view', { pro: professional.id }); setStep('summary');",
+              "if (initialServiceId && initialDate && initialSlot) { trackFunnel('summary_view', { pro: professional.id }); setStep('summary'); }",
+              1,
+          )
+          t = t.replace(
+              "trackFunnel('datetime_select', { pro: professional.id });\n                        setSlotStart('');",
+              "setSlotStart('');",
+              1,
+          )
+          # also fix goSummary if broken similarly
+          t = t.replace(
+              "trackFunnel('summary_view', { pro: professional.id }); setStep('summary')",
+              "trackFunnel('summary_view', { pro: professional.id });\n    setStep('summary')",
+          )
+          p.write_text(t, encoding='utf-8')
+          print('fixed')
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: booking-wizard funnel braces (#61)' && git push)
