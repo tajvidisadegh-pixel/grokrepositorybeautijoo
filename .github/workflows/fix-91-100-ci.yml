@@ -1,0 +1,57 @@
+name: fix-91-100-ci
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          # hours page
+          p = Path('frontend/src/app/zibagar/hours/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          bad = "if (match) if (!window.confirm('این بازه مسدود حذف شود؟')) return; await removeTimeOff(match.id);"
+          good = "if (match) {\n                      if (!window.confirm('این بازه مسدود حذف شود؟')) return;\n                      await removeTimeOff(match.id);\n                    }"
+          if bad in t:
+              t = t.replace(bad, good, 1)
+              p.write_text(t, encoding='utf-8')
+              print('hours fixed')
+          else:
+              print('hours miss', 'match.id' in t)
+
+          # 92 backend
+          p = Path('backend/src/professionals/professionals.service.ts')
+          t = p.read_text(encoding='utf-8')
+          if 'completedBookingsCount' not in t:
+              old = """    const safe = this.sanitizePublicLocations(pro);
+    const withMedia = this.attachMediaPublicUrls(safe);
+    this.cache.set(cacheKey, withMedia, 120_000);
+    return withMedia;"""
+              new = """    const safe = this.sanitizePublicLocations(pro);
+    const withMedia = this.attachMediaPublicUrls(safe);
+    const completedBookingsCount = await this.prisma.booking.count({
+      where: { professionalId: pro.id, status: 'completed' as any },
+    }).catch(() => 0);
+    const payload = { ...withMedia, completedBookingsCount };
+    this.cache.set(cacheKey, payload, 120_000);
+    return payload;"""
+              if old in t:
+                  t = t.replace(old, new, 1)
+                  p.write_text(t, encoding='utf-8')
+                  print('92 fixed')
+              else:
+                  print('92 miss')
+          else:
+              print('92 exists')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "beautijoo-bot"
+          git config user.email "bot@beautijoo.ir"
+          git add -A
+          if git diff --staged --quiet; then echo none; else git commit -m "fix: hours confirm + completedBookingsCount (#40.92-93)" && git push; fi
