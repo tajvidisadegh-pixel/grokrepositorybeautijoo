@@ -24,7 +24,7 @@ const MESSAGE_MAP: Array<{ test: RegExp; fa: string }> = [
   { test: /validation|must be|should not|isString|isUUID|isInt|whitelist/i, fa: 'اطلاعات ارسالی نامعتبر است. فیلدها را بررسی کنید.' },
   { test: /file too large|payload too large|entity too large/i, fa: 'حجم فایل بیش از حد مجاز است.' },
   { test: /unsupported media|invalid file|mime/i, fa: 'فرمت فایل پشتیبانی نمی‌شود.' },
-  { test: /payment|درگاه|zarinpal|آیدی.?پی/i, fa: 'مشکل در پرداخت. دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.' },
+  { test: /payment|درگاه|zarinpal|آیدی.?پی|authority|verify/i, fa: 'پرداخت انجام نشد؛ ممکن است موجودی کافی نباشد یا درگاه موقتاً در دسترس نباشد. دوباره تلاش کنید.' },
   { test: /پروفایل ناقص|incomplete profile|completion/i, fa: 'پروفایل ناقص است. ابتدا موارد الزامی را تکمیل کنید.' },
   { test: /cancel.*hour|ساعات قبل|min.?hours/i, fa: 'در این فاصله زمانی امکان لغو یا تغییر وجود ندارد.' },
   { test: /only after|فقط پس از تکمیل/i, fa: 'این عملیات فقط پس از تکمیل نوبت امکان‌پذیر است.' },

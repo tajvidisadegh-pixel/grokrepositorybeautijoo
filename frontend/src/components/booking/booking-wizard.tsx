@@ -572,6 +572,12 @@ export function BookingWizard({
                   setDate(d.toISOString().slice(0, 10));
                   setSlotStart("");
                 }}>امتحان روز بعد</button>
+                <Link
+                  href={`/search?availableToday=1${selected?.name ? `&q=${encodeURIComponent(selected.name)}` : ""}`}
+                  className="mt-1 block text-xs font-medium text-blue underline"
+                >
+                  پیشنهاد زیباگرهای مشابه با نوبت آزاد
+                </Link>
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">

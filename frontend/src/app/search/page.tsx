@@ -22,7 +22,7 @@ type Props = {
   searchParams: Promise<{
     q?: string; city?: string; category?: string; page?: string;
     minRating?: string; minPrice?: string; maxPrice?: string;
-    sort?: string; availableDate?: string; availableToday?: string;
+    sort?: string; availableDate?: string; availableToday?: string; availableTomorrow?: string;
     lat?: string; lng?: string;
     verifiedOnly?: string; gender?: string; minDuration?: string; maxDuration?: string; durationBand?: string;
   }>;
@@ -49,7 +49,14 @@ export default async function SearchPage({ searchParams }: Props) {
   const maxPrice = sp.maxPrice != null && sp.maxPrice !== '' ? parseInt(sp.maxPrice, 10) : undefined;
   const sort = sp.sort?.trim() || 'featured';
   const availableToday = sp.availableToday === '1' || sp.availableToday === 'true';
-  const availableDate = availableToday ? tehranTodayIso() : (sp.availableDate?.trim() || undefined);
+  const availableTomorrow = sp.availableTomorrow === '1' || sp.availableTomorrow === 'true';
+  let availableDate = sp.availableDate?.trim() || undefined;
+  if (availableToday) availableDate = tehranTodayIso();
+  else if (availableTomorrow) {
+    const d = new Date(tehranTodayIso() + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    availableDate = d.toISOString().slice(0, 10);
+  }
   const lat = sp.lat?.trim() || undefined;
   const lng = sp.lng?.trim() || undefined;
   // Near-me uses a fixed technical maximum; the customer no longer chooses a radius.
@@ -94,6 +101,7 @@ export default async function SearchPage({ searchParams }: Props) {
     if (sort && sort !== 'featured') params.set('sort', sort);
     if (availableDate) params.set('availableDate', availableDate);
     if (availableToday) params.set('availableToday', '1');
+    if (availableTomorrow) params.set('availableTomorrow', '1');
     if (minDuration != null && Number.isFinite(minDuration)) params.set('minDuration', String(minDuration));
     if (lat) params.set('lat', lat);
     if (lng) params.set('lng', lng);
@@ -182,6 +190,34 @@ export default async function SearchPage({ searchParams }: Props) {
             </select>
           </div>
 <div>
+            <div className="mb-2 flex flex-wrap gap-2">
+              <Link
+                href={(() => {
+                  const p = new URLSearchParams();
+                  if (q) p.set("q", q);
+                  if (city) p.set("city", city);
+                  if (category) p.set("category", category);
+                  p.set("availableToday", "1");
+                  return `/search?${p.toString()}`;
+                })()}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium ${availableToday ? "border-coral bg-coral text-white" : "border-border bg-white"}`}
+              >
+                آزاد امروز
+              </Link>
+              <Link
+                href={(() => {
+                  const p = new URLSearchParams();
+                  if (q) p.set("q", q);
+                  if (city) p.set("city", city);
+                  if (category) p.set("category", category);
+                  p.set("availableTomorrow", "1");
+                  return `/search?${p.toString()}`;
+                })()}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium ${availableTomorrow ? "border-coral bg-coral text-white" : "border-border bg-white"}`}
+              >
+                آزاد فردا
+              </Link>
+            </div>
             <label className="mb-1 block text-xs font-medium text-gray">تاریخ در دسترس بودن</label>
             <FormJalaliDate name="availableDate" defaultValue={availableDate || ''} className={inputCls} />
           </div>

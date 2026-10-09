@@ -76,12 +76,27 @@ function PaymentCallbackBody() {
   return (
     <div className="mx-auto max-w-md px-4 py-16 text-center">
       {error ? (
-        <>
-          <p className="text-red-700">{error}</p>
-          <Link href="/panel/bookings" className="mt-4 inline-block text-coral hover:underline">
-            رزروهای من
-          </Link>
-        </>
+        <div className="space-y-4 text-right" dir="rtl">
+          <p className="text-lg font-bold text-red-700">پرداخت انجام نشد</p>
+          <p className="text-sm text-red-800/90">{error}</p>
+          <p className="text-xs text-gray">
+            اگر مبلغ از حساب کسر شده، معمولاً تا ۷۲ ساعت برمی‌گردد. کد پیگیری درگاه را از پیامک بانک نگه دارید.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            <Link
+              href="/panel/bookings"
+              className="inline-flex h-11 items-center rounded-2xl bg-coral px-5 text-sm font-medium text-white"
+            >
+              رزروهای من / تلاش مجدد
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex h-11 items-center rounded-2xl border border-border px-5 text-sm"
+            >
+              صفحه اصلی
+            </Link>
+          </div>
+        </div>
       ) : (
         <p className="text-gray">{msg}</p>
       )}

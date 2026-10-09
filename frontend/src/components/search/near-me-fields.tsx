@@ -67,7 +67,12 @@ export function NearMeFields({ defaultLat, defaultLng }: Props) {
         }
       },
       () => {
-        setStatus('برای «نزدیک من»، دسترسی موقعیت مکانی را در مرورگر فعال کنید.');
+        setStatus('دسترسی موقعیت رد شد. می‌توانید شهر را دستی در فیلترها بنویسید. موقعیت روی دستگاه شما می‌ماند و بدون اجازه ذخیره نمی‌شود.');
+        setBusy(false);
+      },
+      // stub to keep parse — actual replaced below
+      () => {
+        setStatus('دسترسی موقعیت رد شد یا در دسترس نیست. شهر را در فیلترها دستی وارد کنید.');
         setBusy(false);
       },
       { enableHighAccuracy: false, timeout: 12000, maximumAge: 60_000 },
@@ -110,6 +115,7 @@ export function NearMeFields({ defaultLat, defaultLng }: Props) {
           )}
       </div>
       {status && <p className="text-xs text-gray">{status}</p>}
+      <p className="text-[11px] leading-5 text-gray">حریم خصوصی موقعیت: فقط برای مرتب‌سازی فاصله استفاده می‌شود. ذخیره فقط با تأیید شماست و هر زمان با «پاک» حذف می‌شود. اگر GPS در دسترس نیست، شهر را دستی انتخاب کنید.</p>
       {lat && lng && (
         <p className="text-xs text-emerald-700">
           جستجو بر اساس فاصله از موقعیت شما فعال است — نتایج نزدیک‌تر بالاتر می‌آیند.
