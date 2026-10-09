@@ -1,0 +1,111 @@
+name: fix-61-strings
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          # Fix bookings reject prompt
+          p = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          bad = """        const preset = window.prompt(
+          'دلیل رد (اختیاری):
+1) پر بودن
+2) مرخصی
+3) خارج از تخصص
+4) سایر — متن بنویسید',
+          '1',
+        );"""
+          good = """        const preset = window.prompt(
+          'دلیل رد (اختیاری): 1) پر بودن  2) مرخصی  3) خارج از تخصص  4) سایر',
+          '1',
+        );"""
+          if bad in t:
+              t = t.replace(bad, good, 1)
+              p.write_text(t, encoding='utf-8')
+              print('bookings fixed')
+          else:
+              # regex fallback
+              t2 = re.sub(
+                  r"const preset = window\.prompt\(\s*'دلیل رد \(اختیاری\):[^']*',\s*'1',\s*\);",
+                  "const preset = window.prompt(\n          'دلیل رد (اختیاری): 1) پر بودن  2) مرخصی  3) خارج از تخصص  4) سایر',\n          '1',\n        );",
+                  t,
+                  count=1,
+              )
+              p.write_text(t2, encoding='utf-8')
+              print('bookings regex', t2 != t)
+
+          # Fix earnings CSV join newline
+          p = Path('frontend/src/app/zibagar/earnings/page.tsx')
+          t = p.read_text(encoding='utf-8')
+          # broken: join('\n literal newline)
+          t2 = re.sub(
+              r"\.join\('\s*\n\s*'\)",
+              ".join('\\n')",
+              t,
+              count=1,
+          )
+          if t2 == t:
+              # another pattern
+              t2 = t.replace(
+                  ").join(',')).join('\n");",
+                  ").join(',')).join('\\n');",
+                  1,
+              )
+              # if still broken from actual newline in file
+              t2 = re.sub(
+                  r"join\(','\)\)\.join\('([^']*)'\)",
+                  lambda m: "join(',')).join('\\n')" if '\n' in m.group(1) or m.group(1).strip()=='' else m.group(0),
+                  t,
+                  count=1,
+              )
+          # direct line-based fix
+          lines = t.splitlines()
+          out = []
+          for i, line in enumerate(lines):
+              if "join(',')" in line and 'join(' in line and i+1 < len(lines) and lines[i+1].strip() == "');":
+                  # split across lines
+                  out.append("    const csv = rows.map((r) => r.map((c) => `\"${String(c).replace(/\"/g, '\"\"')}\"`).join(',')).join('\\n');")
+                  # skip next line
+                  continue
+              if i > 0 and lines[i-1].endswith("join('") and line.strip() == "');":
+                  continue
+              out.append(line)
+          t3 = '\n'.join(out) + ('\n' if t.endswith('\n') else '')
+          # simpler: find exportCsv and rewrite function
+          if 'function exportCsv' in t3:
+              t3 = re.sub(
+                  r"function exportCsv\(\) \{[\s\S]*?URL\.revokeObjectURL\(url\);\s*\}",
+                  "function exportCsv() {\n"
+                  "    const rows = [['id', 'amount', 'status', 'createdAt']];\n"
+                  "    for (const it of items) {\n"
+                  "      rows.push([it.id, String(it.professionalNetAmount ?? it.amount), it.status, it.createdAt]);\n"
+                  "    }\n"
+                  "    const csv = rows.map((r) => r.map((c) => '\"' + String(c).replace(/\"/g, '\"\"') + '\"').join(',')).join('\\n');\n"
+                  "    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });\n"
+                  "    const url = URL.createObjectURL(blob);\n"
+                  "    const a = document.createElement('a');\n"
+                  "    a.href = url;\n"
+                  "    a.download = 'beautijoo-earnings.csv';\n"
+                  "    a.click();\n"
+                  "    URL.revokeObjectURL(url);\n"
+                  "  }",
+                  t3,
+                  count=1,
+              )
+          p.write_text(t3, encoding='utf-8')
+          print('earnings rewritten')
+          PY
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: multiline string syntax bookings/earnings (#61)' && git push)
