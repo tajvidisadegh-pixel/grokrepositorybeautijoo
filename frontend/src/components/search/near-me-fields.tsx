@@ -67,11 +67,6 @@ export function NearMeFields({ defaultLat, defaultLng }: Props) {
         }
       },
       () => {
-        setStatus('دسترسی موقعیت رد شد. می‌توانید شهر را دستی در فیلترها بنویسید. موقعیت روی دستگاه شما می‌ماند و بدون اجازه ذخیره نمی‌شود.');
-        setBusy(false);
-      },
-      // stub to keep parse — actual replaced below
-      () => {
         setStatus('دسترسی موقعیت رد شد یا در دسترس نیست. شهر را در فیلترها دستی وارد کنید.');
         setBusy(false);
       },
