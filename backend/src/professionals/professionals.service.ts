@@ -367,7 +367,7 @@ export class ProfessionalsService {
     const safe = this.sanitizePublicLocations(pro);
     const withMedia = this.attachMediaPublicUrls(safe);
     const completedBookingsCount = await this.prisma.booking.count({
-      where: { professionalId: pro.id, status: \completed\ as any },
+      where: { professionalId: pro.id, status: 'completed' as any },
     }).catch(() => 0);
     const payload = { ...withMedia, completedBookingsCount };
     this.cache.set(cacheKey, payload, 120_000);
