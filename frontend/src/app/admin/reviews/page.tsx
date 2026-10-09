@@ -69,11 +69,13 @@ export default function AdminReviewsPage() {
   }
 
   async function remove(id: string) {
+    const reason = window.prompt('دلیل حذف نظر را بنویسید:');
+    if (reason == null || !String(reason).trim()) return;
     if (!confirm('آیا از حذف این نظر مطمئن هستید؟')) return;
     setBusyId(id);
     setMsg(null);
     try {
-      await apiClient.delete(`/admin/reviews/${id}`);
+      await apiClient.delete(`/admin/reviews/${id}?reason=${encodeURIComponent(String(reason).trim().slice(0, 500))}`);
       setMsg('نظر حذف شد.');
       await load();
     } catch (e) {

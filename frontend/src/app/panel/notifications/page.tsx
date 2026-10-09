@@ -20,6 +20,18 @@ function emitUnreadChanged() {
   }
 }
 
+
+function notifKindLabel(type?: string | null, title?: string | null): { label: string; className: string } {
+  const s = `${type || ''} ${title || ''}`.toLowerCase();
+  if (/book|رزرو|نوبت|payment|پرداخت|confirm|reject|cancel|لغو/.test(s)) {
+    return { label: 'رزرو', className: 'bg-coral-soft text-coral' };
+  }
+  if (/system|سیستم|security|welcome|otp|verify/.test(s)) {
+    return { label: 'سیستمی', className: 'bg-gray-light text-gray' };
+  }
+  return { label: 'عمومی', className: 'bg-blue-light text-blue' };
+}
+
 export default function PanelNotificationsPage() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +168,12 @@ export default function PanelNotificationsPage() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold">{n.title || n.type || 'اعلان'}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold">{n.title || n.type || 'اعلان'}</p>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${notifKindLabel(n.type, n.title).className}`}>
+                            {notifKindLabel(n.type, n.title).label}
+                          </span>
+                        </div>
                         {unread && (
                           <span className="rounded-full bg-coral px-2 py-0.5 text-[10px] font-bold text-white">
                             جدید

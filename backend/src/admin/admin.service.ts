@@ -839,14 +839,14 @@ export class AdminService {
     return updated;
   }
 
-  async deleteReview(id: string, actorId?: string) {
+  async deleteReview(id: string, actorId?: string, reason?: string) {
     const existing = await this.prisma.review.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('نظر یافت نشد');
     await this.prisma.$transaction(async (tx) => {
       await tx.review.delete({ where: { id } });
       await this.recalcProfessionalRating(tx, existing.professionalId);
     });
-    await this.audit(actorId, 'review.delete', 'review', id, existing, null);
+    await this.audit(actorId, 'review.delete', 'review', id, { ...existing, deleteReason: reason || null }, null);
     return { message: 'نظر حذف شد', id };
   }
 

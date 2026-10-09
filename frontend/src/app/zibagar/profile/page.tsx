@@ -212,7 +212,7 @@ export default function ZibagarProfilePage() {
           </>
         ) : complete ? (
           <>
-            <p className="text-base font-semibold text-blue">اطلاعات پروفایل کامل است ✓</p>
+            <p className="text-base font-semibold text-blue">اطلاعات پروفایل کامل است — قبل از انتشار حتماً پیش‌نمایش را ببینید ✓</p>
             <CompletionBar percent={percent} />
             <div className="flex flex-wrap gap-2">
               <Button size="sm" onClick={() => setConfirm(true)}>
