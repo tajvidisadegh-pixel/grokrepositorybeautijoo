@@ -13,6 +13,7 @@ import {
   type BookingListItem,
 } from '@/lib/panel-api';
 import { apiClient } from '@/lib/api';
+import { shortBookingCode, copyBookingCode } from '@/lib/booking-code';
 import { fetchAvailability } from '@/lib/booking-api';
 import { persianBookingStatus, effectiveBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
@@ -363,7 +364,7 @@ async function submitReport(id: string) {
       <div className="flex flex-wrap gap-2" aria-label="date-preset-filter">
         {([
           { v: 'all' as const, l: 'هر تاریخ' },
-          { v: 'today' as const, l: 'امروز' },
+          { v: 'today' as const, l: 'فقط امروز' },
           { v: 'week' as const, l: 'این هفته' },
           { v: 'month' as const, l: 'این ماه' },
         ]).map((o) => (
@@ -469,6 +470,7 @@ async function submitReport(id: string) {
 
                   return (
                     <li key={b.id}>
+                    <div className="mb-1 flex items-center gap-2 text-xs text-gray-muted" dir="ltr"><span>#{shortBookingCode(b.id)}</span><button type="button" className="rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-gray-light" onClick={() => void copyBookingCode(b.id)}>کپی</button></div>
                       <Card className="space-y-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>

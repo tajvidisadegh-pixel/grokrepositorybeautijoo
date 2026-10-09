@@ -233,6 +233,10 @@ export function PanelShell({ title, items, roles, children }: Props) {
             </div>
           </nav>
         )}
+
+        <p className="mt-8 text-center text-[10px] text-gray-muted" dir="ltr">
+          beautijoo v{APP_VERSION}
+        </p>
       </div>
     </RequireAuth>
   );

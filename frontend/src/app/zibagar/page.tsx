@@ -238,7 +238,13 @@ export default function ZibagarDashboard() {
 
   return (
     <div className="space-y-5">
-      <div className="mb-4"><PauseBookingsToggle /></div>
+      <div className="mb-4"><PauseBookingsToggle />
+      {todayBookings.length >= 5 && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          ظرفیت امروز تقریباً پر است ({todayBookings.length.toLocaleString('fa-IR')} نوبت).
+        </div>
+      )}
+</div>
 
       {pendingReviewBanner}
 

@@ -14,6 +14,7 @@ import {
   type BookingListItem,
 } from '@/lib/panel-api';
 import { fetchAvailability } from '@/lib/booking-api';
+import { shortBookingCode, copyBookingCode } from '@/lib/booking-code';
 import { persianBookingStatus, persianPaymentStatus, effectiveBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice, formatRelativeDate } from '@/lib/utils';
@@ -359,6 +360,19 @@ async function submitReview(bookingId: string) {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-semibold">{proName}</p>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-gray-muted" dir="ltr">
+                      <span>#{shortBookingCode(b.id)}</span>
+                      <button
+                        type="button"
+                        className="rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-gray-light"
+                        onClick={() => {
+                          void copyBookingCode(b.id);
+                        }}
+                      >
+                        کپی
+                      </button>
+                    </div>
+
                       <p className="text-xs text-gray">
                         {formatRelativeDate(b.startAt)}
                       </p>

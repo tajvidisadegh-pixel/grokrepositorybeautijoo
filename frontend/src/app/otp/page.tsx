@@ -222,7 +222,16 @@ function OtpForm() {
           </form>
         )}
 
-        <div className="mt-6 border-t border-border pt-4 text-center text-sm text-gray">
+        <div className="mt-6 space-y-2 border-t border-border pt-4 text-center text-sm text-gray">
+          <p>
+            <Link
+              href={`/forgot-password?as=${accountType}`}
+              className="font-medium text-coral hover:text-coral-dark"
+            >
+              رمز عبورم را فراموش کرده‌ام
+            </Link>
+          </p>
+          <p>
           ورود با رمز عبور؟{' '}
           <Link
             href={`/login?as=${accountType}${next ? `&next=${encodeURIComponent(next)}` : ''}`}
