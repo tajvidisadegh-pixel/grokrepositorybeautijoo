@@ -364,8 +364,12 @@ export class AdminController {
   @RequirePermissions('admin.reviews.moderate')
   @Delete('reviews/:id')
   @ApiOperation({ summary: 'Delete a review and recalc professional rating' })
-  deleteReview(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
-    return this.service.deleteReview(id, actorId);
+  deleteReview(
+    @Param('id') id: string,
+    @CurrentUser('id') actorId?: string,
+    @Query('reason') reason?: string,
+  ) {
+    return this.service.deleteReview(id, actorId, reason);
   }
 
   @RequirePermissions('admin.media.moderate')
