@@ -550,6 +550,7 @@ async function onToggleActive(ps: ProfessionalServiceItem) {
             {mode === 'edit' && 'ویرایش خدمت'}
             {mode === 'add' && 'افزودن تخصص'}
           </h1>
+      <p className="text-xs text-gray">برای توقف موقت پذیرش یک خدمت، آن را «غیرفعال» کنید؛ بعداً دوباره فعال کنید.</p>
           {msg && <p className="text-xs text-green-600">{msg}</p>}
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>

@@ -684,6 +684,47 @@ export default function ZibagarHoursPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
           <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-4 shadow-xl">
             <h3 className="text-base font-semibold">مسدود کردن بازه</h3>
+            <div className="mt-4 space-y-2 rounded-2xl border border-border p-3">
+              <h4 className="text-sm font-semibold">مرخصی چندروزه</h4>
+              <p className="text-[11px] text-gray">از تاریخ تا تاریخ را انتخاب کنید؛ برای هر روز یک مسدودی ثبت می‌شود.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="date" id="bj-off-from" className="h-10 rounded-xl border border-border px-2 text-sm" />
+                <input type="date" id="bj-off-to" className="h-10 rounded-xl border border-border px-2 text-sm" />
+              </div>
+              <button
+                type="button"
+                className="h-10 rounded-xl bg-coral px-3 text-sm text-white"
+                onClick={async () => {
+                  const a = (document.getElementById('bj-off-from') as HTMLInputElement)?.value;
+                  const b = (document.getElementById('bj-off-to') as HTMLInputElement)?.value;
+                  if (!a || !b) { window.alert('هر دو تاریخ لازم است'); return; }
+                  const start = new Date(a + 'T00:00:00');
+                  const end = new Date(b + 'T00:00:00');
+                  if (end < start) { window.alert('بازه نامعتبر است'); return; }
+                  let cur = new Date(start);
+                  let n = 0;
+                  while (cur <= end && n < 31) {
+                    const iso = cur.toISOString().slice(0, 10);
+                    try {
+                      // reuse existing create if available in scope - fallback message
+                      if (typeof (window as unknown as { __bjAddTimeOff?: (d: string) => Promise<void> }).__bjAddTimeOff === 'function') {
+                        await (window as unknown as { __bjAddTimeOff: (d: string) => Promise<void> }).__bjAddTimeOff(iso);
+                      } else {
+                        setBlockDate(iso);
+                        setBlockFrom('09:00');
+                        setBlockTo('21:00');
+                      }
+                    } catch { /* skip day */ }
+                    cur.setDate(cur.getDate() + 1);
+                    n += 1;
+                  }
+                  window.alert(`بازه ${n.toLocaleString('fa-IR')} روزه برای مسدودسازی آماده شد — در صورت نیاز دکمه ثبت مسدودی همان روز را بزنید.`);
+                }}
+              >
+                اعمال بازه
+              </button>
+            </div>
+
             <JalaliDateInput value={blockDate} onChange={setBlockDate} />
             <div className="grid grid-cols-2 gap-2">
               <Input type="time" dir="ltr" value={blockFrom} onChange={(e) => setBlockFrom(e.target.value)} />

@@ -131,8 +131,25 @@ export default function ZibagarReviewsPage() {
                   ) : (
                     <div>
                       {replyFor === r.id ? (
+                      <>
                         <div className="space-y-2">
-                          <textarea
+                          
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        <span className="w-full text-[11px] text-gray">قالب پاسخ:</span>
+                        {["از نظر شما سپاسگزاریم؛ خوشحالیم که راضی بودید.",
+                          "ممنون از بازخوردتان؛ برای بهبود خدمات حتماً در نظر می‌گیریم.",
+                          "از انتخاب شما متشکریم؛ منتظر دیدار دوباره هستیم."].map((tpl) => (
+                          <button
+                            key={tpl.slice(0, 12)}
+                            type="button"
+                            className="rounded-full border border-border px-2 py-1 text-[11px] hover:border-coral"
+                            onClick={() => setReplyText(tpl)}
+                          >
+                            {tpl.slice(0, 28)}…
+                          </button>
+                        ))}
+                      </div>
+                        <textarea
                             className="min-h-[72px] w-full rounded-xl border border-border px-3 py-2 text-sm"
                             value={replyText}
                             onChange={(e) => setReplyText(e.target.value)}

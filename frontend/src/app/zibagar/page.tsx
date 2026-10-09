@@ -239,12 +239,31 @@ export default function ZibagarDashboard() {
   return (
     <div className="space-y-5">
       <div className="mb-4"><PauseBookingsToggle />
-      {todayBookings.length >= 5 && (
+      {todayBookings.length >= (typeof window !== 'undefined' ? Number(localStorage.getItem('bj_daily_cap') || 5) : 5) && (
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           ظرفیت امروز تقریباً پر است ({todayBookings.length.toLocaleString('fa-IR')} نوبت).
         </div>
       )}
 </div>
+
+      
+      {typeof window !== 'undefined' && !localStorage.getItem('bj_zibagar_tips_done') && (
+        <Card className="space-y-2 border-coral/30 bg-coral-soft/40 p-4">
+          <h2 className="font-bold">شروع سریع (۳۰ ثانیه)</h2>
+          <ol className="list-decimal space-y-1 pr-5 text-sm text-gray">
+            <li><Link href="/zibagar/services" className="text-coral underline">خدمت بساز</Link></li>
+            <li><Link href="/zibagar/hours" className="text-coral underline">ساعات بگذار</Link></li>
+            <li><Link href="/zibagar/profile" className="text-coral underline">منتشر کن</Link></li>
+          </ol>
+          <button
+            type="button"
+            className="text-xs text-gray underline"
+            onClick={() => { try { localStorage.setItem('bj_zibagar_tips_done', '1'); } catch {} location.reload(); }}
+          >
+            متوجه شدم
+          </button>
+        </Card>
+      )}
 
       {pendingReviewBanner}
 

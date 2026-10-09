@@ -211,7 +211,20 @@ export default function ZibagarBookingsPage() {
     try {
       let reason: string | undefined;
       if (action === 'reject') {
-        reason = window.prompt('دلیل رد (اختیاری):') || undefined;
+        const preset = window.prompt(
+          'دلیل رد (اختیاری):
+1) پر بودن
+2) مرخصی
+3) خارج از تخصص
+4) سایر — متن بنویسید',
+          '1',
+        );
+        const map: Record<string, string> = {
+          '1': 'پر بودن زمان',
+          '2': 'مرخصی / عدم حضور',
+          '3': 'خارج از تخصص',
+        };
+        reason = (preset && map[preset.trim()]) || (preset && preset.trim()) || undefined;
       }
       await transitionBooking(id, action, reason);
       const labels: Record<string, string> = {
@@ -551,14 +564,14 @@ async function submitReport(id: string) {
                           {b.status === 'pending' && (
                             <>
                               <Button
-                                size="sm"
+                                className="min-h-11 min-w-[7rem] flex-1 sm:flex-none"
                                 loading={busy === `${b.id}:confirm`}
                                 onClick={() => act(b.id, 'confirm')}
                               >
                                 تأیید
                               </Button>
                               <Button
-                                size="sm"
+                                className="min-h-11 min-w-[7rem] flex-1 sm:flex-none"
                                 variant="secondary"
                                 loading={busy === `${b.id}:reject`}
                                 onClick={() => act(b.id, 'reject')}

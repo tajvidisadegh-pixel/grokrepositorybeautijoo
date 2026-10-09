@@ -227,7 +227,7 @@ p = Path('frontend/src/app/zibagar/profile/page.tsx')
 t = p.read_text(encoding='utf-8')
 if 'اشتراک‌گذاری' not in t and 'share' not in t.lower():
     m = re.search(r'<h1[^>]*>[^<]+</h1>', t)
-    if m and pro_slug_hint_ok := True:
+    if m:
         share = '''
       {pro?.slug && (
         <Card className="space-y-2 p-4">

@@ -176,6 +176,26 @@ export default function ZibagarProfilePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          
+      {pro?.slug && (
+        <Card className="space-y-2 p-4">
+          <h2 className="font-bold">پیش‌نمایش اشتراک</h2>
+          <p className="text-xs text-gray">لینک رزرو را کپی کنید و در استوری/بیو بگذارید.</p>
+          <p className="rounded-xl bg-gray-light px-3 py-2 text-xs break-all" dir="ltr">
+            {typeof window !== 'undefined' ? window.location.origin : ''}/p/{pro.slug}
+          </p>
+          <button
+            type="button"
+            className="text-sm text-coral underline"
+            onClick={() => {
+              const url = `${window.location.origin}/p/${pro.slug}`;
+              void navigator.clipboard?.writeText(url);
+            }}
+          >
+            کپی لینک رزرو
+          </button>
+        </Card>
+      )}
           {pro?.slug && published && (
             <Link href={`/professionals/${pro.slug}`} target="_blank">
               <Button size="sm" variant="outline">

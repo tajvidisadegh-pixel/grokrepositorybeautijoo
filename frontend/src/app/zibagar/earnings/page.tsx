@@ -52,6 +52,23 @@ export default function ZibagarEarningsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  
+  function exportCsv() {
+    const rows = [['id', 'amount', 'status', 'createdAt']];
+    for (const it of items) {
+      rows.push([it.id, String(it.professionalNetAmount ?? it.amount), it.status, it.createdAt]);
+    }
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('
+');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'beautijoo-earnings.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -115,6 +132,7 @@ export default function ZibagarEarningsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">درآمد و تسویه</h1>
+        <button type="button" onClick={exportCsv} className="text-xs text-coral underline">خروجی CSV</button>
         <p className="mt-1 text-sm text-gray">
           محاسبه خودکار از رزروهای پرداخت‌شده — تفکیک پرداخت‌شده و پرداخت‌نشده
         </p>
