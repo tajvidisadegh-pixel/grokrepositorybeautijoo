@@ -202,8 +202,7 @@ export function BookingWizard({
         slotStart &&
         !res.slots.some((s) => s.start === slotStart && s.available !== false)
       ) {
-        trackFunnel('datetime_select', { pro: professional.id });
-                        setSlotStart('');
+        setSlotStart('');
       }
     } catch (e) {
       const status = (e as { status?: number }).status;
@@ -220,7 +219,8 @@ export function BookingWizard({
   }, [step, selected, date, loadSlots]);
 
   useEffect(() => {
-    if (initialServiceId && initialDate && initialSlot) trackFunnel('summary_view', { pro: professional.id }); setStep('summary');
+    if (initialServiceId && initialDate && initialSlot) { trackFunnel('summary_view', { pro: professional.id });
+    setStep('summary'); }
     else if (initialServiceId) setStep('datetime');
   }, [initialServiceId, initialDate, initialSlot]);
 
