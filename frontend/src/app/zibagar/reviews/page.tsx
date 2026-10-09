@@ -1,4 +1,5 @@
 'use client';
+
 import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,16 +13,13 @@ type ReviewItem = {
   rating: number;
   comment?: string | null;
   professionalReply?: string | null;
-  repliedAt?: string | null;
   isPublished?: boolean;
   createdAt: string;
-  customer?: { phone?: string | null; profile?: { displayName?: string | null } | null } | null;
-  booking?: { id?: string; startAt?: string } | null;
+  customer?: { profile?: { displayName?: string | null } | null; phone?: string | null } | null;
 };
 
 export default function ZibagarReviewsPage() {
   const [items, setItems] = useState<ReviewItem[]>([]);
-  const [summary, setSummary] = useState<{ ratingAvg?: number | string; ratingCount?: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [replyFor, setReplyFor] = useState<string | null>(null);
@@ -33,12 +31,11 @@ export default function ZibagarReviewsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get<{
-        items?: ReviewItem[];
-        summary?: { ratingAvg?: number | string; ratingCount?: number };
-      }>(`/reviews/professional?page=1&limit=50`);
-      setItems(res.items || []);
-      setSummary(res.summary || null);
+      const res = await apiClient.get<{ items?: ReviewItem[] } | ReviewItem[]>(
+        '/professionals/me/reviews?page=1&limit=50',
+      );
+      const list = Array.isArray(res) ? res : res.items || [];
+      setItems(list);
     } catch (e) {
       setItems([]);
       setError(friendlyApiError(e));
@@ -48,7 +45,7 @@ export default function ZibagarReviewsPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   async function submitReply(id: string) {
@@ -72,125 +69,106 @@ export default function ZibagarReviewsPage() {
     }
   }
 
-  if (loading) return <PanelLoading />;
-  if (error) return <PanelError message={error} onRetry={load} />;
-
-  const avg =
-    summary?.ratingAvg != null ? Number(summary.ratingAvg).toFixed(1) : '—';
-  const count = summary?.ratingCount ?? items.length;
+  if (loading) return <PanelLoading label="در حال بارگذاری نظرات…" />;
+  if (error) return <PanelError message={error} onRetry={() => void load()} />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">نظرات دریافتی</h1>
-          <p className="mt-1 text-sm text-gray">بازخورد مشتریان و پاسخ شما</p>
-        </div>
-        <Card className="px-4 py-2 text-center">
-          <p className="text-lg font-bold text-coral">{avg} ★</p>
-          <p className="text-xs text-gray">{count} نظر</p>
-        </Card>
+    <div className="space-y-4" dir="rtl">
+      <div>
+        <h1 className="text-2xl font-bold">نظرات</h1>
+        <p className="mt-1 text-sm text-gray">بازخورد مشتریان و پاسخ شما</p>
       </div>
-
-      <Button size="sm" variant="outline" onClick={load}>
-        بروزرسانی
-      </Button>
-      {msg && <p className="rounded-xl bg-blue-light px-3 py-2 text-sm text-blue">{msg}</p>}
-
+      {msg && (
+        <p className="rounded-xl bg-gray-light px-3 py-2 text-sm text-foreground">{msg}</p>
+      )}
       {items.length === 0 ? (
-        <PanelEmpty title="هنوز نظری ثبت نشده" description="پس از تکمیل رزروها، نظرات اینجا نمایش داده می‌شوند." icon="⭐" />
+        <PanelEmpty title="نظری ثبت نشده" description="پس از تکمیل نوبت‌ها، نظرات اینجا نمایش داده می‌شوند." />
       ) : (
         <ul className="space-y-3">
-          {items.map((r) => {
-            const name =
-              r.customer?.profile?.displayName || r.customer?.phone || 'مشتری';
-            return (
-              <li key={r.id}>
-                <Card className="space-y-2">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold">{name}</p>
-                      <p className="text-xs text-gray">
-                        {formatDate(r.createdAt, { style: 'short', includeTime: true })}
-                      </p>
-                    </div>
-                    <span className="text-sm font-medium text-coral">
-                      {'★'.repeat(r.rating)}
-                      {'☆'.repeat(Math.max(0, 5 - r.rating))}
-                    </span>
+          {items.map((r) => (
+            <li key={r.id}>
+              <Card className="space-y-2 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">
+                    {r.customer?.profile?.displayName || r.customer?.phone || 'مشتری'}
+                  </span>
+                  <span className="text-xs text-gray">{formatDate(r.createdAt)}</span>
+                </div>
+                <div className="text-sm text-amber-600">
+                  {'★'.repeat(Math.max(0, Math.min(5, r.rating || 0)))}
+                  <span className="ms-1 text-gray">{r.rating?.toLocaleString('fa-IR')}</span>
+                </div>
+                {r.comment && <p className="text-sm text-gray">{r.comment}</p>}
+                {r.isPublished === false && (
+                  <span className="text-xs text-gray">در انتظار انتشار توسط مدیریت</span>
+                )}
+                {r.professionalReply ? (
+                  <div className="rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
+                    <p className="text-xs font-medium text-coral">پاسخ شما</p>
+                    <p className="mt-1 text-gray">{r.professionalReply}</p>
                   </div>
-                  {r.comment && <p className="text-sm text-gray">{r.comment}</p>}
-                  {r.isPublished === false && (
-                    <span className="text-xs text-gray">در انتظار انتشار توسط مدیریت</span>
-                  )}
-                  {r.professionalReply ? (
-                    <div className="rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
-                      <p className="text-xs font-medium text-coral">پاسخ شما</p>
-                      <p className="mt-1 text-gray">{r.professionalReply}</p>
-                    </div>
-                  ) : (
-                    <div>
-                      {replyFor === r.id ? (
-                      <>
-                        <div className="space-y-2">
-                          
-                      <div className="mb-2 flex flex-wrap gap-1">
-                        <span className="w-full text-[11px] text-gray">قالب پاسخ:</span>
-                        {["از نظر شما سپاسگزاریم؛ خوشحالیم که راضی بودید.",
-                          "ممنون از بازخوردتان؛ برای بهبود خدمات حتماً در نظر می‌گیریم.",
-                          "از انتخاب شما متشکریم؛ منتظر دیدار دوباره هستیم."].map((tpl) => (
-                          <button
-                            key={tpl.slice(0, 12)}
-                            type="button"
-                            className="rounded-full border border-border px-2 py-1 text-[11px] hover:border-coral"
-                            onClick={() => setReplyText(tpl)}
-                          >
-                            {tpl.slice(0, 28)}…
-                          </button>
-                        ))}
-                      </div>
-                        <textarea
-                            className="min-h-[72px] w-full rounded-xl border border-border px-3 py-2 text-sm"
-                            value={replyText}
-                            onChange={(e) => setReplyText(e.target.value)}
-                            placeholder="پاسخ محترمانه به مشتری..."
-                            maxLength={2000}
-                          />
-                          <div className="flex gap-2">
-                            <Button size="sm" loading={busy} onClick={() => submitReply(r.id)}>
-                              ثبت پاسخ
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setReplyFor(null);
-                                setReplyText('');
-                              }}
+                ) : (
+                  <div>
+                    {replyFor === r.id ? (
+                      <div className="space-y-2">
+                        <div className="mb-2 flex flex-wrap gap-1">
+                          <span className="w-full text-[11px] text-gray">قالب پاسخ:</span>
+                          {[
+                            'از نظر شما سپاسگزاریم؛ خوشحالیم که راضی بودید.',
+                            'ممنون از بازخوردتان؛ برای بهبود خدمات حتماً در نظر می‌گیریم.',
+                            'از انتخاب شما متشکریم؛ منتظر دیدار دوباره هستیم.',
+                          ].map((tpl) => (
+                            <button
+                              key={tpl.slice(0, 12)}
+                              type="button"
+                              className="rounded-full border border-border px-2 py-1 text-[11px] hover:border-coral"
+                              onClick={() => setReplyText(tpl)}
                             >
-                              انصراف
-                            </Button>
-                          </div>
+                              {tpl.slice(0, 28)}…
+                            </button>
+                          ))}
                         </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setReplyFor(r.id);
-                            setReplyText('');
-                            setMsg(null);
-                          }}
-                        >
-                          پاسخ به نظر
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              </li>
-            );
-          })}
+                        <textarea
+                          className="min-h-[72px] w-full rounded-xl border border-border px-3 py-2 text-sm"
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="پاسخ محترمانه به مشتری..."
+                          maxLength={2000}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" loading={busy} onClick={() => void submitReply(r.id)}>
+                            ثبت پاسخ
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setReplyFor(null);
+                              setReplyText('');
+                            }}
+                          >
+                            انصراف
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setReplyFor(r.id);
+                          setReplyText('');
+                          setMsg(null);
+                        }}
+                      >
+                        پاسخ به نظر
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </Card>
+            </li>
+          ))}
         </ul>
       )}
     </div>
