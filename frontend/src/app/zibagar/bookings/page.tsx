@@ -1,4 +1,3 @@
-import { setCustomerNote, getCustomerNotes } from '@/lib/panel-api';
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -11,6 +10,8 @@ import {
   transitionBooking,
   rescheduleBooking,
   reportBookingToAdmin,
+  setCustomerNote,
+  getCustomerNotes,
   type BookingListItem,
 } from '@/lib/panel-api';
 import { apiClient } from '@/lib/api';
