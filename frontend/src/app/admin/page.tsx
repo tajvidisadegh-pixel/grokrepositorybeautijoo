@@ -395,6 +395,21 @@ export default function AdminDashboardPage() {
         </Card>
       )}
 
+      
+      <Card className="space-y-2 p-4">
+        <h2 className="font-semibold">شاخص‌های رشد / کیفیت</h2>
+        <p className="text-sm text-gray">
+          رزرو لغوشده: {fmt(overview.cancelledBookings)} · تکمیل‌شده از داده‌های داشبورد · برای مانیتورینگ فنی به{' '}
+          <a href="/status" className="text-coral underline">/status</a> و متریک API مراجعه کنید.
+        </p>
+        <p className="text-xs text-gray">
+          نرخ کنسلی تقریبی:{" "}
+          {overview.totalBookings > 0
+            ? `${Math.round((100 * (overview.cancelledBookings || 0)) / overview.totalBookings).toLocaleString('fa-IR')}٪`
+            : '—'}
+        </p>
+      </Card>
+
       <Card className="space-y-2 p-4">
         <h2 className="font-semibold">هشدار تقلب / نرخ غیرعادی</h2>
         <p className="text-xs text-gray">

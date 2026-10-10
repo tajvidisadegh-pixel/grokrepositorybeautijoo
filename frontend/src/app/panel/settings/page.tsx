@@ -440,7 +440,7 @@ export default function PanelSettingsPage() {
         <h2 className="text-lg font-semibold text-red-700">منطقه خطر — حذف حساب</h2>
         <p className="text-sm text-gray">
           با حذف حساب، دسترسی شما قطع می‌شود و وضعیت حساب به «حذف‌شده» تغییر می‌کند. این عمل
-          قابل بازگشت نیست.
+          قابل بازگشت نیست. اگر حسابتان رمز عبور ندارد (ورود فقط با OTP)، حذف بدون رمز انجام می‌شود؛ در غیر این صورت وارد کردن رمز الزامی است.
         </p>
         <form onSubmit={onDeleteAccount} className="space-y-3 max-w-md">
           <div>
