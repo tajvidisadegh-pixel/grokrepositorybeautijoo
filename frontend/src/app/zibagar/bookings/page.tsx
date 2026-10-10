@@ -243,10 +243,14 @@ export default function ZibagarBookingsPage() {
   async function blockCustomer(customerId: string) {
     if (!customerId) return;
     if (typeof window !== 'undefined' && !window.confirm('این مشتری دیگر نتواند از شما نوبت بگیرد. ادامه می‌دهید؟')) return;
+    const reason =
+      typeof window !== 'undefined'
+        ? window.prompt('دلیل مسدودسازی (اختیاری):') || undefined
+        : undefined;
     setBusy(`${customerId}:block`);
     setError(null);
     try {
-      await apiClient.post('/professionals/me/blocked-customers', { customerId });
+      await apiClient.post('/professionals/me/blocked-customers', { customerId, reason });
       setActionMsg('مشتری مسدود شد.');
     } catch (e) {
       setError(friendlyApiError(e));

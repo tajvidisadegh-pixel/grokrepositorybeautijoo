@@ -274,7 +274,25 @@ export default function ZibagarDashboard() {
             <h1 className="text-xl font-bold sm:text-2xl">سلام {name} 👋</h1>
             <p className="mt-1 text-sm text-white/90">
               {todayBookings.length > 0
-                ? `امروز ${todayBookings.length.toLocaleString('fa-IR')} نوبت داری`
+                ? `امروز ${todayBookings.length.toLocaleString('fa-IR')} نوبت داری${
+                    (() => {
+                      const first = [...todayBookings].sort(
+                        (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+                      )[0];
+                      if (!first?.startAt) return '';
+                      try {
+                        const hh = new Date(first.startAt).toLocaleTimeString('fa-IR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                          timeZone: 'Asia/Tehran',
+                        });
+                        return `، اولی ساعت ${hh}`;
+                      } catch {
+                        return '';
+                      }
+                    })()
+                  }`
                 : 'امروز نوبتی در برنامه نیست'}
             </p>
           </div>
@@ -450,7 +468,10 @@ export default function ZibagarDashboard() {
       {/* Today's schedule */}
       <Card className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">📅 برنامه امروز</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold">📅 برنامه امروز</h2>
+            <Link href="/zibagar/bookings" className="text-xs text-blue hover:underline">تقویم هفتگی / لیست</Link>
+          </div>
           <Link href="/zibagar/bookings" className="text-sm text-blue hover:underline">
             همه رزروها
           </Link>

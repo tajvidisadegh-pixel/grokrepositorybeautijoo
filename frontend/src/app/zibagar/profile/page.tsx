@@ -249,7 +249,7 @@ export default function ZibagarProfilePage() {
           <>
             <p className="text-base font-semibold">تکمیل پروفایل — {percent}%</p>
             <CompletionBar percent={percent} fields={pro?.completion?.fields} showFields />
-            <p className="text-sm text-gray">پروفایل شما هنوز آماده انتشار نیست.</p>
+            <p className="text-sm text-gray">پروفایل شما هنوز آماده انتشار نیست (انتشار تا تکمیل موارد زیر قفل است).</p>
             <Link href="/zibagar/profile/complete">
               <Button size="sm">ادامه تکمیل پروفایل</Button>
             </Link>

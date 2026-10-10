@@ -69,6 +69,7 @@ export default function ZibagarPortfolioPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editServiceId, setEditServiceId] = useState('');
@@ -140,6 +141,10 @@ export default function ZibagarPortfolioPage() {
     setUploadProgress(0);
     setMsg(null);
     try {
+      const url = URL.createObjectURL(file);
+      setLocalPreview(url);
+    } catch { /* ignore */ }
+    try {
       await uploadMyMedia(file, 'portfolio', undefined, setUploadProgress);
       setMsg(video ? 'ویدیو آپلود شد.' : 'تصویر آپلود شد.');
       await load();
@@ -148,6 +153,8 @@ export default function ZibagarPortfolioPage() {
     } finally {
       setBusy(false);
       setUploadProgress(null);
+      if (localPreview) { try { URL.revokeObjectURL(localPreview); } catch { /* */ } }
+      setLocalPreview(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   }
@@ -255,6 +262,13 @@ export default function ZibagarPortfolioPage() {
         </div>
       </div>
 
+      {localPreview && (
+        <div className="overflow-hidden rounded-xl border border-border bg-white p-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={localPreview} alt="پیش‌نمایش" className="mx-auto max-h-40 rounded-lg object-contain" />
+          <p className="mt-1 text-center text-xs text-gray">پیش‌نمایش قبل از اتمام آپلود</p>
+        </div>
+      )}
       {uploadProgress != null && (
         <div className="rounded-xl border border-blue/20 bg-blue/5 px-3 py-3">
           <div className="mb-1 flex items-center justify-between text-xs">
