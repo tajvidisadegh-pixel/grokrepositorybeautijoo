@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'وضعیت سامانه', description: 'وضعیت سرویس‌های بیوتی‌جو' };
 
-type Health = { status?: string; database?: string; storage?: string; appVersion?: string; timestamp?: string };
+type Health = { status?: string; database?: string; storage?: string; appVersion?: string; timestamp?: string; payment?: string; sms?: string };
 
 async function fetchHealth(): Promise<Health | null> {
   const base = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || '';
@@ -32,7 +32,8 @@ export default async function StatusPage() {
       <Row label="API" ok={apiOk} detail={h?.appVersion} />
       <Row label="پایگاه داده" ok={h?.database === 'up'} detail={h?.database} />
       <Row label="ذخیره‌سازی" ok={h?.storage === 'up' || h?.storage === 'unconfigured'} detail={h?.storage || 'نامشخص'} />
-      <Row label="پرداخت / پیامک" ok={apiOk} detail="وابسته به API" />
+      <Row label="پرداخت" ok={h?.payment === "up" || h?.payment === "configured" || (apiOk && !h?.payment)} detail={h?.payment || "از health"} />
+      <Row label="پیامک" ok={h?.sms === "up" || h?.sms === "mock" || h?.sms === "configured" || (apiOk && !h?.sms)} detail={h?.sms || "از health"} />
       {h?.timestamp && <p className="text-center text-xs text-gray-muted" dir="ltr">{h.timestamp}</p>}
     </main>
   );

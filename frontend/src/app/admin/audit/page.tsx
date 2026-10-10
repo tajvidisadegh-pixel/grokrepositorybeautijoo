@@ -120,6 +120,14 @@ export default function AdminAuditPage() {
             </select>
           </div>
           <div>
+            
+          <div className="flex flex-wrap gap-1 text-[11px]">
+            <span className="text-gray">میانبر:</span>
+            {['impersonate', 'review.delete', 'booking.cancel', 'user.suspend', 'otp'].map((a) => (
+              <button key={a} type="button" className="rounded-full border border-border px-2 py-0.5" onClick={() => setAction(a)}>{a}</button>
+            ))}
+          </div>
+
             <label className="mb-1 block text-xs text-gray">شناسه عامل (actorId)</label>
             <input
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"

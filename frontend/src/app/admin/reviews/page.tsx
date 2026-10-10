@@ -92,6 +92,7 @@ export default function AdminReviewsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">نظرات و امتیازها</h1>
+      <p className="text-xs text-gray">مودراسیون: انتشار/پنهان و حذف با ثبت دلیل در لاگ audit انجام می‌شود.</p>
         <p className="mt-1 text-sm text-gray">تأیید، مخفی‌سازی یا حذف نظرات مشتریان</p>
       </div>
 

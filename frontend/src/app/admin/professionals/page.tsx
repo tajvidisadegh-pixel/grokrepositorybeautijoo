@@ -289,7 +289,10 @@ export default function AdminProfessionalsPage() {
                     {p.ratingAvg != null ? Number(p.ratingAvg).toFixed(1) : '—'} ({p.ratingCount ?? 0})
                   </td>
                   <td className="px-3 py-2">
-                    <span className="rounded-full bg-coral-soft px-2 py-0.5 text-xs text-coral">{persianProfessionalStatus(p.status)}</span>
+                    <span className="rounded-full bg-coral-soft px-2 py-0.5 text-xs text-coral">{persianProfessionalStatus(p.status)}
+                      {p.status === 'pending_review' && p.updatedAt && (Date.now() - new Date(p.updatedAt).getTime() > 24 * 3600_000) && (
+                        <span className="ms-1 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] text-red-800">SLA&gt;۲۴س</span>
+                      )}</span>
                     {p.isFeatured ? <span className="mr-1 text-xs text-amber-600">ویژه</span> : null}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">{p.createdAt ? formatDate(p.createdAt) : '—'}</td>

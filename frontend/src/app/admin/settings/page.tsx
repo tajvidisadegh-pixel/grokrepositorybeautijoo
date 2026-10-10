@@ -94,6 +94,18 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-6" dir="rtl">
+      <div className="rounded-3xl border border-border bg-white p-4 space-y-2">
+        <h2 className="font-bold">چک‌لیست انتشار نسخه</h2>
+        <ul className="list-disc space-y-1 pr-5 text-sm text-gray">
+          <li>prisma migrate deploy روی لیارا</li>
+          <li>SMS_PROVIDER واقعی یا mock</li>
+          <li>PAYMENT_PROVIDER و callback URL</li>
+          <li>NEXT_PUBLIC_API_URL / APP_URL</li>
+          <li>REMINDERS_ENABLED و JWT secrets</li>
+          <li>بعد از deploy: /status و یک رزرو آزمایشی</li>
+        </ul>
+      </div>
+
       <div>
         <h1 className="text-2xl font-bold">⚙️ تنظیمات پلتفرم</h1>
         <p className="mt-1 text-sm text-gray">

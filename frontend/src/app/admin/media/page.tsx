@@ -158,6 +158,7 @@ export default function AdminMediaPage() {
     <div className="space-y-6" dir="rtl">
       <div>
         <h1 className="text-2xl font-bold">رسانه‌ها</h1>
+      <p className="text-xs text-gray">مودراسیون رسانه: اقدامات تأیید/رد با دلیل در audit ثبت شود.</p>
         <p className="mt-1 text-sm text-gray">کتابخانه رسانه واقعی سیستم Beautijoo</p>
       </div>
 

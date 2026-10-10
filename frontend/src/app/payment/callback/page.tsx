@@ -1,5 +1,7 @@
 'use client';
 
+import { reportClientError } from '@/lib/client-error-report';
+
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -64,7 +66,7 @@ function PaymentCallbackBody() {
         }
         setMsg(`نتیجه: ${data.status || 'نامشخص'}`);
       } catch (e) {
-        if (!cancelled) setError(friendlyApiError(e));
+        if (!cancelled) { reportClientError("payment_callback", e); setError(friendlyApiError(e)); }
       }
     })();
 

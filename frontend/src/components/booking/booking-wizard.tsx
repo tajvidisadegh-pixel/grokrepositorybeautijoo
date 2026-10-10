@@ -1,5 +1,7 @@
 'use client';
 
+import { reportClientError } from '@/lib/client-error-report';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -325,6 +327,7 @@ export function BookingWizard({
         router.push(`/login?next=${encodeURIComponent(bookingLoginReturnPath(draft))}`);
         return;
       }
+      reportClientError("booking_submit", e);
       setSubmitError(friendlyApiError(e));
     } finally {
       setSubmitting(false);
