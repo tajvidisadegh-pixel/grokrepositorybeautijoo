@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -22,7 +24,7 @@ export default function Error({
       </p>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Button onClick={() => reset()}>تلاش مجدد</Button>
-        <a href="/" className="rounded-xl border border-border bg-white px-4 py-2 text-sm">بازگشت به صفحه اصلی</a>
+        <Link href="/" className="rounded-xl border border-border bg-white px-4 py-2 text-sm">بازگشت به صفحه اصلی</Link>
       </div>
     </div>
   );
