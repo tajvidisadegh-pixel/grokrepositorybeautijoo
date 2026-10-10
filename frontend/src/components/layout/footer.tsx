@@ -72,6 +72,16 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link href="/complaint" className="transition-colors hover:text-coral-light">
+                ثبت شکایت
+              </Link>
+            </li>
+            <li>
+              <Link href="/accessibility" className="transition-colors hover:text-coral-light">
+                دسترس‌پذیری
+              </Link>
+            </li>
+            <li>
               <Link href="/terms" className="transition-colors hover:text-coral-light">
                 شرایط استفاده
               </Link>

@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { ToastProvider } from '@/components/ui/app-toast';
 import './globals.css';
+import { MaintenanceBanner } from '@/components/layout/maintenance-banner';
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Beautijoo';
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -80,6 +81,8 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col antialiased">
+        <MaintenanceBanner />
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-coral focus:px-4 focus:py-2 focus:text-white">رد شدن به محتوا</a>
         <a href="#main-content" className="skip-link">
           پرش به محتوای اصلی
         </a>

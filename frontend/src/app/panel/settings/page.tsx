@@ -1,5 +1,7 @@
 'use client';
 
+import { ThemeToggle } from '@/components/theme/theme-toggle';
+
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
@@ -236,6 +238,13 @@ export default function PanelSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold">تنظیمات</h1>
         <p className="mt-1 text-sm text-gray">مدیریت حساب، نشست‌ها و اعلان‌ها</p>
+      <div className="flex items-center justify-between rounded-2xl border border-border bg-white px-4 py-3">
+        <div>
+          <p className="text-sm font-medium">حالت نمایش</p>
+          <p className="text-xs text-gray">روشن / تاریک</p>
+        </div>
+        <ThemeToggle />
+      </div>
       </div>
 
       <Card className="space-y-3">
@@ -318,6 +327,7 @@ export default function PanelSettingsPage() {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-lg font-semibold">نشست‌های فعال</h2>
+          <p className="text-xs text-gray">اگر دستگاهی را نمی‌شناسید، همان را لغو کنید یا «لغو همه نشست‌ها» را بزنید.</p>
           <Button variant="secondary" size="sm" onClick={onRevokeAll} disabled={sessions.length === 0}>
             لغو همه نشست‌ها
           </Button>

@@ -35,6 +35,15 @@ export default function AboutPage() {
           ارائه‌دهنده مستقیم خدمات زیبایی نیست؛ نقش ما اتصال، رزرو و تسهیل ارتباط است.
         </p>
 
+        
+        <h2 className="text-lg font-semibold text-[#0B2C4A]">مدل درآمد و مسئولیت</h2>
+        <ul className="list-disc space-y-1 pr-5">
+          <li>بیوتی‌جو واسط رزرو است؛ خدمت را زیباگر ارائه می‌دهد.</li>
+          <li>کارمزد پلتفرم از مبلغ رزرو طبق تنظیمات مالی کسر می‌شود و در پنل زیباگر قابل مشاهده است.</li>
+          <li>پرداخت آنلاین از درگاه معتبر انجام می‌شود؛ نتیجه در صفحه تأیید رزرو نمایش داده می‌شود.</li>
+          <li>برای شکایت یا پیگیری به صفحه «ثبت شکایت» مراجعه کنید.</li>
+        </ul>
+
         <h2 className="text-lg font-semibold text-[#0B2C4A]">ارتباط با ما</h2>
         <p>
           برای پشتیبانی یا پیشنهادها به صفحه{' '}
@@ -59,7 +68,11 @@ export default function AboutPage() {
         <Link href="/refund" className="text-[#2D6CDF] underline">
           کنسلی و بازپرداخت
         </Link>
+              <Link href="/complaint" className="text-[#2D6CDF] underline">
+          ثبت شکایت
+        </Link>
       </div>
     </div>
   );
 }
+
