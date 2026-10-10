@@ -424,8 +424,9 @@ export default async function ProfessionalProfilePage({ params }: Props) {
         if (tg) { const href = tg.startsWith('http') ? tg : `https://t.me/${tg.replace(/^@/, '')}`; items.push({ label: 'تلگرام', href, text: tg }); }
         const web = (sl.website || '').trim();
         if (web) { const href = web.startsWith('http') ? web : `https://${web}`; items.push({ label: 'وب‌سایت', href, text: web }); }
-        const phone = (sl.phone || '').trim();
-        if (phone) items.push({ label: 'تماس', href: `tel:${phone}`, text: phone });
+        // #62.37 — phone only after confirmed booking (panel), not on public profile
+        // const phone = (sl.phone || '').trim();
+        // if (phone) items.push(...);
         const wa = (sl.whatsapp || '').trim();
         if (wa) { const num = wa.replace(/\D/g, ''); items.push({ label: 'واتساپ', href: `https://wa.me/${num.startsWith('98') ? num : num.replace(/^0/, '98')}`, text: wa }); }
         if (!items.length) return null;
@@ -440,6 +441,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
         );
       })()}
 
+      <p className="mt-3 text-center text-xs text-gray-muted">شماره تماس زیباگر پس از تأیید رزرو در پنل شما نمایش داده می‌شود.</p>
       <StickyBookBar slug={pro.slug} />
     </div>
   );

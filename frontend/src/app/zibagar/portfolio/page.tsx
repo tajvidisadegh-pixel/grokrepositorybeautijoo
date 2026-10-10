@@ -13,6 +13,8 @@ import {
 } from '@/lib/panel-api';
 import { uploadMyMedia } from '@/lib/media-upload';
 import { formatPrice, parsePriceInput } from '@/lib/utils';
+import { ImageLightbox } from '@/components/media/image-lightbox';
+import { useToast } from '@/components/ui/app-toast';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
@@ -62,6 +64,7 @@ function readVideoDuration(file: File): Promise<number> {
 }
 
 export default function ZibagarPortfolioPage() {
+  const { success: toastSuccess } = useToast();
   const [items, setItems] = useState<MediaItem[]>([]);
   const [services, setServices] = useState<ProfessionalServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +73,7 @@ export default function ZibagarPortfolioPage() {
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editServiceId, setEditServiceId] = useState('');
@@ -147,6 +151,7 @@ export default function ZibagarPortfolioPage() {
     try {
       await uploadMyMedia(file, 'portfolio', undefined, setUploadProgress);
       setMsg(video ? 'ویدیو آپلود شد.' : 'تصویر آپلود شد.');
+      try { toastSuccess(video ? 'ویدیو آپلود شد' : 'تصویر آپلود شد'); } catch { /* */ }
       await load();
     } catch (e) {
       setMsg(friendlyApiError(e));
@@ -302,20 +307,32 @@ export default function ZibagarPortfolioPage() {
               <li key={m.id}>
                 <Card className="space-y-2 overflow-hidden p-2">
                   {vid ? (
-                    <video
-                      src={m.publicUrl || ''}
-                      className="aspect-square w-full rounded-xl bg-gray-light object-cover"
-                      muted
-                      playsInline
-                      controls
-                    />
+                    <button
+                      type="button"
+                      className="block w-full"
+                      onClick={() => setLightboxIndex(items.findIndex((x) => x.id === m.id))}
+                    >
+                      <video
+                        src={m.publicUrl || ''}
+                        className="aspect-square w-full rounded-xl bg-gray-light object-cover"
+                        muted
+                        playsInline
+                      />
+                    </button>
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={m.publicUrl || ''}
-                      alt={m.title || 'portfolio'}
-                      className="aspect-square w-full rounded-xl bg-gray-light object-cover"
-                    />
+                    <button
+                      type="button"
+                      className="block w-full"
+                      onClick={() => setLightboxIndex(items.findIndex((x) => x.id === m.id))}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={m.publicUrl || ''}
+                        alt={m.title || 'portfolio'}
+                        className="aspect-square w-full rounded-xl bg-gray-light object-cover"
+                      />
+                    </button>
                   )}
                   <div className="space-y-1 px-1 pb-1">
                     {m.title && <p className="truncate text-sm font-medium">{m.title}</p>}
@@ -437,6 +454,20 @@ export default function ZibagarPortfolioPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {lightboxIndex != null && (
+        <ImageLightbox
+          items={items.map((m) => ({
+            id: m.id,
+            url: m.publicUrl || m.url || '',
+            mimeType: m.mimeType || undefined,
+            caption: m.title || undefined,
+          }))}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+        />
       )}
     </div>
   );

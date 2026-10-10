@@ -18,6 +18,7 @@ import { fetchAvailability } from '@/lib/booking-api';
 import { shortBookingCode, copyBookingCode } from '@/lib/booking-code';
 import { persianBookingStatus, persianPaymentStatus, effectiveBookingStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
+import { AddToCalendarActions } from '@/components/booking/add-to-calendar';
 import { formatPrice, formatRelativeDate } from '@/lib/utils';
 
 type BookingWithReview = BookingListItem & {

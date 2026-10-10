@@ -20,7 +20,10 @@ export default function Error({
       <p className="mb-6 max-w-md text-sm text-gray">
         متأسفانه در پردازش درخواست شما مشکلی پیش آمد. می‌توانید دوباره تلاش کنید.
       </p>
-      <Button onClick={() => reset()}>تلاش مجدد</Button>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Button onClick={() => reset()}>تلاش مجدد</Button>
+        <a href="/" className="rounded-xl border border-border bg-white px-4 py-2 text-sm">بازگشت به صفحه اصلی</a>
+      </div>
     </div>
   );
 }
