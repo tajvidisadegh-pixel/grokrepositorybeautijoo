@@ -619,6 +619,7 @@ export function BookingWizard({
               </div>
             )}
           </div>
+          <p className="text-xs text-gray">حداقل چند ساعت قبل از نوبت؛ زمان‌های خیلی نزدیک قبول نمی‌شوند.</p>
           <Button className="w-full" disabled={!slotStart} onClick={goSummary}>
             ادامه به خلاصه
           </Button>

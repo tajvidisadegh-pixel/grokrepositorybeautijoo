@@ -18,6 +18,7 @@ function LoginForm() {
   const search = useSearchParams();
   const nextParam = search?.get('next');
   const asParam = search?.get('as');
+  const sessionExpired = search?.get('expired') === '1';
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -88,6 +89,11 @@ function LoginForm() {
         </p>
       </div>
 
+      {sessionExpired && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+          نشست شما منقضی شده است. لطفاً دوباره وارد شوید.
+        </div>
+      )}
       <Card className="p-6">
         <div className="mb-4 flex gap-2 rounded-xl bg-muted p-1">
           <button
