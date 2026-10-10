@@ -1,0 +1,19 @@
+name: fix-sla-createdat
+on:
+  push:
+    paths:
+      - scripts/fix_sla_createdat.py
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_sla_createdat.py
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m 'fix: SLA badge createdAt typing (#61.31)' && git push)
