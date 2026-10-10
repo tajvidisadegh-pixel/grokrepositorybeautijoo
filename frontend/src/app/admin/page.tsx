@@ -394,6 +394,19 @@ export default function AdminDashboardPage() {
           </ul>
         </Card>
       )}
+
+      <Card className="space-y-2 p-4">
+        <h2 className="font-semibold">هشدار تقلب / نرخ غیرعادی</h2>
+        <p className="text-xs text-gray">
+          رزروهای لغوشده پرتکرار و OTP مشکوک را از لاگ audit بررسی کنید.
+        </p>
+        <div className="flex flex-wrap gap-2 text-sm">
+          <a href="/admin/audit" className="text-coral underline">لاگ audit</a>
+          <a href="/admin/bookings" className="text-coral underline">رزروها</a>
+          <a href="/admin/users" className="text-coral underline">کاربران</a>
+        </div>
+      </Card>
+
     </div>
   );
 }

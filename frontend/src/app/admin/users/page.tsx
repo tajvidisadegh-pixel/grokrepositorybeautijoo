@@ -150,10 +150,14 @@ export default function AdminUsersPage() {
   };
 
   const changeStatus = async (id: string, newStatus: string) => {
+    const reason = (newStatus === 'suspended' || newStatus === 'blocked')
+      ? (window.prompt('دلیل تعلیق (اختیاری):') ?? undefined)
+      : undefined;
+    if ((newStatus === 'suspended' || newStatus === 'blocked') && reason === undefined && false) return;
     setBusy(true);
     setActionMsg(null);
     try {
-      await adminSetUserStatus(id, newStatus === 'blocked' ? 'suspended' : newStatus);
+      await adminSetUserStatus(id, newStatus === 'blocked' ? 'suspended' : newStatus, reason);
       setActionMsg('وضعیت به‌روز شد');
       await load();
       if (detail?.id === id) await openDetail(id);
@@ -402,7 +406,7 @@ export default function AdminUsersPage() {
                       <button type="button" className="rounded border px-2 py-0.5 text-xs" onClick={() => openDetail(u.id)}>جزئیات</button>
                       <button type="button" className="rounded border px-2 py-0.5 text-xs" onClick={() => openNotify([u.id])}>اعلان</button>
                       {u.status === 'active' ? (
-                        <button type="button" className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-700" disabled={busy} onClick={() => changeStatus(u.id, 'suspended')}>مسدود</button>
+                        <button type="button" className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-700" disabled={busy} onClick={() => { const r = window.prompt('دلیل تعلیق / مسدودسازی:'); if (r === null) return; void changeStatus(u.id, 'suspended'); }}>مسدود</button>
                       ) : (
                         <button type="button" className="rounded border border-green-300 px-2 py-0.5 text-xs text-green-700" disabled={busy} onClick={() => changeStatus(u.id, 'active')}>فعال</button>
                       )}
