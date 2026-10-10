@@ -73,7 +73,7 @@ export function ProfessionalCard({ pro, className }: Props) {
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-muted sm:mt-2">
             {rating && count > 0 && (
-              <span className="text-amber-500">
+              <span className="text-amber-500" aria-label={`امتیاز ${rating} از ۵`}>
                 ★ {rating}{' '}
                 <span className="text-gray-muted">({count} نظر)</span>
               </span>

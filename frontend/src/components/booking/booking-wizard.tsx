@@ -609,7 +609,7 @@ export function BookingWizard({
                           ? 'border-coral bg-coral text-white'
                           : available
                             ? 'border-border bg-white hover:border-coral'
-                            : 'cursor-not-allowed border-border bg-gray-light text-gray-muted'
+                            : 'cursor-not-allowed border-red-300 bg-red-50 text-red-700 line-through opacity-80'
                       }`}
                     >
                       {s.start}
