@@ -1,3 +1,4 @@
+/** #62.10 — full booking lifecycle coverage (create → pay path → complete → review). */
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp } from '../helpers/test-app';
