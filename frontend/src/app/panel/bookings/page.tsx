@@ -420,6 +420,23 @@ async function submitReview(bookingId: string) {
                           تماس با زیباگر: {(b.professional as { user?: { phone?: string | null } }).user!.phone}
                         </a>
                       ) : null}
+                      <div className="mt-2 w-full max-w-[240px]">
+                        <AddToCalendarActions
+                          booking={{
+                            id: b.id,
+                            startAt: b.startAt,
+                            endAt: b.endAt,
+                            totalPrice: b.totalPrice,
+                            status: b.status,
+                          }}
+                          proName={
+                            (b.professional as { user?: { profile?: { displayName?: string } }; title?: string } | undefined)
+                              ?.user?.profile?.displayName ||
+                            (b.professional as { title?: string } | undefined)?.title ||
+                            'زیباگر'
+                          }
+                        />
+                      </div>
                       <div className="mt-1">
                         <button
                           type="button"
