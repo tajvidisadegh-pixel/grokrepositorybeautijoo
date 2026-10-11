@@ -39,7 +39,8 @@ function collectRoots(tree: CatNode[]): CatNode[] {
   // API returns only roots with nested children
   const hasNested = tree.some((c) => (c.children && c.children.length > 0) || c.parentId == null);
   if (hasNested && tree.every((c) => !c.parentId || tree.every((x) => x.id !== c.parentId))) {
-    return tree.filter((c) => !c.parentId) .length ? tree.filter((c) => !c.parentId) : tree;
+    const top = tree.filter((c) => !c.parentId);
+    return top.length ? top : tree;
   }
   return tree.filter((c) => !c.parentId);
 }
