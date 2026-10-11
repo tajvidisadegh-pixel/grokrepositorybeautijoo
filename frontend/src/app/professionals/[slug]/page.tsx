@@ -13,7 +13,6 @@ import { SalonMediaGallery } from '@/components/professionals/salon-media-galler
 import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
 import LocationMapView from '@/components/location/location-map-view'
 import { StickyBookBar } from '@/components/professionals/sticky-book-bar';
-import { ShareProfileButton } from '@/components/professionals/share-profile-button';
 import { OpenStatusBadge } from '@/components/professionals/open-status-badge';
 
 type Props = {
@@ -241,7 +240,6 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                 )}
               <div className="min-w-0 flex-1">
                 <h1 className="text-xl font-bold text-blue sm:text-2xl">{name}</h1>
-                <div className="mt-2"><ShareProfileButton slug={pro.slug} name={name} /></div>
                 {pro.title && pro.title !== name && (
                   <p className="mt-1 text-sm text-gray">{pro.title}</p>
                 )}
@@ -414,32 +412,6 @@ export default async function ProfessionalProfilePage({ params }: Props) {
       )}
 
       {/* Issue #36 */}
-      {(() => {
-        const sl = (pro as { socialLinks?: Record<string, string | null> | null }).socialLinks;
-        if (!sl || typeof sl !== 'object') return null;
-        const items: { label: string; href: string; text: string }[] = [];
-        const ig = (sl.instagram || '').trim();
-        if (ig) { const href = ig.startsWith('http') ? ig : `https://instagram.com/${ig.replace(/^@/, '')}`; items.push({ label: 'اینستاگرام', href, text: ig }); }
-        const tg = (sl.telegram || '').trim();
-        if (tg) { const href = tg.startsWith('http') ? tg : `https://t.me/${tg.replace(/^@/, '')}`; items.push({ label: 'تلگرام', href, text: tg }); }
-        const web = (sl.website || '').trim();
-        if (web) { const href = web.startsWith('http') ? web : `https://${web}`; items.push({ label: 'وب‌سایت', href, text: web }); }
-        // #62.37 — phone only after confirmed booking (panel), not on public profile
-        // const phone = (sl.phone || '').trim();
-        // if (phone) items.push(...);
-        const wa = (sl.whatsapp || '').trim();
-        if (wa) { const num = wa.replace(/\D/g, ''); items.push({ label: 'واتساپ', href: `https://wa.me/${num.startsWith('98') ? num : num.replace(/^0/, '98')}`, text: wa }); }
-        if (!items.length) return null;
-        return (
-          <p className="mt-6 border-t border-border/40 pt-4 text-center text-xs text-gray-muted">
-            {items.map((it, i) => (
-              <span key={it.label}>{i > 0 && <span className="mx-2 opacity-40">.</span>}
-                <a href={it.href} target="_blank" rel="noopener noreferrer" className="hover:text-coral transition-colors">{it.label}: <span dir="ltr">{it.text}</span></a>
-              </span>
-            ))}
-          </p>
-        );
-      })()}
 
       <p className="mt-3 text-center text-xs text-gray-muted">شماره تماس زیباگر پس از تأیید رزرو در پنل شما نمایش داده می‌شود.</p>
       <p className="mt-2 text-center text-xs text-gray-muted">رزرو آنلاین مشمول حداقل زمان از قبل و ظرفیت روز زیباگر است؛ اسلات‌های پر قابل انتخاب نیستند.</p>
