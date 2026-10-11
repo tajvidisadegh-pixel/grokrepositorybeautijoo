@@ -4,15 +4,12 @@ import path from 'path';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: 'standalone',
-  // In Docker (context = frontend/) tracing root is this app dir.
-  // In monorepo local builds, parent still works if present.
+  // Must match Docker WORKDIR/package root so traced node_modules (incl. next) land next to server.js
   outputFileTracingRoot: path.join(__dirname),
-  // Lint noise must not block Liara production image builds.
   eslint: {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    // Typecheck runs in CI; don't fail docker image on pre-existing strict noise.
     ignoreBuildErrors: false,
   },
   images: {
