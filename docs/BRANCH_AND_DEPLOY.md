@@ -13,82 +13,59 @@
 
 ### ممنوع
 
-- دیپلوی **بک‌اند** از `main` (مسیر و ساختار برای لیارا اشتباه است / نسخه قدیمی می‌ماند).
+- دیپلوی **بک‌اند** از `main`.
 - دیپلوی **فرانت** از `beautijoo-backend-export`.
-- پوش مستقیم به `main` یا `beautijoo-backend-export` وقتی CI قرمز است.
-- فرض اینکه «کامیت روی main = روی سایت آمده» — تا **Redeploy لیارا** نشود، سایت عوض نمی‌شود.
+- پوش مستقیم به `main` یا export وقتی CI قرمز است.
+- فرض اینکه «کامیت روی main = روی سایت آمده» بدون Redeploy لیارا.
 
 ---
 
 ## ۲) کد حتماً سالم باشد قبل از برنچ اصلی
 
-1. تغییر را روی برنچ کاری / PR بساز.
-2. **CI روی GitHub باید سبز شود** (Frontend build + Backend build + در صورت نیاز e2e).
-3. فقط بعد از سبز بودن، به **`main`** merge/push کن.
-4. اگر تغییر داخل **`backend/`** بود:
-   - حتماً برنچ **`beautijoo-backend-export`** را همگام کن (workflow: `sync-backend-export` یا Actions مربوط به sync).
-   - بدون این قدم، لیارا بک‌اند نسخهٔ قدیمی می‌گیرد.
-5. در پنل لیارا **Redeploy** بزن:
-   - فرانت ← از `main`
-   - بک‌اند ← از `beautijoo-backend-export`
-6. در صورت migration جدید: بعد از بالا آمدن بک‌اند، `prisma migrate deploy` (اگر استارت کانتینر خودش اجرا نمی‌کند).
-
-### تعریف «سالم»
-
-- TypeScript/build بدون خطا
-- تست‌های اجباری CI پاس
-- بدون شکستن مسیر رزرو / لاگین / پنل زیباگر به‌صورت عمدی
-- برای فیچرهای وابسته به env (پرداخت، یادآوری، نقشه): در ایشو فنی (#42) env لازم نوشته شده باشد
+1. CI روی GitHub **سبز**.
+2. Merge/push به **`main`**.
+3. اگر `backend/` عوض شد → همگام **`beautijoo-backend-export`**.
+4. Redeploy لیارا (فرانت از main، بک‌اند از export).
+5. migration در صورت نیاز.
 
 ---
 
-## ۳) جریان صحیح (خلاصه)
+## ۳) ترتیب deploy فرانت و بک‌اند (مهم)
 
 ```
-کد سالم + CI سبز
-        ↓
-     main  ──────────────►  لیارا فرانت (Redeploy)
-        │
-        │  (فقط اگر backend/ عوض شد)
-        ↓
-beautijoo-backend-export  ►  لیارا بک‌اند (Redeploy)
+۱) بک‌اند بالا و /health سالم
+۲) فرانت بیلد با NEXT_PUBLIC_API_URL درست
+۳) اگر Collecting page data > ۲۰ دقیقه → Cancel، API را چک کن
 ```
+
+صفحات SSR/sitemap در **زمان بیلد** به API درخواست می‌زنند. اگر API نباشد، بیلد می‌تواند روی `Collecting page data` آویزان شود.
+
+- همهٔ این درخواست‌ها باید از `frontend/src/lib/public-api.ts` با **timeout** بروند.
+- جزئیات و علائم لاگ: **README.md** بخش «هشدار استقرار فرانت».
 
 ---
 
 ## ۴) همگام‌سازی بک‌اند
 
-بعد از هر تغییر معنادار در `backend/` روی `main`:
+بعد از تغییر `backend/` روی `main`:
 
-```bash
-# از GitHub Actions:
-# Workflow: sync-backend-export  →  Run workflow
-```
-
-یا معادل: محتوای `backend/` از `main` روی برنچ `beautijoo-backend-export` قرار بگیرد و push شود.
-
-**چک:** آخرین کامیت export باید بگوید sync از main با SHA نزدیک به HEAD فعلی `main`.
+- Actions → workflow **`sync-backend-export`**
 
 ---
 
-## ۵) Env حداقل production (یادآوری)
+## ۵) Env حداقل
 
-جزئیات کامل: ایشو **#42** و `DEPLOY_LIARA.md`.
+ایشو **#42** و `DEPLOY_LIARA.md`.
 
-فرانت: `NEXT_PUBLIC_API_URL` و …  
-بک‌اند: `DATABASE_URL`, JWTها, در صورت نیاز `PAYMENT_PROVIDER`, `REMINDERS_*`, SMS
-
-بدون env درست، کد «انجام‌شده» روی سرور خاموش می‌ماند.
+فرانت بیلد: `NEXT_PUBLIC_API_URL` = آدرس واقعی API production.
 
 ---
 
 ## ۶) برای عامل‌ها / Grok / PR
 
-- پیش‌فرض: همهٔ کار فرانت و بک‌اند در ریپو روی **`main`** (مسیرهای `frontend/` و `backend/`).
-- بعد از تغییر بک‌اند: **همگام export را فراموش نکن.**
-- هرگز «انجام شد روی سایت» ننویس مگر deploy + تست دستی تأیید شده باشد.
-- این فایل را نقض نکن.
+- کار روی `main` در مسیرهای `frontend/` و `backend/`.
+- بعد از backend → sync export.
+- «انجام شد روی سایت» فقط بعد از deploy + تست دستی.
+- **هرگز** fetch بدون timeout به API در مسیر بیلد (RSC / sitemap / generateMetadata) اضافه نکن.
 
----
-
-**مرتبط:** `DEPLOY_LIARA.md` · `DEPLOYMENT.md` · `docs/CI_CD.md` · Issue #42
+**مرتبط:** `README.md` · `DEPLOY_LIARA.md` · `DEPLOYMENT.md` · Issue #42

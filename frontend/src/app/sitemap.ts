@@ -3,7 +3,8 @@ import { listCategories, searchProfessionals } from '@/lib/public-api';
 import { absoluteUrl } from '@/lib/seo';
 
 const PRO_PAGE_SIZE = 100;
-const PRO_MAX_PAGES = 20; // up to ~2000 profiles
+/** Cap at build so Liara does not spend many minutes paging API if slow */
+const PRO_MAX_PAGES = 5;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -95,7 +96,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     }));
   } catch {
-    /* ignore */
+    /* ignore — never block build */
   }
 
   return [...staticRoutes, ...categoryRoutes, ...proRoutes, ...cityRoutes];
