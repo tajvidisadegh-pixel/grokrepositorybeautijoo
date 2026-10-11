@@ -33,6 +33,55 @@ beautijoo/
 
 ---
 
+## هشدار استقرار فرانت — ۵۰۲ و `Cannot find module 'next'`
+
+### علامت در لاگ runtime لیارا
+
+```text
+Error: Cannot find module 'next'
+Require stack: - /app/standalone/server.js
+```
+
+یا سایت **۵۰۲ Bad Gateway** بعد از deploy «موفق».
+
+### علت
+
+Next با `output: 'standalone'` باید این‌طور اجرا شود:
+
+```text
+WORKDIR = جایی که server.js و node_modules (شامل next) کنار هم‌اند
+دستور: node server.js
+```
+
+اگر دستور استارت این باشد، **module resolution می‌شکند**:
+
+```text
+node standalone/server.js     ← ممنوع
+node /app/standalone/server.js  ← ممنوع
+```
+
+چون `next` نسبت به مسیر اشتباه resolve می‌شود و پروسه کرش می‌کند → پروکسی لیارا **۵۰۲** می‌دهد.
+
+### قانون تا دوباره پیش نیاید
+
+1. **Dockerfile فرانت:** `frontend/Dockerfile` — در image نهایی `server.js` در `/app/server.js` باشد.
+2. **دستور Start در لیارا:** خالی بگذار تا همان `CMD` داکر اجرا شود، یا فقط:
+   ```text
+   node server.js
+   ```
+3. **هرگز** Start دستی `node standalone/server.js` نگذار.
+4. **Build context** باید پوشهٔ **`frontend/`** باشد (نه root کل monorepo)، مگر Dockerfile مخصوص root نوشته شده باشد.
+5. پورت سرویس: **3000**.
+6. بیلد ایمیج اگر `next` داخل standalone نباشد باید **همان‌جا fail** شود (چک داخل Dockerfile) تا به runtime نرسد.
+
+### اگر دوباره ۵۰۲ دیدی
+
+1. لاگ runtime را برای `Cannot find module 'next'` چک کن.
+2. Start Command لیارا را اصلاح/پاک کن.
+3. از `main` با `frontend/Dockerfile` دوباره Deploy کن.
+
+---
+
 ## هشدار استقرار فرانت — گیر کردن روی `Collecting page data`
 
 ### اشتباه رایج (یک ساعت «در حال ساختن»)
@@ -42,36 +91,23 @@ beautijoo/
 ```text
 Warning: 'x' is assigned a value but never used
 …
-info - Need to disable some ESLint rules?
 Collecting page data ...
 ```
 
-اگر ساعت‌ها روی **`Collecting page data`** بماند، علت تقریباً همیشه این است:
+اگر ساعت‌ها روی **`Collecting page data`** بماند:
 
 | علت | توضیح |
 |-----|--------|
-| API در بیلد در دسترس نیست / کند است | صفحهٔ اصلی، sitemap، دسته و … در build به `NEXT_PUBLIC_API_URL` درخواست می‌زنند |
-| آدرس API اشتباه در env بیلد لیارا | مثلاً localhost یا دامنهٔ قدیمی |
-| بک‌اند هنوز deploy / سالم نیست | فرانت را قبل از API پایدار بیلد نکنید |
+| API در بیلد در دسترس نیست / کند است | صفحهٔ اصلی، sitemap و … به `NEXT_PUBLIC_API_URL` درخواست می‌زنند |
+| آدرس API اشتباه در env بیلد | مثلاً localhost |
+| بک‌اند هنوز بالا نیست | اول API، بعد فرانت |
 
-### قانون تا دوباره پیش نیاید
+### قانون
 
-1. **اول بک‌اند** روی `beautijoo-backend-export` بالا و سالم باشد؛ **بعد** بیلد فرانت.
-2. در لیارا فرانت حتماً:
-   ```text
-   NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1
-   ```
-   (آدرس واقعی production — نه localhost)
-3. درخواست‌های public در بیلد **timeout** دارند (`frontend/src/lib/public-api.ts`، حدود ۱۲ث). اگر بیلد باز هم >۱۵–۲۰ دقیقه روی Collecting ماند → **Cancel** و API/env را چک کن؛ صبر یک‌ساعته فایده ندارد.
-4. Warningهای ESLint را با hang اشتباه نگیر؛ بعد از lint باید `Collecting page data` / `Compiling` / `Build finished` بیاید.
-5. هر `fetch` سمت سرور برای صفحهٔ عمومی باید از `@/lib/public-api` با timeout برود — **fetch بدون timeout به API در RSC/sitemap ممنوع**.
-
-### اگر بیلد گیر کرد
-
-1. Cancel در لیارا  
-2. سلامت `GET {API}/health` را چک کن  
-3. env بیلد فرانت را چک کن  
-4. Redeploy از **`main`** بعد از سبز بودن CI  
+1. اول بک‌اند سالم؛ بعد بیلد فرانت.
+2. `NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1` (آدرس واقعی).
+3. timeout در `frontend/src/lib/public-api.ts` (~۱۲ث). بیش از ۲۰ دقیقه روی Collecting → **Cancel**.
+4. fetch بدون timeout در RSC/sitemap ممنوع.
 
 ---
 
