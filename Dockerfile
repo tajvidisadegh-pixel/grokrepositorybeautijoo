@@ -1,12 +1,14 @@
-FROM node:22-bookworm-slim AS builder
+# Liara frontend (repo root). Build frontend in isolation so Next standalone
+# includes a COMPLETE next install — never partially copy next (breaks ESM paths).
 
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV PUBLIC_API_TIMEOUT_MS=12000
+ENV DOCKER_STANDALONE=1
 
-# NEXT_PUBLIC_* are baked into the client bundle at build time.
 ARG NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1
 ARG NEXT_PUBLIC_APP_URL=https://beautijoo.ir
 ARG NEXT_PUBLIC_APP_NAME=Beautijoo
@@ -14,50 +16,49 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 
-COPY package.json ./
-COPY frontend/package.json ./frontend/package.json
-COPY backend/package.json ./backend/package.json
-RUN npm install --include=dev
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-COPY frontend ./frontend
-
+COPY frontend/ ./
 RUN npm run build
 
-# Fail early if standalone missing
-RUN test -n "$(find /app/frontend/.next/standalone -type f -name server.js -print -quit)"
-
-# If workspace hoist left `next` outside standalone, copy it beside server.js
+# Expect flat standalone (DOCKER_STANDALONE=1)
 RUN set -e; \
-  SERVER=$(find /app/frontend/.next/standalone -type f -name server.js -print -quit); \
-  SERVER_DIR=$(dirname "$SERVER"); \
-  if [ ! -d "$SERVER_DIR/node_modules/next" ]; then \
-    echo "Patching next into standalone at $SERVER_DIR"; \
-    mkdir -p "$SERVER_DIR/node_modules"; \
-    if [ -d /app/node_modules/next ]; then cp -a /app/node_modules/next "$SERVER_DIR/node_modules/"; \
-    elif [ -d /app/frontend/node_modules/next ]; then cp -a /app/frontend/node_modules/next "$SERVER_DIR/node_modules/"; \
-    else echo "ERROR: next package not found to copy"; exit 1; fi; \
-    for p in react react-dom styled-jsx; do \
-      if [ -d "/app/node_modules/$p" ]; then cp -a "/app/node_modules/$p" "$SERVER_DIR/node_modules/" || true; fi; \
-      if [ -d "/app/frontend/node_modules/$p" ]; then cp -a "/app/frontend/node_modules/$p" "$SERVER_DIR/node_modules/" || true; fi; \
-    done; \
+  if [ -f .next/standalone/server.js ]; then \
+    echo "standalone OK at .next/standalone"; \
+  elif [ -f .next/standalone/frontend/server.js ]; then \
+    echo "nested standalone — flattening"; \
+    cp -a .next/standalone/frontend/. .next/standalone/; \
+    rm -rf .next/standalone/frontend; \
+  else \
+    echo "server.js missing"; find .next -name server.js; exit 1; \
   fi; \
-  test -d "$SERVER_DIR/node_modules/next"
+  test -f .next/standalone/server.js; \
+  test -d .next/standalone/node_modules/next; \
+  test -e .next/standalone/node_modules/next/dist/server/web/exports/index.js || \
+  test -e .next/standalone/node_modules/next/dist/server/web/exports/index.js.map || \
+  ls .next/standalone/node_modules/next/dist/server/web/exports/ | head
 
 FROM node:22-bookworm-slim AS runner
-
 WORKDIR /app
-
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Same layout as the previously working image
-COPY --from=builder /app/frontend/.next/standalone ./standalone
-COPY --from=builder /app/frontend/.next/static ./next-static
-COPY --from=builder /app/frontend/public ./next-public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+# Liara may start: node /app/standalone/server.js — full tree mirror (not frontend/ nested)
+RUN mkdir -p /app/standalone \
+  && cp -a /app/server.js /app/standalone/server.js \
+  && cp -a /app/node_modules /app/standalone/node_modules \
+  && mkdir -p /app/standalone/.next \
+  && cp -a /app/.next/. /app/standalone/.next/ \
+  && cp -a /app/public /app/standalone/public \
+  && test -f /app/standalone/server.js \
+  && test -d /app/standalone/node_modules/next
 
 EXPOSE 3000
-
-# Locate server.js, attach static/public, start from that directory (resolves next)
-CMD ["sh", "-c", "SERVER=$(find /app/standalone -type f -name server.js -print -quit); test -n \"$SERVER\"; SERVER_DIR=$(dirname \"$SERVER\"); mkdir -p \"$SERVER_DIR/.next\"; cp -a /app/next-static \"$SERVER_DIR/.next/static\"; cp -a /app/next-public \"$SERVER_DIR/public\"; cd \"$SERVER_DIR\"; exec node \"$(basename \"$SERVER\")\""]
+CMD ["node", "server.js"]
