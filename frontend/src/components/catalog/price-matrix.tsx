@@ -18,7 +18,7 @@ type Props = {
   onBatchApply: (labels: string[], price: number) => Promise<void>;
 };
 
-/** جدول قیمت + اعمال دسته‌ای — مطابق طرح #60 */
+/** جدول قیمت + اعمال دسته‌ای روی انتخاب‌شده‌ها */
 export function PriceMatrix({ title, cells, busy, onSaveCell, onBatchApply }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchPrice, setBatchPrice] = useState('');
@@ -41,11 +41,18 @@ export function PriceMatrix({ title, cells, busy, onSaveCell, onBatchApply }: Pr
   }
 
   async function applyBatch() {
-    const price = Math.max(0, Math.round(Number(batchPrice.replace(/,/g, '')) || 0));
-    if (!selected.size || price <= 0) return;
+    const price = Math.max(0, Math.round(Number(String(batchPrice).replace(/,/g, '')) || 0));
+    if (!selected.size) return;
+    if (price <= 0) return;
     await onBatchApply([...selected], price);
     setSelected(new Set());
     setBatchPrice('');
+    // refresh drafts for selected
+    setDrafts((d) => {
+      const n = { ...d };
+      for (const l of selected) n[l] = String(price);
+      return n;
+    });
   }
 
   return (
@@ -53,13 +60,15 @@ export function PriceMatrix({ title, cells, busy, onSaveCell, onBatchApply }: Pr
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold text-[#0B2C4A]">{title}</h3>
         <button type="button" className="text-xs text-coral" onClick={toggleAll}>
-          {selected.size === allLabels.length ? 'لغو انتخاب همه' : 'انتخاب همه'}
+          {selected.size === allLabels.length && allLabels.length > 0
+            ? 'لغو انتخاب همه'
+            : 'انتخاب همه'}
         </button>
       </div>
 
-      <div className="rounded-xl border border-coral/30 bg-coral-soft/40 p-3 space-y-2">
+      <div className="space-y-2 rounded-xl border border-coral/30 bg-[#FFE6E2]/40 p-3">
         <p className="text-sm font-medium text-[#0B2C4A]">اعمال قیمت یکسان روی موارد انتخاب‌شده</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             className="max-w-[160px]"
             inputMode="numeric"
@@ -73,12 +82,18 @@ export function PriceMatrix({ title, cells, busy, onSaveCell, onBatchApply }: Pr
             disabled={busy || selected.size === 0 || !batchPrice}
             onClick={() => void applyBatch()}
           >
-            اعمال روی {selected.size.toLocaleString('fa-IR')} مورد
+            اعمال روی {selected.size > 0 ? selected.size.toLocaleString('fa-IR') : '…'} مورد
           </Button>
         </div>
+        <p className="text-[11px] text-gray">
+          ردیف‌ها را تیک بزنید، قیمت را بنویسید، «اعمال» را بزنید — یا برای هر ردیف جداگانه «ذخیره».
+        </p>
       </div>
 
       <ul className="divide-y divide-border rounded-xl border border-border">
+        {cells.length === 0 && (
+          <li className="px-3 py-4 text-center text-sm text-gray">هنوز ردیف قیمتی نیست</li>
+        )}
         {cells.map((c) => {
           const val = drafts[c.label] ?? (c.price > 0 ? String(c.price) : '');
           return (
@@ -103,7 +118,10 @@ export function PriceMatrix({ title, cells, busy, onSaveCell, onBatchApply }: Pr
                 variant="outline"
                 disabled={busy}
                 onClick={() => {
-                  const price = Math.max(0, Math.round(Number((drafts[c.label] ?? val).replace(/,/g, '')) || 0));
+                  const price = Math.max(
+                    0,
+                    Math.round(Number(String(drafts[c.label] ?? val).replace(/,/g, '')) || 0),
+                  );
                   void onSaveCell(c.label, price, c.ruleId);
                 }}
               >

@@ -1,15 +1,13 @@
 'use client';
 
 /**
- * منوی خدمات زیباگر — کاربردی و کامل
- * ساختار همیشه از CATALOG_TEMPLATE (حتی اگر API ناقص باشد).
- * اتصال به کاتالوگ واقعی: تطبیق نام خدمت، در صورت نبود ایجاد زیر دستهٔ موجود.
+ * منوی خدمات زیباگر — تخصص → خدمت → جدول قیمت (اعمال تکی و دسته‌ای)
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PanelLoading, PanelError } from '@/components/panel/state-blocks';
+import { PanelLoading } from '@/components/panel/state-blocks';
 import {
   fetchCategories,
   fetchMyServices,
@@ -47,7 +45,7 @@ type CatNode = CatalogCategory & {
 type FlatSvc = { id: string; name: string; categoryId?: string; slug?: string };
 
 function norm(s: string) {
-  return s.trim().replace(/\s+/g, ' ');
+  return (s || '').trim().replace(/\s+/g, ' ');
 }
 
 function flattenCats(nodes: CatNode[], out: CatNode[] = []): CatNode[] {
@@ -75,6 +73,12 @@ function findFamilyCat(tree: CatNode[], root: CatNode | null, familyName: string
   return kids.find((c) => norm(c.name) === norm(familyName)) || null;
 }
 
+function anyCategoryId(tree: CatNode[]): string | null {
+  const all = flattenCats(tree);
+  const root = all.find((c) => !c.parentId);
+  return root?.id || all[0]?.id || null;
+}
+
 function findServiceByName(list: FlatSvc[], name: string): FlatSvc | null {
   const n = norm(name);
   return list.find((s) => norm(s.name) === n) || null;
@@ -85,7 +89,6 @@ export default function ZibagarServicesPage() {
   const [tree, setTree] = useState<CatNode[]>([]);
   const [flatServices, setFlatServices] = useState<FlatSvc[]>([]);
   const [mine, setMine] = useState<ProfessionalServiceItem[]>([]);
-  /** specialty slugs selected */
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [openFamily, setOpenFamily] = useState<string | null>(null);
@@ -97,6 +100,7 @@ export default function ZibagarServicesPage() {
   const [durationMin, setDurationMin] = useState(60);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -119,7 +123,6 @@ export default function ZibagarServicesPage() {
         : (allSvcs as { items?: FlatSvc[] })?.items || [];
       setFlatServices(flat);
 
-      // restore selected specialties from pro.selectedCategoryIds matched to template
       const selIds = (pro as { selectedCategoryIds?: string[] } | null)?.selectedCategoryIds;
       if (Array.isArray(selIds) && selIds.length) {
         const all = flattenCats(cats as CatNode[]);
@@ -132,7 +135,10 @@ export default function ZibagarServicesPage() {
           );
           if (sp && !slugs.includes(sp.slug)) slugs.push(sp.slug);
         }
-        if (slugs.length) setSelectedSlugs(slugs);
+        if (slugs.length) {
+          setSelectedSlugs(slugs);
+          setActiveSlug((prev) => prev || slugs[0]);
+        }
       }
     } catch (e) {
       setError(friendlyApiError(e));
@@ -159,6 +165,16 @@ export default function ZibagarServicesPage() {
     }
     return m;
   }, [mine]);
+
+  const filteredFamilies = useMemo(() => {
+    if (!activeSpecialty) return [];
+    const q = familySearch.trim();
+    return activeSpecialty.families.filter((f) => {
+      if (!q) return true;
+      if (f.name.includes(q)) return true;
+      return f.variants.some((v) => v.name.includes(q));
+    });
+  }, [activeSpecialty, familySearch]);
 
   async function persistSelected(slugs: string[]) {
     const ids: string[] = [];
@@ -191,18 +207,25 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  /** Resolve or create catalog Service for a template variant, then open pricing */
-  async function enableAndPrice(family: CatalogFamily, variant: CatalogVariant) {
-    if (!activeSpecialty) return;
+  /** Resolve catalog service + pro offer, open price matrix (step 3) */
+  async function enableAndPrice(family: CatalogFamily, variant: CatalogVariant, specialty?: CatalogSpecialty | null) {
+    const sp = specialty || activeSpecialty;
+    if (!sp) {
+      setError('ابتدا یک تخصص را از چیپ‌های بالا انتخاب کنید.');
+      return;
+    }
+    const key = `${family.name}::${variant.name}`;
     setBusy(true);
+    setBusyKey(key);
     setError(null);
     setMsg(null);
     setActiveFamily(family);
     setActiveVariant(variant);
+    setActiveSlug(sp.slug);
+
     try {
       let svc = findServiceByName(flatServices, variant.name);
 
-      // also search nested category services
       if (!svc) {
         for (const c of flattenCats(tree)) {
           const hit = c.services?.find((s) => norm(s.name) === norm(variant.name));
@@ -214,74 +237,105 @@ export default function ZibagarServicesPage() {
       }
 
       if (!svc) {
-        const root = findRootForSpecialty(tree, activeSpecialty);
+        const root = findRootForSpecialty(tree, sp);
         const famCat = findFamilyCat(tree, root, family.name);
-        const categoryId = famCat?.id || root?.id;
+        const categoryId = famCat?.id || root?.id || anyCategoryId(tree);
         if (!categoryId) {
           throw new Error(
-            'این تخصص هنوز در کاتالوگ سرور نیست. از پنل ادمین «بارگذاری قالب استاندارد» را بزنید، بعد اینجا «بارگذاری دوباره» را بزنید.',
+            'هنوز هیچ دسته‌ای در کاتالوگ سرور نیست. از پنل ادمین «بارگذاری قالب استاندارد» را بزنید، بعد اینجا «بارگذاری دوباره».',
           );
         }
-        const created = await createServiceNode({
+        const created = (await createServiceNode({
           name: variant.name,
           categoryId,
-        });
-        svc = { id: created.id, name: created.name, categoryId: created.categoryId };
+        })) as FlatSvc;
+        svc = { id: created.id, name: created.name || variant.name, categoryId: created.categoryId || categoryId };
         setFlatServices((prev) => [...prev, svc!]);
       }
 
       let ps =
         mineByServiceId.get(svc.id) ||
         mineByServiceId.get(`name:${norm(variant.name)}`) ||
-        mine.find((m) => m.serviceId === svc!.id || m.service?.id === svc!.id);
+        mine.find((m) => m.serviceId === svc!.id || m.service?.id === svc!.id) ||
+        null;
 
       if (!ps) {
-        await upsertMyService({
+        const createdPs = (await upsertMyService({
           serviceId: svc.id,
           durationMin: 60,
           price: 0,
           isActive: true,
-        });
-        const refreshed = await fetchMyServices();
-        setMine(refreshed);
-        ps = refreshed.find((m) => m.serviceId === svc!.id || m.service?.id === svc!.id);
+        })) as ProfessionalServiceItem;
+        if (createdPs?.id) {
+          ps = createdPs;
+          setMine((prev) => {
+            const without = prev.filter((m) => m.id !== createdPs.id);
+            return [createdPs, ...without];
+          });
+        } else {
+          const refreshed = await fetchMyServices();
+          setMine(refreshed);
+          ps =
+            refreshed.find((m) => m.serviceId === svc!.id || m.service?.id === svc!.id) || null;
+        }
       } else if (ps.isActive === false) {
         await patchMyService(ps.id, { isActive: true });
-        const refreshed = await fetchMyServices();
-        setMine(refreshed);
-        ps = refreshed.find((m) => m.id === ps!.id) || ps;
+        ps = { ...ps, isActive: true };
       }
 
-      if (!ps) throw new Error('خدمت برای شما فعال نشد. دوباره تلاش کنید.');
+      if (!ps?.id) {
+        throw new Error('خدمت برای شما فعال نشد. یک‌بار «بارگذاری دوباره» بزنید و مجدداً امتحان کنید.');
+      }
 
       setPsId(ps.id);
       setDurationMin(ps.durationMin || 60);
 
-      let pr = await fetchMyPriceRules(ps.id);
       const labels = matrixLabels(family, variant);
+      let pr: PriceRuleItem[] = [];
+      try {
+        pr = await fetchMyPriceRules(ps.id);
+      } catch {
+        pr = [];
+      }
+
       const have = new Set(pr.map((r) => r.label));
       for (const label of labels) {
-        if (!have.has(label)) {
-          await upsertMyPriceRule(ps.id, { label, price: 0 });
+        if (have.has(label)) continue;
+        try {
+          const row = (await upsertMyPriceRule(ps.id, { label, price: 0 })) as PriceRuleItem;
+          if (row?.id) pr = [...pr.filter((x) => x.label !== label), row];
+          else have.add(label);
+        } catch {
+          /* keep going — still open matrix with placeholders */
+          pr = [...pr, { id: `local-${label}`, label, price: 0 } as PriceRuleItem];
         }
       }
-      // remove nothing — keep extra custom rules
-      pr = await fetchMyPriceRules(ps.id);
-      // order rules by labels order
+
+      try {
+        pr = await fetchMyPriceRules(ps.id);
+      } catch {
+        /* keep local */
+      }
+
       const ordered: PriceRuleItem[] = [];
       for (const l of labels) {
         const hit = pr.find((r) => r.label === l);
         if (hit) ordered.push(hit);
+        else ordered.push({ id: undefined as unknown as string, label: l, price: 0 } as PriceRuleItem);
       }
       for (const r of pr) {
         if (!labels.includes(r.label)) ordered.push(r);
       }
-      setRules(ordered.length ? ordered : pr);
+
+      setRules(ordered.length ? ordered : labels.map((label) => ({ label, price: 0 } as PriceRuleItem)));
       setStep(3);
+      setMsg(`قیمت‌گذاری «${variant.name}» — قیمت را وارد و ذخیره کنید`);
     } catch (e) {
       setError(friendlyApiError(e));
+      setStep(2);
     } finally {
       setBusy(false);
+      setBusyKey(null);
     }
   }
 
@@ -290,13 +344,14 @@ export default function ZibagarServicesPage() {
     setBusy(true);
     setError(null);
     try {
-      await upsertMyPriceRule(psId, { id: ruleId, label, price });
+      const payload: { id?: string; label: string; price: number } = { label, price };
+      if (ruleId && !String(ruleId).startsWith('local-')) payload.id = ruleId;
+      await upsertMyPriceRule(psId, payload);
       const next = await fetchMyPriceRules(psId);
       setRules(next);
       const positive = next.filter((r) => r.price > 0).map((r) => r.price);
       if (positive.length) {
-        const min = Math.min(...positive);
-        await patchMyService(psId, { price: min, durationMin });
+        await patchMyService(psId, { price: Math.min(...positive), durationMin });
       }
       setMsg('قیمت ذخیره شد');
     } catch (e) {
@@ -307,13 +362,15 @@ export default function ZibagarServicesPage() {
   }
 
   async function batchApply(labels: string[], price: number) {
-    if (!psId) return;
+    if (!psId || !labels.length) return;
     setBusy(true);
     setError(null);
     try {
       for (const label of labels) {
         const existing = rules.find((r) => r.label === label);
-        await upsertMyPriceRule(psId, { id: existing?.id, label, price });
+        const payload: { id?: string; label: string; price: number } = { label, price };
+        if (existing?.id && !String(existing.id).startsWith('local-')) payload.id = existing.id;
+        await upsertMyPriceRule(psId, payload);
       }
       const next = await fetchMyPriceRules(psId);
       setRules(next);
@@ -339,29 +396,15 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  const filteredFamilies = useMemo(() => {
-    if (!activeSpecialty) return [];
-    const q = familySearch.trim();
-    return activeSpecialty.families.filter((f) => {
-      if (!q) return true;
-      if (f.name.includes(q)) return true;
-      return f.variants.some((v) => v.name.includes(q));
-    });
-  }, [activeSpecialty, familySearch]);
-
   if (loading) return <PanelLoading label="بارگذاری منوی خدمات…" />;
-  if (error && !tree.length && !CATALOG_TEMPLATE.length) {
-    return <PanelError message={error} onRetry={load} />;
-  }
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-28" dir="rtl">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-[#0B2C4A]">منوی خدمات من</h1>
-        <p className="mt-1 text-sm text-gray">تخصص → خدمت → قیمت؛ فقط موارد فعال به مشتری نشان داده می‌شود</p>
+        <p className="mt-1 text-sm text-gray">تخصص → خدمت → قیمت (تکی یا دسته‌ای)</p>
       </div>
 
-      {/* Stepper */}
       <div className="flex items-center justify-center gap-0">
         {(
           [
@@ -400,14 +443,19 @@ export default function ZibagarServicesPage() {
         <p className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-800">{msg}</p>
       )}
       {error && (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm text-red-700">{error}</p>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-center text-sm text-red-700">
+          <p className="font-medium">خطا</p>
+          <p className="mt-1">{error}</p>
+          <button type="button" className="mt-2 text-xs underline" onClick={() => void load()}>
+            بارگذاری دوباره از سرور
+          </button>
+        </div>
       )}
 
-      {/* STEP 1 */}
       {step === 1 && (
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <h2 className="text-center text-base font-semibold text-[#0B2C4A]">تخصص‌هایی که بلدی</h2>
-          <p className="text-center text-xs text-gray">چند مورد را انتخاب کن؛ بعد خدمات همان‌ها را قیمت می‌گذاری</p>
+          <p className="text-center text-xs text-gray">چند مورد را انتخاب کن</p>
           <div className="grid grid-cols-2 gap-3">
             {CATALOG_TEMPLATE.map((sp) => {
               const on = selectedSlugs.includes(sp.slug);
@@ -429,9 +477,7 @@ export default function ZibagarServicesPage() {
                   </span>
                   {sp.name}
                   {!root && (
-                    <span className="mt-1 block text-[10px] font-normal text-amber-600">
-                      در سرور نیست
-                    </span>
+                    <span className="mt-1 block text-[10px] font-normal text-amber-600">در سرور نیست</span>
                   )}
                 </button>
               );
@@ -450,13 +496,9 @@ export default function ZibagarServicesPage() {
           >
             ادامه به انتخاب خدمات
           </Button>
-          <button type="button" className="w-full text-center text-xs text-gray underline" onClick={() => void load()}>
-            بارگذاری دوباره از سرور
-          </button>
         </Card>
       )}
 
-      {/* STEP 2 */}
       {step === 2 && (
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
@@ -481,6 +523,7 @@ export default function ZibagarServicesPage() {
                       setActiveSlug(slug);
                       setOpenFamily(null);
                       setFamilySearch('');
+                      setError(null);
                     }}
                     className={`rounded-full px-3 py-1 text-xs font-medium ${
                       activeSlug === slug ? 'bg-coral text-white' : 'bg-gray-100 text-gray-700'
@@ -523,22 +566,24 @@ export default function ZibagarServicesPage() {
                     >
                       <span>{fam.name}</span>
                       <span className="text-xs text-gray">
-                        {pricedCount.toLocaleString('fa-IR')}/{variants.length.toLocaleString('fa-IR')} قیمت‌گذاری
+                        {pricedCount.toLocaleString('fa-IR')}/{variants.length.toLocaleString('fa-IR')}
                       </span>
                     </button>
                     {open && (
                       <div className="space-y-2 border-t border-border bg-gray-50/80 p-3">
+                        {fam.dims.length > 0 && (
+                          <p className="text-[11px] text-gray">
+                            ابعاد قیمت: {fam.dims.map((d) => d.label).join(' · ')}
+                          </p>
+                        )}
                         {variants.map((v) => {
                           const svc = findServiceByName(flatServices, v.name);
                           const ps =
                             (svc && mineByServiceId.get(svc.id)) ||
                             mineByServiceId.get(`name:${norm(v.name)}`);
                           const active = !!ps && ps.isActive !== false;
-                          const minP =
-                            ps?.priceRules?.filter((r) => r.price > 0).map((r) => r.price) ||
-                            (ps?.price && ps.price > 0 ? [ps.price] : []);
-                          const from =
-                            minP.length > 0 ? Math.min(...minP) : ps?.price && ps.price > 0 ? ps.price : null;
+                          const key = `${fam.name}::${v.name}`;
+                          const thisBusy = busyKey === key;
                           return (
                             <div
                               key={v.name}
@@ -551,16 +596,13 @@ export default function ZibagarServicesPage() {
                                     <span className="mr-2 text-[10px] text-emerald-600">فعال</span>
                                   )}
                                 </p>
-                                {from != null && (
-                                  <p className="text-[11px] text-gray">از {formatPrice(from)}</p>
-                                )}
                               </div>
                               <Button
                                 size="sm"
                                 disabled={busy}
-                                onClick={() => void enableAndPrice(fam, v)}
+                                onClick={() => void enableAndPrice(fam, v, activeSpecialty)}
                               >
-                                {active ? 'ویرایش قیمت' : 'قیمت‌گذاری'}
+                                {thisBusy ? '…' : active ? 'ویرایش قیمت' : 'قیمت‌گذاری'}
                               </Button>
                             </div>
                           );
@@ -573,9 +615,11 @@ export default function ZibagarServicesPage() {
             </ul>
           )}
 
-          {mine.length > 0 && (
+          {mine.filter((m) => m.isActive !== false).length > 0 && (
             <div className="rounded-xl border border-dashed border-border p-3">
-              <p className="mb-2 text-xs font-medium text-gray">خدمات فعال شما ({mine.filter((m) => m.isActive !== false).length.toLocaleString('fa-IR')})</p>
+              <p className="mb-2 text-xs font-medium text-gray">
+                خدمات فعال ({mine.filter((m) => m.isActive !== false).length.toLocaleString('fa-IR')})
+              </p>
               <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
                 {mine
                   .filter((m) => m.isActive !== false)
@@ -591,7 +635,6 @@ export default function ZibagarServicesPage() {
         </Card>
       )}
 
-      {/* STEP 3 */}
       {step === 3 && psId && activeVariant && (
         <div className="space-y-3">
           <button
@@ -637,7 +680,7 @@ export default function ZibagarServicesPage() {
 
           {activeFamily && activeFamily.dims.length > 0 && (
             <p className="text-center text-[11px] text-gray">
-              ابعاد قیمت: {activeFamily.dims.map((d) => d.label).join(' · ')}
+              ابعاد: {activeFamily.dims.map((d) => `${d.label} (${d.options.join('، ')})`).join(' · ')}
             </p>
           )}
         </div>
