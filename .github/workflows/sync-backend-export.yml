@@ -21,34 +21,15 @@ jobs:
           set -euo pipefail
           git config user.name beautijoo-bot
           git config user.email bot@beautijoo.ir
-
           git fetch origin main beautijoo-backend-export
-
-          # Work on export branch
           git checkout -B beautijoo-backend-export origin/beautijoo-backend-export
-
-          # Replace backend/ with exactly what is on main
           rm -rf backend
           git checkout origin/main -- backend
-
-          # Also sync root files that backend deploy often needs if present on main
-          for f in docker-compose.yml Dockerfile.backend backend.Dockerfile liara.json; do
-            if git cat-file -e "origin/main:$f" 2>/dev/null; then
-              git checkout origin/main -- "$f" || true
-            fi
-          done
-
           git add -A backend
-          for f in docker-compose.yml Dockerfile.backend backend.Dockerfile liara.json; do
-            [ -f "$f" ] && git add "$f" || true
-          done
-
           if git diff --staged --quiet; then
             echo "No backend differences to commit."
             exit 0
           fi
-
           MAIN_SHA=$(git rev-parse --short origin/main)
           git commit -m "chore: sync backend/ from main@${MAIN_SHA}"
           git push origin beautijoo-backend-export
-          echo "Pushed backend sync to beautijoo-backend-export"
