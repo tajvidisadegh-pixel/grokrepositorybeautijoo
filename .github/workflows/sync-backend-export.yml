@@ -38,10 +38,6 @@ jobs:
             fi
           done
 
-          if git diff --staged --quiet && git diff --quiet; then
-            # ensure staged
-            git add -A backend || true
-          fi
           git add -A backend
           for f in docker-compose.yml Dockerfile.backend backend.Dockerfile liara.json; do
             [ -f "$f" ] && git add "$f" || true
@@ -53,6 +49,6 @@ jobs:
           fi
 
           MAIN_SHA=$(git rev-parse --short origin/main)
-          git commit -m "chore: sync backend/ from main@${MAIN_SHA} (last 2 weeks work)"
+          git commit -m "chore: sync backend/ from main@${MAIN_SHA}"
           git push origin beautijoo-backend-export
           echo "Pushed backend sync to beautijoo-backend-export"
