@@ -339,11 +339,6 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  if (loading) return <PanelLoading label="بارگذاری منوی خدمات…" />;
-  if (error && !tree.length && !CATALOG_TEMPLATE.length) {
-    return <PanelError message={error} onRetry={load} />;
-  }
-
   const filteredFamilies = useMemo(() => {
     if (!activeSpecialty) return [];
     const q = familySearch.trim();
@@ -353,6 +348,11 @@ export default function ZibagarServicesPage() {
       return f.variants.some((v) => v.name.includes(q));
     });
   }, [activeSpecialty, familySearch]);
+
+  if (loading) return <PanelLoading label="بارگذاری منوی خدمات…" />;
+  if (error && !tree.length && !CATALOG_TEMPLATE.length) {
+    return <PanelError message={error} onRetry={load} />;
+  }
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-28" dir="rtl">
