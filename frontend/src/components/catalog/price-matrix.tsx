@@ -14,12 +14,22 @@ type Props = {
   title: string;
   cells: MatrixCell[];
   busy?: boolean;
+  minPrice?: number;
   onSaveCell: (label: string, price: number, ruleId?: string) => Promise<void>;
   onBatchApply: (labels: string[], price: number) => Promise<void>;
 };
 
-/** جدول قیمت + اعمال دسته‌ای روی انتخاب‌شده‌ها */
-export function PriceMatrix({ title, cells, busy, onSaveCell, onBatchApply }: Props) {
+const DEFAULT_MIN = 10_000;
+
+/** جدول قیمت — تکی و دسته‌ای، UI واضح‌تر برای موبایل */
+export function PriceMatrix({
+  title,
+  cells,
+  busy,
+  minPrice = DEFAULT_MIN,
+  onSaveCell,
+  onBatchApply,
+}: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchPrice, setBatchPrice] = useState('');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -40,97 +50,132 @@ export function PriceMatrix({ title, cells, busy, onSaveCell, onBatchApply }: Pr
     else setSelected(new Set(allLabels));
   }
 
+  function parsePrice(raw: string) {
+    return Math.max(0, Math.round(Number(String(raw).replace(/,/g, '')) || 0));
+  }
+
   async function applyBatch() {
-    const price = Math.max(0, Math.round(Number(String(batchPrice).replace(/,/g, '')) || 0));
-    if (!selected.size) return;
-    if (price <= 0) return;
+    const price = parsePrice(batchPrice);
+    if (!selected.size || price < minPrice) return;
     await onBatchApply([...selected], price);
-    setSelected(new Set());
-    setBatchPrice('');
-    // refresh drafts for selected
     setDrafts((d) => {
       const n = { ...d };
       for (const l of selected) n[l] = String(price);
       return n;
     });
+    setSelected(new Set());
+    setBatchPrice('');
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-border bg-white p-3" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold text-[#0B2C4A]">{title}</h3>
-        <button type="button" className="text-xs text-coral" onClick={toggleAll}>
-          {selected.size === allLabels.length && allLabels.length > 0
-            ? 'لغو انتخاب همه'
-            : 'انتخاب همه'}
-        </button>
-      </div>
-
-      <div className="space-y-2 rounded-xl border border-coral/30 bg-[#FFE6E2]/40 p-3">
-        <p className="text-sm font-medium text-[#0B2C4A]">اعمال قیمت یکسان روی موارد انتخاب‌شده</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            className="max-w-[160px]"
-            inputMode="numeric"
-            placeholder="قیمت (تومان)"
-            value={batchPrice}
-            onChange={(e) => setBatchPrice(e.target.value)}
-            dir="ltr"
-          />
-          <Button
-            size="sm"
-            disabled={busy || selected.size === 0 || !batchPrice}
-            onClick={() => void applyBatch()}
+    <div className="space-y-4" dir="rtl">
+      <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-lg font-bold text-navy">{title}</h3>
+            <p className="mt-0.5 text-xs text-gray">
+              حداقل {minPrice.toLocaleString('fa-IR')} تومان
+            </p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 text-xs font-medium text-coral"
+            onClick={toggleAll}
           >
-            اعمال روی {selected.size > 0 ? selected.size.toLocaleString('fa-IR') : '…'} مورد
-          </Button>
+            {selected.size === allLabels.length && allLabels.length > 0
+              ? 'لغو همه'
+              : 'انتخاب همه'}
+          </button>
         </div>
-        <p className="text-[11px] text-gray">
-          ردیف‌ها را تیک بزنید، قیمت را بنویسید، «اعمال» را بزنید — یا برای هر ردیف جداگانه «ذخیره».
-        </p>
-      </div>
 
-      <ul className="divide-y divide-border rounded-xl border border-border">
-        {cells.length === 0 && (
-          <li className="px-3 py-4 text-center text-sm text-gray">هنوز ردیف قیمتی نیست</li>
-        )}
-        {cells.map((c) => {
-          const val = drafts[c.label] ?? (c.price > 0 ? String(c.price) : '');
-          return (
-            <li key={c.label} className="flex flex-wrap items-center gap-2 px-3 py-2">
-              <input
-                type="checkbox"
-                checked={selected.has(c.label)}
-                onChange={() => toggle(c.label)}
-                aria-label={c.label}
-              />
-              <span className="min-w-[7rem] flex-1 text-sm font-medium">{c.label}</span>
-              <Input
-                className="w-28"
-                inputMode="numeric"
-                dir="ltr"
-                value={val}
-                onChange={(e) => setDrafts((d) => ({ ...d, [c.label]: e.target.value }))}
-                placeholder="۰"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  const price = Math.max(
-                    0,
-                    Math.round(Number(String(drafts[c.label] ?? val).replace(/,/g, '')) || 0),
-                  );
-                  void onSaveCell(c.label, price, c.ruleId);
-                }}
-              >
-                ذخیره
-              </Button>
+        {/* Batch bar */}
+        <div className="mb-4 rounded-2xl bg-gradient-to-l from-[#FFE6E2] to-[#FFF5F3] p-3 ring-1 ring-coral/20">
+          <p className="mb-2 text-sm font-semibold text-navy">اعمال یک قیمت روی چند مورد</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              className="flex-1 bg-white text-base"
+              inputMode="numeric"
+              placeholder={`مثلاً ${minPrice.toLocaleString('fa-IR')}`}
+              value={batchPrice}
+              onChange={(e) => setBatchPrice(e.target.value)}
+              dir="ltr"
+            />
+            <Button
+              className="w-full sm:w-auto"
+              disabled={busy || selected.size === 0 || parsePrice(batchPrice) < minPrice}
+              onClick={() => void applyBatch()}
+            >
+              اعمال روی{' '}
+              {selected.size > 0 ? selected.size.toLocaleString('fa-IR') : '۰'} مورد
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] text-gray">
+            اول ردیف‌ها را تیک بزن، قیمت را بنویس، بعد اعمال کن.
+          </p>
+        </div>
+
+        {/* Rows */}
+        <ul className="space-y-2">
+          {cells.length === 0 && (
+            <li className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-gray">
+              ردیف قیمتی تعریف نشده
             </li>
-          );
-        })}
-      </ul>
+          )}
+          {cells.map((c) => {
+            const val = drafts[c.label] ?? (c.price > 0 ? String(c.price) : '');
+            const saved = c.price >= minPrice;
+            return (
+              <li
+                key={c.label}
+                className={`rounded-xl border px-3 py-3 transition ${
+                  selected.has(c.label)
+                    ? 'border-coral bg-[#FFE6E2]/50'
+                    : 'border-border bg-white'
+                }`}
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#fc7074]"
+                    checked={selected.has(c.label)}
+                    onChange={() => toggle(c.label)}
+                    aria-label={c.label}
+                  />
+                  <span className="flex-1 text-sm font-semibold text-navy">{c.label}</span>
+                  {saved ? (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                      {c.price.toLocaleString('fa-IR')} ت
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
+                      بدون قیمت
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    className="flex-1 bg-white text-base"
+                    inputMode="numeric"
+                    dir="ltr"
+                    value={val}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [c.label]: e.target.value }))}
+                    placeholder={String(minPrice)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 px-4"
+                    disabled={busy || parsePrice(val) < minPrice}
+                    onClick={() => void onSaveCell(c.label, parsePrice(val), c.ruleId)}
+                  >
+                    ذخیره
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }
