@@ -10,7 +10,7 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ||
   'http://localhost:3000/api/v1';
 
-/** Prevent Liara/CI `next build` hanging forever on Collecting page data */
+/** Prevent Liara `next build` hanging on Collecting page data when API is slow/down */
 const FETCH_TIMEOUT_MS = Number(process.env.PUBLIC_API_TIMEOUT_MS || 12_000);
 
 export class PublicApiError extends Error {
@@ -26,7 +26,7 @@ export class PublicApiError extends Error {
 async function publicGet<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
   const timeoutSignal =
-    typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
       ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
       : undefined;
   let res: Response;
@@ -95,42 +95,79 @@ export function searchProfessionals(params: SearchParams = {}) {
   if (params.maxDuration != null) sp.set('maxDuration', String(params.maxDuration));
   if (params.sort) sp.set('sort', params.sort);
   if (params.availableDate) sp.set('availableDate', params.availableDate);
-  if (params.lat != null) sp.set('lat', String(params.lat));
-  if (params.lng != null) sp.set('lng', String(params.lng));
-  if (params.radiusKm != null) sp.set('radiusKm', String(params.radiusKm));
+  if (params.lat != null && params.lat !== '') sp.set('lat', String(params.lat));
+  if (params.lng != null && params.lng !== '') sp.set('lng', String(params.lng));
+  if (params.radiusKm != null && params.radiusKm !== '') sp.set('radiusKm', String(params.radiusKm));
   if (params.verifiedOnly) sp.set('verifiedOnly', 'true');
   if (params.gender) sp.set('gender', params.gender);
-  if (params.filterCategory) sp.set('filterCategory', 'true');
   const qs = sp.toString();
-  return publicGet<ProfessionalsSearchResponse>(`/professionals${qs ? `?${qs}` : ''}`);
+  const path = params.filterCategory
+    ? `/service-filters/professionals${qs ? `?${qs}` : ''}`
+    : `/professionals${qs ? `?${qs}` : ''}`;
+  return publicGet<ProfessionalsSearchResponse>(path);
+}
+
+export function getProfessionalBySlug(slug: string) {
+  return publicGet<ProfessionalDetail>(`/professionals/${encodeURIComponent(slug)}`, {
+    next: { revalidate: 30 },
+  });
 }
 
 export function listCategories() {
   return publicGet<ServiceCategory[]>('/categories');
 }
 
-export function getCategoryBySlug(slug: string) {
-  return publicGet<ServiceCategory>(`/categories/${encodeURIComponent(slug)}`);
-}
-
-export function getProfessionalBySlug(slug: string) {
-  return publicGet<ProfessionalDetail>(`/professionals/by-slug/${encodeURIComponent(slug)}`);
+export function listFilterCategories() {
+  return publicGet<ServiceCategory[]>('/service-filters/categories');
 }
 
 export function listServices(categorySlug?: string) {
-  const qs = categorySlug ? `?category=${encodeURIComponent(categorySlug)}` : '';
-  return publicGet<ServiceItem[]>(`/services${qs}`);
+  return publicGet<ServiceItem[]>(
+    `/services${categorySlug ? `?category=${encodeURIComponent(categorySlug)}` : ''}`,
+  );
 }
 
+/** Published homepage CMS (draft is never returned). */
 export type PublishedSiteConfig = {
-  content?: Record<string, unknown> & {
-    hero?: Record<string, unknown>;
-    texts?: Record<string, unknown>;
-    features?: Record<string, unknown>;
+  content: {
+    hero?: {
+      enabled?: boolean;
+      title?: string;
+      subtitle?: string;
+      description?: string;
+      ctaText?: string;
+      ctaLink?: string;
+      badge?: string;
+      desktopImageUrl?: string | null;
+      mobileImageUrl?: string | null;
+    };
+    texts?: {
+      categoriesTitle?: string;
+      categoriesLinkText?: string;
+      featuredTitle?: string;
+      featuredLinkText?: string;
+      ctaTitle?: string;
+      ctaDescription?: string;
+      ctaPrimaryText?: string;
+      ctaPrimaryLink?: string;
+      ctaSecondaryText?: string;
+      ctaSecondaryLink?: string;
+    };
+    features?: {
+      showCategories?: boolean;
+      showFeaturedProfessionals?: boolean;
+      showBottomCta?: boolean;
+      showSearchInHero?: boolean;
+    };
+    publishedAt?: string | null;
   };
-  sections?: { id: string; label?: string; enabled?: boolean; sortOrder: number }[];
+  sections: Array<{ id: string; label: string; enabled: boolean; sortOrder: number }>;
 };
 
 export function getPublishedSiteConfig() {
-  return publicGet<PublishedSiteConfig>('/site/published');
+  return publicGet<PublishedSiteConfig>('/public/site-config', {
+    next: { revalidate: 30, tags: ['site-cms'] },
+  });
 }
+
+export { API_URL };
