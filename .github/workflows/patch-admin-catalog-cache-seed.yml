@@ -1,0 +1,20 @@
+name: patch-admin-catalog-cache-seed
+on:
+  push:
+    paths:
+      - scripts/patch_admin_catalog_cache_seed.py
+      - .github/workflows/patch-admin-catalog-cache-seed.yml
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_admin_catalog_cache_seed.py
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m "fix: catalog cache invalidate + resilient template seed" && git push)
