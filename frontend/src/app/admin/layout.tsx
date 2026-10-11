@@ -27,6 +27,7 @@ const BASE_ITEMS: NavDef[] = [
   { href: '/admin/users', label: '\u0645\u0634\u062a\u0631\u06cc\u0627\u0646', anyOf: ['admin.users.read', 'admin.users.write'] },
   { href: '/admin/notifications', label: '\u0627\u0639\u0644\u0627\u0646\u200c\u0647\u0627', badgeKey: 'notifications', anyOf: ['admin.notifications.send'] },
   { href: '/admin/professionals', label: '\u0632\u06cc\u0628\u0627\u06af\u0631\u0647\u0627', badgeKey: 'professionals', anyOf: ['admin.professionals.read', 'admin.professionals.write'] },
+  { href: '/admin/catalog-template', label: 'کاتالوگ قالب', anyOf: ['admin.catalog.manage'] },
   { href: '/admin/service-categories', label: '\u062a\u062e\u0635\u0635\u200c\u0647\u0627 \u0648 \u062f\u0633\u062a\u0647\u200c\u0628\u0646\u062f\u06cc\u200c\u0647\u0627', anyOf: ['admin.catalog.manage'] },
   { href: '/admin/bookings', label: '\u0631\u0632\u0631\u0648\u0647\u0627', badgeKey: 'bookings', anyOf: ['admin.bookings.read', 'admin.bookings.write'] },
   { href: '/admin/reviews', label: '\u0646\u0638\u0631\u0627\u062a \u0648 \u0627\u0645\u062a\u06cc\u0627\u0632\u0647\u0627', badgeKey: 'reviews', anyOf: ['admin.reviews.moderate'] },
