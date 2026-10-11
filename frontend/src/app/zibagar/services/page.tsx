@@ -34,6 +34,9 @@ import { PriceMatrix } from '@/components/catalog/price-matrix';
 import { formatPrice } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 
+/** Production API rejects prices below this (تومان) */
+const MIN_PRICE = 10_000;
+
 type Step = 1 | 2 | 3;
 
 type CatNode = CatalogCategory & {
@@ -158,7 +161,7 @@ export default function ZibagarServicesPage() {
 
   const mineByServiceId = useMemo(() => {
     const m = new Map<string, ProfessionalServiceItem>();
-    for (const ps of mine) {
+  for (const ps of mine) {
       const sid = ps.serviceId || ps.service?.id;
       if (sid) m.set(sid, ps);
       if (ps.service?.name) m.set(`name:${norm(ps.service.name)}`, ps);
@@ -207,8 +210,11 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  /** Resolve catalog service + pro offer, open price matrix (step 3) */
-  async function enableAndPrice(family: CatalogFamily, variant: CatalogVariant, specialty?: CatalogSpecialty | null) {
+  async function enableAndPrice(
+    family: CatalogFamily,
+    variant: CatalogVariant,
+    specialty?: CatalogSpecialty | null,
+  ) {
     const sp = specialty || activeSpecialty;
     if (!sp) {
       setError('ابتدا یک تخصص را از چیپ‌های بالا انتخاب کنید.');
@@ -249,7 +255,11 @@ export default function ZibagarServicesPage() {
           name: variant.name,
           categoryId,
         })) as FlatSvc;
-        svc = { id: created.id, name: created.name || variant.name, categoryId: created.categoryId || categoryId };
+        svc = {
+          id: created.id,
+          name: created.name || variant.name,
+          categoryId: created.categoryId || categoryId,
+        };
         setFlatServices((prev) => [...prev, svc!]);
       }
 
@@ -263,7 +273,7 @@ export default function ZibagarServicesPage() {
         const createdPs = (await upsertMyService({
           serviceId: svc.id,
           durationMin: 60,
-          price: 0,
+          price: MIN_PRICE,
           isActive: true,
         })) as ProfessionalServiceItem;
         if (createdPs?.id) {
@@ -284,7 +294,9 @@ export default function ZibagarServicesPage() {
       }
 
       if (!ps?.id) {
-        throw new Error('خدمت برای شما فعال نشد. یک‌بار «بارگذاری دوباره» بزنید و مجدداً امتحان کنید.');
+        throw new Error(
+          'خدمت برای شما فعال نشد. یک‌بار «بارگذاری دوباره» بزنید و مجدداً امتحان کنید.',
+        );
       }
 
       setPsId(ps.id);
@@ -298,38 +310,25 @@ export default function ZibagarServicesPage() {
         pr = [];
       }
 
-      const have = new Set(pr.map((r) => r.label));
-      for (const label of labels) {
-        if (have.has(label)) continue;
-        try {
-          const row = (await upsertMyPriceRule(ps.id, { label, price: 0 })) as PriceRuleItem;
-          if (row?.id) pr = [...pr.filter((x) => x.label !== label), row];
-          else have.add(label);
-        } catch {
-          /* keep going — still open matrix with placeholders */
-          pr = [...pr, { id: `local-${label}`, label, price: 0 } as PriceRuleItem];
-        }
-      }
-
-      try {
-        pr = await fetchMyPriceRules(ps.id);
-      } catch {
-        /* keep local */
-      }
-
       const ordered: PriceRuleItem[] = [];
       for (const l of labels) {
         const hit = pr.find((r) => r.label === l);
         if (hit) ordered.push(hit);
-        else ordered.push({ id: undefined as unknown as string, label: l, price: 0 } as PriceRuleItem);
+        else ordered.push({ label: l, price: 0 } as PriceRuleItem);
       }
       for (const r of pr) {
         if (!labels.includes(r.label)) ordered.push(r);
       }
 
-      setRules(ordered.length ? ordered : labels.map((label) => ({ label, price: 0 } as PriceRuleItem)));
+      setRules(
+        ordered.length
+          ? ordered
+          : labels.map((label) => ({ label, price: 0 } as PriceRuleItem)),
+      );
       setStep(3);
-      setMsg(`قیمت‌گذاری «${variant.name}» — قیمت را وارد و ذخیره کنید`);
+      setMsg(
+        `قیمت‌گذاری «${variant.name}» — حداقل ${MIN_PRICE.toLocaleString('fa-IR')} تومان؛ تکی یا دسته‌ای ذخیره کنید`,
+      );
     } catch (e) {
       setError(friendlyApiError(e));
       setStep(2);
@@ -341,6 +340,10 @@ export default function ZibagarServicesPage() {
 
   async function saveCell(label: string, price: number, ruleId?: string) {
     if (!psId) return;
+    if (price < MIN_PRICE) {
+      setError(`حداقل قیمت ${MIN_PRICE.toLocaleString('fa-IR')} تومان است`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -349,7 +352,7 @@ export default function ZibagarServicesPage() {
       await upsertMyPriceRule(psId, payload);
       const next = await fetchMyPriceRules(psId);
       setRules(next);
-      const positive = next.filter((r) => r.price > 0).map((r) => r.price);
+      const positive = next.filter((r) => r.price >= MIN_PRICE).map((r) => r.price);
       if (positive.length) {
         await patchMyService(psId, { price: Math.min(...positive), durationMin });
       }
@@ -363,6 +366,10 @@ export default function ZibagarServicesPage() {
 
   async function batchApply(labels: string[], price: number) {
     if (!psId || !labels.length) return;
+    if (price < MIN_PRICE) {
+      setError(`حداقل قیمت ${MIN_PRICE.toLocaleString('fa-IR')} تومان است`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -375,7 +382,9 @@ export default function ZibagarServicesPage() {
       const next = await fetchMyPriceRules(psId);
       setRules(next);
       await patchMyService(psId, { price, durationMin });
-      setMsg(`قیمت ${formatPrice(price)} روی ${labels.length.toLocaleString('fa-IR')} مورد اعمال شد`);
+      setMsg(
+        `قیمت ${formatPrice(price)} روی ${labels.length.toLocaleString('fa-IR')} مورد اعمال شد`,
+      );
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -402,7 +411,7 @@ export default function ZibagarServicesPage() {
     <div className="mx-auto max-w-lg space-y-5 pb-28" dir="rtl">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-[#0B2C4A]">منوی خدمات من</h1>
-        <p className="mt-1 text-sm text-gray">تخصص → خدمت → قیمت (تکی یا دسته‌ای)</p>
+        <p className="mt-1 text-sm text-gray">تخصص → خدمت → قیمت (حداقل ۱۰٬۰۰۰ تومان)</p>
       </div>
 
       <div className="flex items-center justify-center gap-0">
@@ -582,8 +591,7 @@ export default function ZibagarServicesPage() {
                             (svc && mineByServiceId.get(svc.id)) ||
                             mineByServiceId.get(`name:${norm(v.name)}`);
                           const active = !!ps && ps.isActive !== false;
-                          const key = `${fam.name}::${v.name}`;
-                          const thisBusy = busyKey === key;
+                          const thisBusy = busyKey === `${fam.name}::${v.name}`;
                           return (
                             <div
                               key={v.name}
@@ -613,24 +621,6 @@ export default function ZibagarServicesPage() {
                 );
               })}
             </ul>
-          )}
-
-          {mine.filter((m) => m.isActive !== false).length > 0 && (
-            <div className="rounded-xl border border-dashed border-border p-3">
-              <p className="mb-2 text-xs font-medium text-gray">
-                خدمات فعال ({mine.filter((m) => m.isActive !== false).length.toLocaleString('fa-IR')})
-              </p>
-              <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
-                {mine
-                  .filter((m) => m.isActive !== false)
-                  .map((m) => (
-                    <li key={m.id} className="flex justify-between gap-2">
-                      <span>{m.service?.name || '—'}</span>
-                      <span className="text-gray">{m.price > 0 ? formatPrice(m.price) : '—'}</span>
-                    </li>
-                  ))}
-              </ul>
-            </div>
           )}
         </Card>
       )}
