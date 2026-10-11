@@ -2,7 +2,7 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV PUBLIC_API_TIMEOUT_MS=12000
+ENV PUBLIC_API_TIMEOUT_MS=8000
 ENV DOCKER_STANDALONE=1
 
 ARG NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1
@@ -17,10 +17,9 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
 RUN npm run build
 
-RUN test -f .next/standalone/server.js || test -f .next/standalone/frontend/server.js
 RUN if [ -f .next/standalone/frontend/server.js ] && [ ! -f .next/standalone/server.js ]; then \
   cp -a .next/standalone/frontend/. .next/standalone/ && rm -rf .next/standalone/frontend; fi
-RUN test -d .next/standalone/node_modules/next
+RUN test -f .next/standalone/server.js && test -d .next/standalone/node_modules/next
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app

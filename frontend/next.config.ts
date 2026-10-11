@@ -2,8 +2,8 @@ import type { NextConfig } from 'next';
 import path from 'path';
 
 /**
- * DOCKER_STANDALONE=1 → trace only this package (Liara image).
- * Otherwise monorepo root (local/CI workspace).
+ * DOCKER_STANDALONE=1 → package-local tracing (Liara Docker image).
+ * Default → monorepo root (CI/local workspace) — product code unchanged.
  */
 const tracingRoot =
   process.env.DOCKER_STANDALONE === '1'
