@@ -1,0 +1,19 @@
+name: patch-60-cleanup
+on:
+  push:
+    paths:
+      - scripts/patch_60_cleanup_social_services.py
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_60_cleanup_social_services.py
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m "fix: strip social links; redirect menu to services" && git push)
