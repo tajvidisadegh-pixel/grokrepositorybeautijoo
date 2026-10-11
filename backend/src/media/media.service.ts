@@ -292,7 +292,7 @@ export class MediaService {
       if (dto.price == null) data.price = null;
       else {
         const pr = Math.floor(Number(dto.price));
-        if (!Number.isFinite(pr) || pr < 10000) throw new BadRequestException('قیمت باید حداقل ۱۰٬۰۰۰ تومان باشد');
+        if (!Number.isFinite(pr) || pr < 0) throw new BadRequestException('قیمت نامعتبر است');
         data.price = pr;
       }
     }

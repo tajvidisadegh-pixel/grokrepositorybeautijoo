@@ -1,0 +1,124 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { NotificationType, Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { SMS_PROVIDER, type SmsProvider } from '../sms/sms.provider';
+
+export type CreateNotificationInput = {
+  userId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+  /** When true, also send SMS to the user's phone (best-effort). */
+  sms?: boolean;
+};
+
+@Injectable()
+export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
+  ) {}
+
+  async list(userId: string, page = 1, limit = 30) {
+    const safePage = Math.max(1, page || 1);
+    const safeLimit = Math.min(Math.max(limit || 30, 1), 50);
+    const skip = (safePage - 1) * safeLimit;
+    const where = { userId };
+    const [items, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: safeLimit,
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page: safePage, limit: safeLimit, total },
+    };
+  }
+
+  async markRead(userId: string, id: string) {
+    await this.prisma.notification.updateMany({
+      where: { id, userId },
+      data: { readAt: new Date() },
+    });
+    return { message: 'ok' };
+  }
+
+  /** Mark every unread notification for this user as read. */
+  async markAllRead(userId: string) {
+    const result = await this.prisma.notification.updateMany({
+      where: { userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return { message: 'ok', updated: result.count };
+  }
+
+  unreadCount(userId: string) {
+    return this.prisma.notification.count({ where: { userId, readAt: null } });
+  }
+
+  /**
+   * Persist in-app notification and optionally SMS.
+   * Never throws to callers — booking flows must not fail on notify errors.
+   */
+  async notify(input: CreateNotificationInput): Promise<{ id?: string } | null> {
+    try {
+      const row = await this.prisma.notification.create({
+        data: {
+          userId: input.userId,
+          type: input.type,
+          title: input.title,
+          body: input.body,
+          data: (input.data ?? undefined) as Prisma.InputJsonValue | undefined,
+        },
+      });
+
+      if (input.sms) {
+        await this.sendSmsSafe(input.userId, input.body, input.data);
+      }
+
+      return { id: row.id };
+    } catch (err) {
+      this.logger.warn(
+        `notify failed user=${input.userId} type=${input.type}: ${(err as Error)?.message}`,
+      );
+      return null;
+    }
+  }
+
+  private appendSmsLink(message: string, data?: Record<string, unknown>): string {
+    const href = typeof data?.href === 'string' ? data.href.trim() : '';
+    if (!href) return message;
+    const base =
+      (process.env.FRONTEND_URL || process.env.APP_URL || process.env.PUBLIC_WEB_URL || '').replace(/\/$/, '');
+    if (!base) return message;
+    const path = href.startsWith('/') ? href : `/${href}`;
+    return `${message}
+${base}${path}`;
+  }
+
+  private async sendSmsSafe(
+    userId: string,
+    message: string,
+    data?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { phone: true },
+      });
+      const phone = user?.phone?.trim();
+      if (!phone) return;
+      const full = this.appendSmsLink(message, data);
+      await this.sms.sendNotification(phone, full);
+    } catch (err) {
+      this.logger.warn(`SMS failed user=${userId}: ${(err as Error)?.message}`);
+    }
+  }
+}

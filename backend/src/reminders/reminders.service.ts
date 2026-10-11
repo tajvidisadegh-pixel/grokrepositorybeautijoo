@@ -1,0 +1,349 @@
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { BookingStatus, NotificationType } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { JobLeaseService } from '../jobs/job-lease.service';
+
+export type ReminderStats = {
+  reminders24h: number;
+  reminders2h: number;
+  reviewRequests: number;
+  dailyProSummaries: number;
+};
+
+/**
+ * Periodic jobs for issue #11:
+ * - booking_reminder ~24h and ~2h before confirmed appointments
+ * - review_request after completed bookings (once, if no review yet)
+ *
+ * In-app always; SMS when REMINDERS_SMS=true (or production default for 2h).
+ * Dedup: skip if a notification of the same type already exists for that bookingId in data.
+ */
+@Injectable()
+export class RemindersService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(RemindersService.name);
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private running = false;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
+    private readonly jobLease: JobLeaseService,
+  ) {}
+
+  onModuleInit() {
+    const enabled = this.config.get<string>('REMINDERS_ENABLED') !== 'false';
+    if (!enabled) {
+      this.logger.log('Reminders disabled (REMINDERS_ENABLED=false)');
+      return;
+    }
+    const intervalMs = this.resolveIntervalMs();
+    // slight delay so app can finish boot
+    setTimeout(() => void this.safeRun(), 30_000);
+    this.timer = setInterval(() => void this.safeRun(), intervalMs);
+    this.logger.log(`Reminders scheduled every ${Math.round(intervalMs / 60_000)} min`);
+  }
+
+  onModuleDestroy() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  private resolveIntervalMs(): number {
+    const min = parseInt(process.env.REMINDERS_INTERVAL_MINUTES || '60', 10);
+    if (Number.isNaN(min) || min < 15) return 60 * 60_000;
+    return min * 60_000;
+  }
+
+  private async safeRun(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    try {
+      // Lease ~15 min — multi-instance safe (#18.2); work itself is idempotent via notification dedup
+      const stats = await this.jobLease.withLease('reminders', 15 * 60_000, () =>
+        this.runAllWithRetry(),
+      );
+      if (!stats) return;
+      this.logger.log(
+        `Reminders done: 24h=${stats.reminders24h} 2h=${stats.reminders2h} review=${stats.reviewRequests} daily=${stats.dailyProSummaries}`,
+      );
+    } catch (err) {
+      this.logger.error(`Reminders failed: ${(err as Error)?.message}`);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async runAllWithRetry(): Promise<ReminderStats> {
+    try {
+      return await this.runAll();
+    } catch (err) {
+      this.logger.warn(`Reminders attempt 1 failed, retrying: ${(err as Error)?.message}`);
+      await new Promise((r) => setTimeout(r, 2_000));
+      return await this.runAll();
+    }
+  }
+
+  /** Public for tests / manual trigger */
+  async runAll(): Promise<ReminderStats> {
+    const [reminders24h, reminders2h, reviewRequests, dailyProSummaries] = await Promise.all([
+      this.sendWindowReminders('24h', 23, 25),
+      this.sendWindowReminders('2h', 1.5, 2.5),
+      this.sendReviewRequests(),
+      this.sendDailyProSummaries(),
+    ]);
+    return { reminders24h, reminders2h, reviewRequests, dailyProSummaries };
+  }
+
+  /**
+   * Confirmed bookings whose startAt falls within [now+minHours, now+maxHours].
+   * windowKey is stored in data for dedup (24h vs 2h are separate).
+   */
+  async sendWindowReminders(
+    windowKey: '24h' | '2h',
+    minHours: number,
+    maxHours: number,
+  ): Promise<number> {
+    const now = Date.now();
+    const from = new Date(now + minHours * 3600_000);
+    const to = new Date(now + maxHours * 3600_000);
+
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        status: BookingStatus.confirmed,
+        startAt: { gte: from, lte: to },
+      },
+      select: {
+        id: true,
+        customerId: true,
+        professionalId: true,
+        startAt: true,
+        professional: {
+          select: { title: true, userId: true },
+        },
+      },
+      take: 200,
+    });
+
+    let sent = 0;
+    for (const b of bookings) {
+      const already = await this.hasNotification(b.customerId, NotificationType.booking_reminder, {
+        bookingId: b.id,
+        window: windowKey,
+      });
+      if (already) continue;
+
+      const proName = b.professional?.title?.trim() || 'زیباگر';
+      const when = this.formatTehran(b.startAt);
+      const title =
+        windowKey === '24h' ? 'یادآوری نوبت (فردا)' : 'یادآوری نوبت (به‌زودی)';
+      const body =
+        windowKey === '24h'
+          ? `نوبت شما با ${proName} حدود ۲۴ ساعت دیگر است (${when}).`
+          : `نوبت شما با ${proName} حدود ۲ ساعت دیگر است (${when}).`;
+
+      const smsEnabled = this.shouldSendSms(windowKey);
+
+      const result = await this.notifications.notify({
+        userId: b.customerId,
+        type: NotificationType.booking_reminder,
+        title,
+        body,
+        data: {
+          bookingId: b.id,
+          professionalId: b.professionalId,
+          window: windowKey,
+          href: `/panel/bookings?focus=${b.id}`,
+        },
+        sms: smsEnabled,
+      });
+      if (result?.id) sent += 1;
+
+      // Soft in-app reminder for professional (no SMS by default)
+      const proUserId = (
+        b as { professional?: { userId?: string | null } }
+      ).professional?.userId;
+      if (proUserId) {
+        const proAlready = await this.hasNotification(
+          proUserId,
+          NotificationType.booking_reminder,
+          { bookingId: b.id, window: `${windowKey}-pro` },
+        );
+        if (!proAlready) {
+          await this.notifications.notify({
+            userId: proUserId,
+            type: NotificationType.booking_reminder,
+            title:
+              windowKey === '24h'
+                ? 'یادآوری نوبت فردا'
+                : 'یادآوری نوبت نزدیک',
+            body:
+              windowKey === '24h'
+                ? `فردا حدود این ساعت نوبت دارید (${when}).`
+                : `حدود ۲ ساعت دیگر نوبت دارید (${when}).`,
+            data: {
+              bookingId: b.id,
+              window: `${windowKey}-pro`,
+              href: `/zibagar/bookings?focus=${b.id}`,
+            },
+            sms: false,
+          });
+        }
+      }
+    }
+    return sent;
+  }
+
+  /** SMS for reminders: REMINDERS_SMS=true|false; default true in production for 2h only. */
+  private shouldSendSms(windowKey: '24h' | '2h'): boolean {
+    const raw = (process.env.REMINDERS_SMS || '').trim().toLowerCase();
+    if (raw === 'true' || raw === '1' || raw === 'yes') return true;
+    if (raw === 'false' || raw === '0' || raw === 'no') return false;
+    // default: production 2h reminders only (cost-aware)
+    return (
+      (process.env.NODE_ENV || '').toLowerCase() === 'production' &&
+      windowKey === '2h'
+    );
+  }
+
+  /**
+   * Completed bookings in the last 48h without a review → one review_request.
+   */
+  async sendReviewRequests(): Promise<number> {
+    const now = Date.now();
+    const since = new Date(now - 48 * 3600_000);
+    // wait at least 2h after completion before asking
+    const until = new Date(now - 2 * 3600_000);
+
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        status: BookingStatus.completed,
+        completedAt: { gte: since, lte: until },
+        review: null,
+      },
+      select: {
+        id: true,
+        customerId: true,
+        professionalId: true,
+        professional: {
+          select: { title: true },
+        },
+      },
+      take: 200,
+    });
+
+    let sent = 0;
+    for (const b of bookings) {
+      const already = await this.hasNotification(b.customerId, NotificationType.review_request, {
+        bookingId: b.id,
+      });
+      if (already) continue;
+
+      const proName = b.professional?.title?.trim() || 'زیباگر';
+      const result = await this.notifications.notify({
+        userId: b.customerId,
+        type: NotificationType.review_request,
+        title: 'نظر شما مهم است',
+        body: `نوبت شما با ${proName} تمام شده. لطفاً نظر خود را ثبت کنید.`,
+        data: {
+          bookingId: b.id,
+          professionalId: b.professionalId,
+          href: `/panel/bookings?review=${b.id}`,
+        },
+        sms: false,
+      });
+      if (result?.id) sent += 1;
+    }
+    return sent;
+  }
+
+
+  async sendDailyProSummaries(): Promise<number> {
+    const now = new Date();
+    const hourStr = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tehran', hour: '2-digit', hour12: false }).format(now);
+    const hour = parseInt(hourStr, 10);
+    if (Number.isNaN(hour) || hour < 7 || hour > 10) return 0;
+    const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const startUtc = new Date(`${dayKey}T00:00:00+03:30`);
+    const endUtc = new Date(`${dayKey}T23:59:59+03:30`);
+    const bookings = await this.prisma.booking.findMany({
+      where: { status: BookingStatus.confirmed, startAt: { gte: startUtc, lte: endUtc } },
+      select: { id: true, startAt: true, professional: { select: { userId: true } } },
+      orderBy: { startAt: 'asc' },
+    });
+    const byPro = new Map<string, { count: number; first: Date }>();
+    for (const b of bookings) {
+      const uid = b.professional.userId;
+      const cur = byPro.get(uid);
+      if (!cur) byPro.set(uid, { count: 1, first: b.startAt });
+      else byPro.set(uid, { count: cur.count + 1, first: cur.first });
+    }
+    let sent = 0;
+    for (const [userId, info] of byPro) {
+      const already = await this.hasDayNotification(userId, dayKey);
+      if (already) continue;
+      const timeFa = this.formatTehran(info.first);
+      const result = await this.notifications.notify({
+        userId,
+        type: NotificationType.system,
+        title: 'خلاصه نوبت‌های امروز',
+        body: `امروز ${info.count} نوبت دارید. اولین نوبت: ${timeFa}`,
+        data: { kind: 'daily_pro_summary', dayKey, count: info.count, href: '/zibagar/bookings' },
+        sms: false,
+      });
+      if (result?.id) sent += 1;
+    }
+    return sent;
+  }
+
+  private async hasDayNotification(userId: string, dayKey: string): Promise<boolean> {
+    const rows = await this.prisma.notification.findMany({
+      where: { userId, type: NotificationType.system, createdAt: { gte: new Date(Date.now() - 2 * 24 * 3600_000) } },
+      select: { data: true },
+      take: 30,
+    });
+    for (const r of rows) {
+      const data = r.data as { kind?: string; dayKey?: string } | null;
+      if (data?.kind === 'daily_pro_summary' && data.dayKey === dayKey) return true;
+    }
+    return false;
+  }
+
+  /** Dedup: any existing notification of this type for the same bookingId (+ optional window). */
+  private async hasNotification(
+    userId: string,
+    type: NotificationType,
+    match: { bookingId: string; window?: string },
+  ): Promise<boolean> {
+    const rows = await this.prisma.notification.findMany({
+      where: {
+        userId,
+        type,
+        createdAt: { gte: new Date(Date.now() - 7 * 24 * 3600_000) },
+      },
+      select: { data: true },
+      take: 50,
+    });
+    for (const r of rows) {
+      const data = r.data as { bookingId?: string; window?: string } | null;
+      if (!data || data.bookingId !== match.bookingId) continue;
+      if (match.window && data.window !== match.window) continue;
+      return true;
+    }
+    return false;
+  }
+
+  private formatTehran(d: Date): string {
+    try {
+      return new Intl.DateTimeFormat('fa-IR', {
+        timeZone: 'Asia/Tehran',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(d);
+    } catch {
+      return d.toISOString();
+    }
+  }
+}

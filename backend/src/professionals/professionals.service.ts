@@ -25,25 +25,6 @@ export type CompletionResult = {
   fields: Array<{ key: CompletionFieldKey; label: string; done: boolean }>;
 };
 
-// Issue #44: public profile slugs are based on the professional's name, not phone number.
-const PERSIAN_SLUG_MAP: Record<string, string> = {
-  'ا':'a','آ':'a','ب':'b','پ':'p','ت':'t','ث':'s','ج':'j','چ':'ch','ح':'h','خ':'kh',
-  'د':'d','ذ':'z','ر':'r','ز':'z','ژ':'zh','س':'s','ش':'sh','ص':'s','ض':'z','ط':'t','ظ':'z',
-  'ع':'a','غ':'gh','ف':'f','ق':'gh','ک':'k','ك':'k','گ':'g','ل':'l','م':'m','ن':'n','و':'v',
-  'ه':'h','ی':'y','ي':'y','ئ':'y','ء':'a','ة':'h','ۀ':'h',
-};
-
-function englishSlug(value: string): string {
-  const normalized = String(value || '').trim().toLowerCase().normalize('NFKC');
-  let out = '';
-  for (const ch of normalized) {
-    if (/[a-z0-9]/.test(ch)) out += ch;
-    else if (PERSIAN_SLUG_MAP[ch]) out += PERSIAN_SLUG_MAP[ch];
-    else if (/[_\s-]/.test(ch)) out += '-';
-  }
-  return out.replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
-}
-
 const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
   title: '\u0639\u0646\u0648\u0627\u0646 \u062d\u0631\u0641\u0647\u200c\u0627\u06cc',
   firstName: '\u0646\u0627\u0645',
@@ -71,6 +52,8 @@ export class ProfessionalsService {
     minRating?: number;
     minPrice?: number;
     maxPrice?: number;
+    minDuration?: number;
+    maxDuration?: number;
     sort?: string;
     availableDate?: string;
     ids?: string[];
@@ -102,6 +85,7 @@ export class ProfessionalsService {
             radiusKm: params.radiusKm ?? '',
             verifiedOnly: params.verifiedOnly ?? null,
             gender: params.gender || '',
+            minDuration: params.minDuration ?? null,
           })}`
         : null;
     if (cacheKey) {
@@ -174,13 +158,21 @@ export class ProfessionalsService {
     if (params.minPrice != null && Number.isFinite(params.minPrice)) priceFilter.gte = params.minPrice;
     if (params.maxPrice != null && Number.isFinite(params.maxPrice)) priceFilter.lte = params.maxPrice;
     const hasPrice = Object.keys(priceFilter).length > 0;
-    if (params.category || hasPrice) {
+    const hasDuration = (params.minDuration != null && Number.isFinite(params.minDuration) && params.minDuration > 0)
+      || (params.maxDuration != null && Number.isFinite(params.maxDuration) && params.maxDuration > 0);
+    if (params.category || hasPrice || hasDuration) {
       const svcSome: Prisma.ProfessionalServiceWhereInput = { isActive: true };
       if (params.category) {
         svcSome.service = { category: { slug: params.category } };
       }
       if (hasPrice) {
         svcSome.price = priceFilter;
+      }
+      if (hasDuration) {
+        svcSome.durationMin = {
+          ...(params.minDuration != null ? { gte: params.minDuration } : {}),
+          ...(params.maxDuration != null ? { lte: params.maxDuration } : {}),
+        };
       }
       where.professionalServices = { some: svcSome };
     }
@@ -272,6 +264,10 @@ export class ProfessionalsService {
         take: 5,
         orderBy: { price: 'asc' as const },
         include: { service: { select: { name: true, slug: true } } },
+      },
+      workingHours: {
+        where: { isActive: true },
+        select: { dayOfWeek: true, startTime: true, endTime: true, isActive: true },
       },
     };
 
@@ -370,8 +366,12 @@ export class ProfessionalsService {
     }
     const safe = this.sanitizePublicLocations(pro);
     const withMedia = this.attachMediaPublicUrls(safe);
-    this.cache.set(cacheKey, withMedia, 120_000);
-    return withMedia;
+    const completedBookingsCount = await this.prisma.booking.count({
+      where: { professionalId: pro.id, status: 'completed' as any },
+    }).catch(() => 0);
+    const payload = { ...withMedia, completedBookingsCount };
+    this.cache.set(cacheKey, payload, 120_000);
+    return payload;
   }
 
   private attachMediaPublicUrls<T extends {
@@ -485,24 +485,6 @@ export class ProfessionalsService {
           bio: data.profileBio?.trim() || null,
         },
       });
-      const nameForSlug = [data.firstName?.trim(), data.lastName?.trim()].filter(Boolean).join(' ').trim()
-        || data.displayName?.trim()
-        || '';
-      if (nameForSlug) {
-        const base = englishSlug(nameForSlug);
-        if (base.length >= 2) {
-          let nextSlug = base;
-          const taken = await this.prisma.professional.findFirst({
-            where: { slug: nextSlug, id: { not: pro.id } },
-            select: { id: true },
-          });
-          if (taken) nextSlug = `${base}-${pro.id.slice(0, 6)}`;
-          if (nextSlug !== pro.slug) {
-            await this.prisma.professional.update({ where: { id: pro.id }, data: { slug: nextSlug } });
-            this.cache.invalidateCatalog();
-          }
-        }
-      }
     }
     return this.getOwn(userId);
   }
@@ -537,6 +519,20 @@ export class ProfessionalsService {
     } catch {
       /* non-blocking */
     }
+    
+    // #40 item 63
+    try {
+      const adminRoles = await this.prisma.role.findMany({ where: { name: { in: ['admin', 'SUPER_ADMIN', 'super_admin'] } }, select: { id: true } });
+      const roleIds = adminRoles.map((r) => r.id);
+      if (roleIds.length) {
+        const admins = await this.prisma.userRole.findMany({ where: { roleId: { in: roleIds } }, select: { userId: true }, distinct: ['userId'] });
+        for (const a of admins) {
+          if (a.userId === userId) continue;
+          await this.prisma.notification.create({ data: { userId: a.userId, type: 'system', title: 'زیباگر جدید در انتظار بررسی', body: `پروفایل «${pro.title || 'زیباگر'}» برای تأیید ارسال شد.`, data: { professionalId: pro.id, status: 'pending_review', href: '/admin/professionals' } } }).catch(() => undefined);
+        }
+      }
+    } catch { /* non-blocking */ }
+
     return { ...updated, completion };
   }
 
@@ -619,9 +615,10 @@ export class ProfessionalsService {
       }
       const city = loc.city || '';
       const province = loc.province || null;
-      const enteredAddress = typeof loc.address === 'string' ? loc.address.trim() : '';
       const publicAddress =
-        enteredAddress || `محدوده ${city}${province ? `، ${province}` : ''}`;
+        typeof loc.address === 'string' && loc.address.includes('محدوده')
+          ? loc.address
+          : `محدوده ${city}${province ? `، ${province}` : ''}`;
       return {
         ...pl,
         location: {
@@ -640,6 +637,7 @@ export class ProfessionalsService {
     return {
       user: {
         select: {
+          lastLoginAt: true,
           profile: {
             select: {
               displayName: true, firstName: true, lastName: true, avatarUrl: true,
@@ -913,4 +911,65 @@ export class ProfessionalsService {
       availableNet: available,
     };
   }
+
+  async listBlockedCustomers(userId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const links = (pro.socialLinks as { _blockedCustomerIds?: string[] } | null) || {};
+    const ids = Array.isArray(links._blockedCustomerIds) ? links._blockedCustomerIds : [];
+    if (!ids.length) return { items: [] as { id: string; phone?: string | null; displayName?: string | null }[] };
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, phone: true, profile: { select: { displayName: true } } },
+    });
+    return { items: users.map((u) => ({ id: u.id, phone: u.phone, displayName: u.profile?.displayName ?? null })) };
+  }
+
+  async blockCustomer(userId: string, customerId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    if (customerId === userId) throw new BadRequestException('نمی‌توانید خودتان را مسدود کنید');
+    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
+    const prev = Array.isArray(links._blockedCustomerIds) ? (links._blockedCustomerIds as string[]) : [];
+    if (!prev.includes(customerId)) {
+      links._blockedCustomerIds = [...prev, customerId];
+      await this.prisma.professional.update({ where: { id: pro.id }, data: { socialLinks: links as object } });
+    }
+    return { ok: true };
+  }
+
+  async unblockCustomer(userId: string, customerId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
+    const prev = Array.isArray(links._blockedCustomerIds) ? (links._blockedCustomerIds as string[]) : [];
+    links._blockedCustomerIds = prev.filter((id) => id !== customerId);
+    await this.prisma.professional.update({ where: { id: pro.id }, data: { socialLinks: links as object } });
+    return { ok: true };
+  }
+
+
+  /** #40 item 58 — pin up to 3 services for public ordering */
+  async listPinnedServices(userId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const links = (pro.socialLinks as { _pinnedServiceIds?: string[] } | null) || {};
+    const ids = Array.isArray(links._pinnedServiceIds) ? links._pinnedServiceIds : [];
+    return { pinnedServiceIds: ids.slice(0, 3) };
+  }
+
+  async setPinnedServices(userId: string, serviceIds: string[]) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
+    const cleaned = Array.from(new Set((serviceIds || []).filter(Boolean))).slice(0, 3);
+    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
+    if (cleaned.length) links._pinnedServiceIds = cleaned;
+    else delete links._pinnedServiceIds;
+    await this.prisma.professional.update({
+      where: { id: pro.id },
+      data: { socialLinks: (Object.keys(links).length ? links : null) as object },
+    });
+    return { pinnedServiceIds: cleaned };
+  }
+
 }
