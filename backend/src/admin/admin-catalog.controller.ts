@@ -157,8 +157,8 @@ export class AdminCatalogController {
   async deleteCategory(@Param('id') id: string) {
     const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('category not found');
-    const updated = this.cache.invalidateCatalog();
-    await this.prisma.serviceCategory.update({
+    this.cache.invalidateCatalog();
+    const updated = await this.prisma.serviceCategory.update({
       where: { id },
       data: { isActive: false },
       include: {
