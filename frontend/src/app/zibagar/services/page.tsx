@@ -1,14 +1,15 @@
 'use client';
 
 /**
- * منوی خدمات یکپارچه — تخصص → خانواده → جدول قیمت
- * API /categories درخت تو در تو برمی‌گرداند (children + services).
+ * منوی خدمات زیباگر — کاربردی و کامل
+ * ساختار همیشه از CATALOG_TEMPLATE (حتی اگر API ناقص باشد).
+ * اتصال به کاتالوگ واقعی: تطبیق نام خدمت، در صورت نبود ایجاد زیر دستهٔ موجود.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
+import { PanelLoading, PanelError } from '@/components/panel/state-blocks';
 import {
   fetchCategories,
   fetchMyServices,
@@ -17,12 +18,20 @@ import {
   fetchMyPriceRules,
   setMySelectedCategories,
   fetchMyProfessional,
+  createServiceNode,
+  patchMyService,
   type ProfessionalServiceItem,
   type CatalogCategory,
   type PriceRuleItem,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
-import { CATALOG_TEMPLATE, matrixLabels } from '@/lib/catalog-template';
+import {
+  CATALOG_TEMPLATE,
+  matrixLabels,
+  type CatalogFamily,
+  type CatalogSpecialty,
+  type CatalogVariant,
+} from '@/lib/catalog-template';
 import { PriceMatrix } from '@/components/catalog/price-matrix';
 import { formatPrice } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
@@ -31,63 +40,100 @@ type Step = 1 | 2 | 3;
 
 type CatNode = CatalogCategory & {
   children?: CatNode[];
-  services?: { id: string; name: string; slug?: string }[];
+  services?: { id: string; name: string; categoryId?: string }[];
+  parentId?: string | null;
 };
 
-function collectRoots(tree: CatNode[]): CatNode[] {
-  if (!tree.length) return [];
-  // API returns only roots with nested children
-  const hasNested = tree.some((c) => (c.children && c.children.length > 0) || c.parentId == null);
-  if (hasNested && tree.every((c) => !c.parentId || tree.every((x) => x.id !== c.parentId))) {
-    const top = tree.filter((c) => !c.parentId);
-    return top.length ? top : tree;
-  }
-  return tree.filter((c) => !c.parentId);
+type FlatSvc = { id: string; name: string; categoryId?: string; slug?: string };
+
+function norm(s: string) {
+  return s.trim().replace(/\s+/g, ' ');
 }
 
-function childrenOf(root: CatNode | undefined, flat: CatNode[]): CatNode[] {
-  if (!root) return [];
-  if (root.children && root.children.length) return root.children;
-  return flat.filter((c) => c.parentId === root.id);
+function flattenCats(nodes: CatNode[], out: CatNode[] = []): CatNode[] {
+  for (const n of nodes) {
+    out.push(n);
+    if (n.children?.length) flattenCats(n.children, out);
+  }
+  return out;
+}
+
+function findRootForSpecialty(tree: CatNode[], sp: CatalogSpecialty): CatNode | null {
+  const all = flattenCats(tree);
+  return (
+    all.find((c) => !c.parentId && (c.slug === sp.slug || norm(c.name) === norm(sp.name))) ||
+    all.find((c) => c.slug === sp.slug || norm(c.name) === norm(sp.name)) ||
+    null
+  );
+}
+
+function findFamilyCat(tree: CatNode[], root: CatNode | null, familyName: string): CatNode | null {
+  if (!root) return null;
+  const kids = root.children?.length
+    ? root.children
+    : flattenCats(tree).filter((c) => c.parentId === root.id);
+  return kids.find((c) => norm(c.name) === norm(familyName)) || null;
+}
+
+function findServiceByName(list: FlatSvc[], name: string): FlatSvc | null {
+  const n = norm(name);
+  return list.find((s) => norm(s.name) === n) || null;
 }
 
 export default function ZibagarServicesPage() {
   const [step, setStep] = useState<Step>(1);
   const [tree, setTree] = useState<CatNode[]>([]);
-  const [flatServices, setFlatServices] = useState<{ id: string; name: string; categoryId?: string }[]>([]);
+  const [flatServices, setFlatServices] = useState<FlatSvc[]>([]);
   const [mine, setMine] = useState<ProfessionalServiceItem[]>([]);
-  const [selectedRootIds, setSelectedRootIds] = useState<string[]>([]);
-  const [rootId, setRootId] = useState<string | null>(null);
-  const [familyId, setFamilyId] = useState<string | null>(null);
-  const [activeServiceName, setActiveServiceName] = useState('');
+  /** specialty slugs selected */
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
+  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const [openFamily, setOpenFamily] = useState<string | null>(null);
+  const [familySearch, setFamilySearch] = useState('');
+  const [activeVariant, setActiveVariant] = useState<CatalogVariant | null>(null);
+  const [activeFamily, setActiveFamily] = useState<CatalogFamily | null>(null);
   const [psId, setPsId] = useState<string | null>(null);
   const [rules, setRules] = useState<PriceRuleItem[]>([]);
+  const [durationMin, setDurationMin] = useState(60);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [familySearch, setFamilySearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [cats, services, pro, allSvcs] = await Promise.all([
-        fetchCategories(),
-        fetchMyServices(),
+        fetchCategories().catch(() => [] as CatalogCategory[]),
+        fetchMyServices().catch(() => [] as ProfessionalServiceItem[]),
         fetchMyProfessional().catch(() => null),
         apiClient
-          .get<{ id: string; name: string; categoryId?: string }[] | { items?: { id: string; name: string; categoryId?: string }[] }>('/services')
-          .catch(() => [] as { id: string; name: string; categoryId?: string }[]),
+          .get<FlatSvc[] | { items?: FlatSvc[] }>('/services')
+          .catch(() => [] as FlatSvc[]),
       ]);
       setTree((Array.isArray(cats) ? cats : []) as CatNode[]);
       setMine(Array.isArray(services) ? services : []);
       const flat = Array.isArray(allSvcs)
         ? allSvcs
-        : (allSvcs as { items?: { id: string; name: string; categoryId?: string }[] })?.items || [];
+        : (allSvcs as { items?: FlatSvc[] })?.items || [];
       setFlatServices(flat);
-      const sel = (pro as { selectedCategoryIds?: string[] } | null)?.selectedCategoryIds;
-      if (Array.isArray(sel) && sel.length) setSelectedRootIds(sel);
+
+      // restore selected specialties from pro.selectedCategoryIds matched to template
+      const selIds = (pro as { selectedCategoryIds?: string[] } | null)?.selectedCategoryIds;
+      if (Array.isArray(selIds) && selIds.length) {
+        const all = flattenCats(cats as CatNode[]);
+        const slugs: string[] = [];
+        for (const id of selIds) {
+          const cat = all.find((c) => c.id === id);
+          if (!cat) continue;
+          const sp = CATALOG_TEMPLATE.find(
+            (s) => s.slug === cat.slug || norm(s.name) === norm(cat.name),
+          );
+          if (sp && !slugs.includes(sp.slug)) slugs.push(sp.slug);
+        }
+        if (slugs.length) setSelectedSlugs(slugs);
+      }
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -99,112 +145,139 @@ export default function ZibagarServicesPage() {
     void load();
   }, [load]);
 
-  const roots = useMemo(() => collectRoots(tree), [tree]);
+  const activeSpecialty = useMemo(
+    () => CATALOG_TEMPLATE.find((s) => s.slug === activeSlug) || null,
+    [activeSlug],
+  );
 
-  const rootNode = useMemo(() => roots.find((r) => r.id === rootId), [roots, rootId]);
-
-  const families = useMemo(() => childrenOf(rootNode, tree), [rootNode, tree]);
-
-  const familyNode = useMemo(() => {
-    if (!familyId) return null;
-    const fromNested = families.find((f) => f.id === familyId);
-    if (fromNested) return fromNested;
-    // deep search
-    const walk = (nodes: CatNode[]): CatNode | null => {
-      for (const n of nodes) {
-        if (n.id === familyId) return n;
-        if (n.children?.length) {
-          const f = walk(n.children);
-          if (f) return f;
-        }
-      }
-      return null;
-    };
-    return walk(tree);
-  }, [familyId, families, tree]);
-
-  const familyServices = useMemo(() => {
-    const nested = familyNode?.services || [];
-    const fromFlat = familyId
-      ? flatServices.filter((s) => s.categoryId === familyId)
-      : [];
-    const byId = new Map<string, { id: string; name: string }>();
-    for (const s of nested) byId.set(s.id, s);
-    for (const s of fromFlat) byId.set(s.id, s);
-    // if still empty and family is actually root with services
-    if (!byId.size && rootNode && familyId === rootId) {
-      for (const s of rootNode.services || []) byId.set(s.id, s);
-      for (const s of flatServices.filter((x) => x.categoryId === rootId)) byId.set(s.id, s);
+  const mineByServiceId = useMemo(() => {
+    const m = new Map<string, ProfessionalServiceItem>();
+    for (const ps of mine) {
+      const sid = ps.serviceId || ps.service?.id;
+      if (sid) m.set(sid, ps);
+      if (ps.service?.name) m.set(`name:${norm(ps.service.name)}`, ps);
     }
-    let list = [...byId.values()];
-    const q = familySearch.trim();
-    if (q) list = list.filter((s) => s.name.includes(q));
-    return list;
-  }, [familyNode, familyId, flatServices, familySearch, rootNode, rootId]);
+    return m;
+  }, [mine]);
 
-  const templateFamily = useMemo(() => {
-    const root = roots.find((r) => r.id === rootId);
-    if (!root || !familyNode) return null;
-    const sp = CATALOG_TEMPLATE.find((s) => s.name === root.name || s.slug === root.slug);
-    if (!sp) return null;
-    return sp.families.find((f) => f.name === familyNode.name) || null;
-  }, [roots, rootId, familyNode]);
+  async function persistSelected(slugs: string[]) {
+    const ids: string[] = [];
+    for (const slug of slugs) {
+      const sp = CATALOG_TEMPLATE.find((s) => s.slug === slug);
+      if (!sp) continue;
+      const root = findRootForSpecialty(tree, sp);
+      if (root?.id) ids.push(root.id);
+    }
+    if (ids.length) {
+      try {
+        await setMySelectedCategories(ids);
+      } catch {
+        /* non-blocking */
+      }
+    }
+  }
 
-  async function toggleRoot(id: string) {
-    const next = selectedRootIds.includes(id)
-      ? selectedRootIds.filter((x) => x !== id)
-      : [...selectedRootIds, id];
-    setSelectedRootIds(next);
+  async function toggleSpecialty(slug: string) {
+    const next = selectedSlugs.includes(slug)
+      ? selectedSlugs.filter((x) => x !== slug)
+      : [...selectedSlugs, slug];
+    setSelectedSlugs(next);
     setBusy(true);
-    setError(null);
     try {
-      await setMySelectedCategories(next);
+      await persistSelected(next);
       setMsg('تخصص‌ها ذخیره شد');
-    } catch (e) {
-      setError(friendlyApiError(e));
     } finally {
       setBusy(false);
     }
   }
 
-  async function enableAndPrice(serviceId: string, serviceName: string) {
+  /** Resolve or create catalog Service for a template variant, then open pricing */
+  async function enableAndPrice(family: CatalogFamily, variant: CatalogVariant) {
+    if (!activeSpecialty) return;
     setBusy(true);
     setError(null);
-    setActiveServiceName(serviceName);
+    setMsg(null);
+    setActiveFamily(family);
+    setActiveVariant(variant);
     try {
-      let ps = mine.find((m) => m.serviceId === serviceId || m.service?.id === serviceId);
+      let svc = findServiceByName(flatServices, variant.name);
+
+      // also search nested category services
+      if (!svc) {
+        for (const c of flattenCats(tree)) {
+          const hit = c.services?.find((s) => norm(s.name) === norm(variant.name));
+          if (hit) {
+            svc = { id: hit.id, name: hit.name, categoryId: c.id };
+            break;
+          }
+        }
+      }
+
+      if (!svc) {
+        const root = findRootForSpecialty(tree, activeSpecialty);
+        const famCat = findFamilyCat(tree, root, family.name);
+        const categoryId = famCat?.id || root?.id;
+        if (!categoryId) {
+          throw new Error(
+            'این تخصص هنوز در کاتالوگ سرور نیست. از پنل ادمین «بارگذاری قالب استاندارد» را بزنید، بعد اینجا «بارگذاری دوباره» را بزنید.',
+          );
+        }
+        const created = await createServiceNode({
+          name: variant.name,
+          categoryId,
+        });
+        svc = { id: created.id, name: created.name, categoryId: created.categoryId };
+        setFlatServices((prev) => [...prev, svc!]);
+      }
+
+      let ps =
+        mineByServiceId.get(svc.id) ||
+        mineByServiceId.get(`name:${norm(variant.name)}`) ||
+        mine.find((m) => m.serviceId === svc!.id || m.service?.id === svc!.id);
+
       if (!ps) {
         await upsertMyService({
-          serviceId,
+          serviceId: svc.id,
           durationMin: 60,
           price: 0,
           isActive: true,
         });
         const refreshed = await fetchMyServices();
         setMine(refreshed);
-        ps = refreshed.find((m) => m.serviceId === serviceId || m.service?.id === serviceId);
+        ps = refreshed.find((m) => m.serviceId === svc!.id || m.service?.id === svc!.id);
+      } else if (ps.isActive === false) {
+        await patchMyService(ps.id, { isActive: true });
+        const refreshed = await fetchMyServices();
+        setMine(refreshed);
+        ps = refreshed.find((m) => m.id === ps!.id) || ps;
       }
-      if (!ps) throw new Error('خدمت فعال نشد');
-      setPsId(ps.id);
-      let pr = await fetchMyPriceRules(ps.id);
 
-      const variant = templateFamily?.variants.find((v) => v.name === serviceName);
-      if (templateFamily && variant) {
-        const labels = matrixLabels(templateFamily, variant);
-        const have = new Set(pr.map((r) => r.label));
-        for (const label of labels) {
-          if (!have.has(label)) {
-            await upsertMyPriceRule(ps.id, { label, price: 0 });
-          }
+      if (!ps) throw new Error('خدمت برای شما فعال نشد. دوباره تلاش کنید.');
+
+      setPsId(ps.id);
+      setDurationMin(ps.durationMin || 60);
+
+      let pr = await fetchMyPriceRules(ps.id);
+      const labels = matrixLabels(family, variant);
+      const have = new Set(pr.map((r) => r.label));
+      for (const label of labels) {
+        if (!have.has(label)) {
+          await upsertMyPriceRule(ps.id, { label, price: 0 });
         }
-        pr = await fetchMyPriceRules(ps.id);
-      } else if (pr.length === 0) {
-        await upsertMyPriceRule(ps.id, { label: 'قیمت پایه', price: ps.price || 0 });
-        pr = await fetchMyPriceRules(ps.id);
       }
-      setRules(pr);
+      // remove nothing — keep extra custom rules
+      pr = await fetchMyPriceRules(ps.id);
+      // order rules by labels order
+      const ordered: PriceRuleItem[] = [];
+      for (const l of labels) {
+        const hit = pr.find((r) => r.label === l);
+        if (hit) ordered.push(hit);
+      }
+      for (const r of pr) {
+        if (!labels.includes(r.label)) ordered.push(r);
+      }
+      setRules(ordered.length ? ordered : pr);
       setStep(3);
-      setMsg(null);
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -215,6 +288,7 @@ export default function ZibagarServicesPage() {
   async function saveCell(label: string, price: number, ruleId?: string) {
     if (!psId) return;
     setBusy(true);
+    setError(null);
     try {
       await upsertMyPriceRule(psId, { id: ruleId, label, price });
       const next = await fetchMyPriceRules(psId);
@@ -222,17 +296,9 @@ export default function ZibagarServicesPage() {
       const positive = next.filter((r) => r.price > 0).map((r) => r.price);
       if (positive.length) {
         const min = Math.min(...positive);
-        const ps = mine.find((m) => m.id === psId);
-        if (ps?.serviceId) {
-          await upsertMyService({
-            serviceId: ps.serviceId,
-            durationMin: ps.durationMin || 60,
-            price: min,
-            isActive: true,
-          });
-        }
+        await patchMyService(psId, { price: min, durationMin });
       }
-      setMsg('ذخیره شد');
+      setMsg('قیمت ذخیره شد');
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -243,12 +309,15 @@ export default function ZibagarServicesPage() {
   async function batchApply(labels: string[], price: number) {
     if (!psId) return;
     setBusy(true);
+    setError(null);
     try {
       for (const label of labels) {
         const existing = rules.find((r) => r.label === label);
         await upsertMyPriceRule(psId, { id: existing?.id, label, price });
       }
-      setRules(await fetchMyPriceRules(psId));
+      const next = await fetchMyPriceRules(psId);
+      setRules(next);
+      await patchMyService(psId, { price, durationMin });
       setMsg(`قیمت ${formatPrice(price)} روی ${labels.length.toLocaleString('fa-IR')} مورد اعمال شد`);
     } catch (e) {
       setError(friendlyApiError(e));
@@ -257,16 +326,42 @@ export default function ZibagarServicesPage() {
     }
   }
 
+  async function saveDuration() {
+    if (!psId) return;
+    setBusy(true);
+    try {
+      await patchMyService(psId, { durationMin: Math.max(5, durationMin) });
+      setMsg('مدت زمان ذخیره شد');
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <PanelLoading label="بارگذاری منوی خدمات…" />;
-  if (error && !tree.length) return <PanelError message={error} onRetry={load} />;
+  if (error && !tree.length && !CATALOG_TEMPLATE.length) {
+    return <PanelError message={error} onRetry={load} />;
+  }
+
+  const filteredFamilies = useMemo(() => {
+    if (!activeSpecialty) return [];
+    const q = familySearch.trim();
+    return activeSpecialty.families.filter((f) => {
+      if (!q) return true;
+      if (f.name.includes(q)) return true;
+      return f.variants.some((v) => v.name.includes(q));
+    });
+  }, [activeSpecialty, familySearch]);
 
   return (
-    <div className="mx-auto max-w-lg space-y-5 pb-24" dir="rtl">
+    <div className="mx-auto max-w-lg space-y-5 pb-28" dir="rtl">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-[#0B2C4A]">منوی خدمات من</h1>
-        <p className="mt-1 text-sm text-gray">فقط خدمات فعال شما به مشتری نشان داده می‌شود</p>
+        <p className="mt-1 text-sm text-gray">تخصص → خدمت → قیمت؛ فقط موارد فعال به مشتری نشان داده می‌شود</p>
       </div>
 
+      {/* Stepper */}
       <div className="flex items-center justify-center gap-0">
         {(
           [
@@ -308,174 +403,168 @@ export default function ZibagarServicesPage() {
         <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm text-red-700">{error}</p>
       )}
 
+      {/* STEP 1 */}
       {step === 1 && (
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <h2 className="text-center text-base font-semibold text-[#0B2C4A]">تخصص‌هایی که بلدی</h2>
-          {!roots.length ? (
-            <PanelEmpty
-              title="کاتالوگی نیست"
-              description="سوپرادمین باید از «کاتالوگ قالب» قالب استاندارد را بارگذاری کند."
-            />
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {roots.map((r) => {
-                const on = selectedRootIds.includes(r.id);
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void toggleRoot(r.id)}
-                    className={`rounded-2xl border-2 px-3 py-4 text-sm font-medium transition ${
-                      on
-                        ? 'border-coral bg-[#FFE6E2] text-coral'
-                        : 'border-gray-200 bg-white text-[#0B2C4A]'
-                    }`}
-                  >
-                    <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs">
-                      {on ? '✓' : ''}
+          <p className="text-center text-xs text-gray">چند مورد را انتخاب کن؛ بعد خدمات همان‌ها را قیمت می‌گذاری</p>
+          <div className="grid grid-cols-2 gap-3">
+            {CATALOG_TEMPLATE.map((sp) => {
+              const on = selectedSlugs.includes(sp.slug);
+              const root = findRootForSpecialty(tree, sp);
+              return (
+                <button
+                  key={sp.slug}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void toggleSpecialty(sp.slug)}
+                  className={`rounded-2xl border-2 px-3 py-4 text-sm font-medium transition ${
+                    on
+                      ? 'border-coral bg-[#FFE6E2] text-coral'
+                      : 'border-gray-200 bg-white text-[#0B2C4A]'
+                  }`}
+                >
+                  <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs">
+                    {on ? '✓' : ''}
+                  </span>
+                  {sp.name}
+                  {!root && (
+                    <span className="mt-1 block text-[10px] font-normal text-amber-600">
+                      در سرور نیست
                     </span>
-                    {r.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                  )}
+                </button>
+              );
+            })}
+          </div>
           <Button
             className="w-full rounded-xl"
-            disabled={!selectedRootIds.length || busy}
+            disabled={!selectedSlugs.length || busy}
             onClick={() => {
-              setRootId(selectedRootIds[0] || null);
-              setFamilyId(null);
+              setActiveSlug(selectedSlugs[0]);
+              setOpenFamily(null);
               setStep(2);
               setMsg(null);
+              setError(null);
             }}
           >
             ادامه به انتخاب خدمات
           </Button>
-          <p className="text-center text-[11px] text-gray">دسته‌های محبوب فقط توسط ادمین تنظیم می‌شود</p>
+          <button type="button" className="w-full text-center text-xs text-gray underline" onClick={() => void load()}>
+            بارگذاری دوباره از سرور
+          </button>
         </Card>
       )}
 
+      {/* STEP 2 */}
       {step === 2 && (
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="text-sm text-gray underline" onClick={() => setStep(1)}>
+            <button
+              type="button"
+              className="text-sm text-gray underline"
+              onClick={() => {
+                setStep(1);
+                setError(null);
+              }}
+            >
               → تخصص‌ها
             </button>
             <div className="flex flex-wrap gap-1">
-              {selectedRootIds.map((id) => {
-                const r = roots.find((x) => x.id === id);
+              {selectedSlugs.map((slug) => {
+                const sp = CATALOG_TEMPLATE.find((s) => s.slug === slug);
                 return (
                   <button
-                    key={id}
+                    key={slug}
                     type="button"
                     onClick={() => {
-                      setRootId(id);
-                      setFamilyId(null);
+                      setActiveSlug(slug);
+                      setOpenFamily(null);
+                      setFamilySearch('');
                     }}
                     className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      rootId === id ? 'bg-coral text-white' : 'bg-gray-100 text-gray-700'
+                      activeSlug === slug ? 'bg-coral text-white' : 'bg-gray-100 text-gray-700'
                     }`}
                   >
-                    {r?.name || '—'}
+                    {sp?.name || slug}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <h2 className="font-semibold text-[#0B2C4A]">خانواده خدمت</h2>
-          {!rootId ? (
-            <p className="text-sm text-gray">یک تخصص را از بالا انتخاب کنید.</p>
-          ) : !families.length ? (
-            <div className="space-y-2">
-              <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-3 py-2">
-                برای این تخصص هنوز خانواده‌ای در کاتالوگ نیست. اگر ادمین تازه قالب را زده، چند ثانیه صبر کنید و «تلاش مجدد» را بزنید.
-              </p>
-              <Button size="sm" variant="outline" onClick={() => void load()}>
-                تلاش مجدد / بارگذاری دوباره
-              </Button>
-              {/* fallback: services directly on root */}
-              {(rootNode?.services?.length || flatServices.some((s) => s.categoryId === rootId)) && (
-                <div className="space-y-2 pt-2">
-                  <p className="text-xs text-gray">خدمات مستقیم این تخصص:</p>
-                  {(rootNode?.services || flatServices.filter((s) => s.categoryId === rootId)).map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2.5"
-                    >
-                      <span className="text-sm font-medium">{s.name}</span>
-                      <Button size="sm" disabled={busy} onClick={() => void enableAndPrice(s.id, s.name)}>
-                        قیمت‌گذاری
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <Input
+            placeholder="جستجوی خانواده یا خدمت…"
+            value={familySearch}
+            onChange={(e) => setFamilySearch(e.target.value)}
+            className="bg-white"
+          />
+
+          {!activeSpecialty ? (
+            <p className="text-sm text-gray">یک تخصص را از چیپ‌های بالا انتخاب کنید.</p>
           ) : (
             <ul className="space-y-2">
-              {families.map((f) => {
-                const open = familyId === f.id;
-                const count =
-                  (f.services?.length || 0) ||
-                  flatServices.filter((s) => s.categoryId === f.id).length;
+              {filteredFamilies.map((fam) => {
+                const open = openFamily === fam.name;
+                const variants = fam.variants;
+                const pricedCount = variants.filter((v) => {
+                  const svc = findServiceByName(flatServices, v.name);
+                  if (svc && mineByServiceId.has(svc.id)) return true;
+                  return mineByServiceId.has(`name:${norm(v.name)}`);
+                }).length;
                 return (
-                  <li key={f.id} className="overflow-hidden rounded-xl border border-border">
+                  <li key={fam.name} className="overflow-hidden rounded-xl border border-border">
                     <button
                       type="button"
                       className={`flex w-full items-center justify-between px-3 py-3 text-right text-sm font-medium ${
-                        open ? 'bg-[#FFE6E2] text-coral' : 'bg-white'
+                        open ? 'bg-[#FFE6E2] text-coral' : 'bg-white text-[#0B2C4A]'
                       }`}
-                      onClick={() => {
-                        setFamilyId(open ? null : f.id);
-                        setFamilySearch('');
-                      }}
+                      onClick={() => setOpenFamily(open ? null : fam.name)}
                     >
-                      <span>{f.name}</span>
-                      <span className="text-xs text-gray">{count.toLocaleString('fa-IR')} مورد</span>
+                      <span>{fam.name}</span>
+                      <span className="text-xs text-gray">
+                        {pricedCount.toLocaleString('fa-IR')}/{variants.length.toLocaleString('fa-IR')} قیمت‌گذاری
+                      </span>
                     </button>
                     {open && (
                       <div className="space-y-2 border-t border-border bg-gray-50/80 p-3">
-                        <Input
-                          placeholder="جستجوی خدمت…"
-                          value={familySearch}
-                          onChange={(e) => setFamilySearch(e.target.value)}
-                          className="bg-white"
-                        />
-                        {familyServices.map((s) => {
-                          const active = mine.some(
-                            (m) =>
-                              (m.serviceId === s.id || m.service?.id === s.id) &&
-                              m.isActive !== false,
-                          );
+                        {variants.map((v) => {
+                          const svc = findServiceByName(flatServices, v.name);
+                          const ps =
+                            (svc && mineByServiceId.get(svc.id)) ||
+                            mineByServiceId.get(`name:${norm(v.name)}`);
+                          const active = !!ps && ps.isActive !== false;
+                          const minP =
+                            ps?.priceRules?.filter((r) => r.price > 0).map((r) => r.price) ||
+                            (ps?.price && ps.price > 0 ? [ps.price] : []);
+                          const from =
+                            minP.length > 0 ? Math.min(...minP) : ps?.price && ps.price > 0 ? ps.price : null;
                           return (
                             <div
-                              key={s.id}
+                              key={v.name}
                               className="flex items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2.5"
                             >
-                              <span className="text-sm font-medium text-[#0B2C4A]">
-                                {s.name}
-                                {active ? (
-                                  <span className="mr-2 text-[10px] text-emerald-600">فعال</span>
-                                ) : null}
-                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-[#0B2C4A]">
+                                  {v.name}
+                                  {active && (
+                                    <span className="mr-2 text-[10px] text-emerald-600">فعال</span>
+                                  )}
+                                </p>
+                                {from != null && (
+                                  <p className="text-[11px] text-gray">از {formatPrice(from)}</p>
+                                )}
+                              </div>
                               <Button
                                 size="sm"
                                 disabled={busy}
-                                onClick={() => void enableAndPrice(s.id, s.name)}
+                                onClick={() => void enableAndPrice(fam, v)}
                               >
-                                قیمت‌گذاری
+                                {active ? 'ویرایش قیمت' : 'قیمت‌گذاری'}
                               </Button>
                             </div>
                           );
                         })}
-                        {!familyServices.length && (
-                          <p className="text-xs text-gray">
-                            خدمتی در این خانواده نیست. ادمین باید قالب را دوباره بارگذاری کند یا خدمت اضافه کند.
-                          </p>
-                        )}
                       </div>
                     )}
                   </li>
@@ -483,16 +572,59 @@ export default function ZibagarServicesPage() {
               })}
             </ul>
           )}
+
+          {mine.length > 0 && (
+            <div className="rounded-xl border border-dashed border-border p-3">
+              <p className="mb-2 text-xs font-medium text-gray">خدمات فعال شما ({mine.filter((m) => m.isActive !== false).length.toLocaleString('fa-IR')})</p>
+              <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
+                {mine
+                  .filter((m) => m.isActive !== false)
+                  .map((m) => (
+                    <li key={m.id} className="flex justify-between gap-2">
+                      <span>{m.service?.name || '—'}</span>
+                      <span className="text-gray">{m.price > 0 ? formatPrice(m.price) : '—'}</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
         </Card>
       )}
 
-      {step === 3 && psId && (
+      {/* STEP 3 */}
+      {step === 3 && psId && activeVariant && (
         <div className="space-y-3">
-          <button type="button" className="text-sm text-gray underline" onClick={() => setStep(2)}>
+          <button
+            type="button"
+            className="text-sm text-gray underline"
+            onClick={() => {
+              setStep(2);
+              setError(null);
+            }}
+          >
             → بازگشت به خدمات
           </button>
+
+          <Card className="flex flex-wrap items-end gap-3 rounded-2xl border border-border p-3">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs text-gray">مدت زمان تقریبی (دقیقه)</label>
+              <Input
+                type="number"
+                min={5}
+                step={5}
+                dir="ltr"
+                value={durationMin}
+                onChange={(e) => setDurationMin(Number(e.target.value) || 60)}
+                className="max-w-[120px]"
+              />
+            </div>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void saveDuration()}>
+              ذخیره مدت
+            </Button>
+          </Card>
+
           <PriceMatrix
-            title={activeServiceName || 'جدول قیمت'}
+            title={activeVariant.name}
             busy={busy}
             cells={rules.map((r) => ({
               label: r.label,
@@ -502,6 +634,12 @@ export default function ZibagarServicesPage() {
             onSaveCell={saveCell}
             onBatchApply={batchApply}
           />
+
+          {activeFamily && activeFamily.dims.length > 0 && (
+            <p className="text-center text-[11px] text-gray">
+              ابعاد قیمت: {activeFamily.dims.map((d) => d.label).join(' · ')}
+            </p>
+          )}
         </div>
       )}
     </div>
