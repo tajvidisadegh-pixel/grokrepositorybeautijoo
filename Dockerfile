@@ -1,17 +1,12 @@
-# Beautijoo FRONTEND image (repo-root Dockerfile used by Liara when root is connected)
-# Builds frontend in isolation (no workspace hoist) so Next standalone contains `next`.
-#
-# Liara runtime error we fix:
-#   Error: Cannot find module 'next'
-#   Require stack: - /app/standalone/server.js
-
 FROM node:22-bookworm-slim AS builder
-WORKDIR /app/frontend
+
+WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV PUBLIC_API_TIMEOUT_MS=12000
 
+# NEXT_PUBLIC_* are baked into the client bundle at build time.
 ARG NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1
 ARG NEXT_PUBLIC_APP_URL=https://beautijoo.ir
 ARG NEXT_PUBLIC_APP_NAME=Beautijoo
@@ -19,62 +14,50 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 
-# Install only frontend deps (avoid monorepo workspace hoisting next to repo root)
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY package.json ./
+COPY frontend/package.json ./frontend/package.json
+COPY backend/package.json ./backend/package.json
+RUN npm install --include=dev
 
-COPY frontend/ ./
+COPY frontend ./frontend
 
-# Ensure tracing root is this package (server.js + node_modules/next side by side)
 RUN npm run build
 
-# Locate standalone server and verify next is traced
+# Fail early if standalone missing
+RUN test -n "$(find /app/frontend/.next/standalone -type f -name server.js -print -quit)"
+
+# If workspace hoist left `next` outside standalone, copy it beside server.js
 RUN set -e; \
-  if [ -f .next/standalone/server.js ]; then S=.next/standalone; \
-  elif [ -f .next/standalone/frontend/server.js ]; then S=.next/standalone/frontend; \
-  else echo "standalone server.js missing"; find .next -name server.js | head; exit 1; fi; \
-  echo "STANDALONE=$S"; \
-  if [ ! -d "$S/node_modules/next" ]; then \
-    echo "next not in standalone; copying from build node_modules"; \
-    mkdir -p "$S/node_modules"; \
-    cp -a node_modules/next "$S/node_modules/"; \
-    # next peer deps often needed
+  SERVER=$(find /app/frontend/.next/standalone -type f -name server.js -print -quit); \
+  SERVER_DIR=$(dirname "$SERVER"); \
+  if [ ! -d "$SERVER_DIR/node_modules/next" ]; then \
+    echo "Patching next into standalone at $SERVER_DIR"; \
+    mkdir -p "$SERVER_DIR/node_modules"; \
+    if [ -d /app/node_modules/next ]; then cp -a /app/node_modules/next "$SERVER_DIR/node_modules/"; \
+    elif [ -d /app/frontend/node_modules/next ]; then cp -a /app/frontend/node_modules/next "$SERVER_DIR/node_modules/"; \
+    else echo "ERROR: next package not found to copy"; exit 1; fi; \
     for p in react react-dom styled-jsx; do \
-      [ -d "node_modules/$p" ] && cp -a "node_modules/$p" "$S/node_modules/" || true; \
+      if [ -d "/app/node_modules/$p" ]; then cp -a "/app/node_modules/$p" "$SERVER_DIR/node_modules/" || true; fi; \
+      if [ -d "/app/frontend/node_modules/$p" ]; then cp -a "/app/frontend/node_modules/$p" "$SERVER_DIR/node_modules/" || true; fi; \
     done; \
   fi; \
-  test -d "$S/node_modules/next"; \
-  # stage a clean tree for runner
-  mkdir -p /out; \
-  cp -a "$S"/. /out/; \
-  mkdir -p /out/.next; \
-  cp -a .next/static /out/.next/static; \
-  cp -a public /out/public; \
-  test -f /out/server.js
+  test -d "$SERVER_DIR/node_modules/next"
 
 FROM node:22-bookworm-slim AS runner
+
 WORKDIR /app
+
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Flat layout at /app (preferred)
-COPY --from=builder /out/ ./
-
-# Also mirror under /app/standalone so Liara start commands that use
-#   node standalone/server.js
-# still resolve `next` next to that server.js
-RUN mkdir -p /app/standalone \
-  && cp -a /app/server.js /app/standalone/ \
-  && cp -a /app/node_modules /app/standalone/ \
-  && mkdir -p /app/standalone/.next \
-  && cp -a /app/.next/. /app/standalone/.next/ \
-  && cp -a /app/public /app/standalone/public \
-  && test -f /app/standalone/server.js \
-  && test -d /app/standalone/node_modules/next
+# Same layout as the previously working image
+COPY --from=builder /app/frontend/.next/standalone ./standalone
+COPY --from=builder /app/frontend/.next/static ./next-static
+COPY --from=builder /app/frontend/public ./next-public
 
 EXPOSE 3000
 
-# Prefer flat start; both paths work after the mirror above
-CMD ["node", "server.js"]
+# Locate server.js, attach static/public, start from that directory (resolves next)
+CMD ["sh", "-c", "SERVER=$(find /app/standalone -type f -name server.js -print -quit); test -n \"$SERVER\"; SERVER_DIR=$(dirname \"$SERVER\"); mkdir -p \"$SERVER_DIR/.next\"; cp -a /app/next-static \"$SERVER_DIR/.next/static\"; cp -a /app/next-public \"$SERVER_DIR/public\"; cd \"$SERVER_DIR\"; exec node \"$(basename \"$SERVER\")\""]

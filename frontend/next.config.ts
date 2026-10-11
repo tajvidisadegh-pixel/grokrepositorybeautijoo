@@ -4,13 +4,11 @@ import path from 'path';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: 'standalone',
-  // Must match Docker WORKDIR/package root so traced node_modules (incl. next) land next to server.js
-  outputFileTracingRoot: path.join(__dirname),
+  // Monorepo: trace from repo root (was working until Docker experiments)
+  outputFileTracingRoot: path.resolve(__dirname, '../'),
   eslint: {
+    // Do not block production image on lint warnings
     ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: false,
   },
   images: {
     remotePatterns: [
