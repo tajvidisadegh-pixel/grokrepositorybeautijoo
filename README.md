@@ -12,8 +12,24 @@ beautijoo/
 ├── scripts/          # اسکریپت‌های کمکی
 ├── docker/           # Docker Compose برای توسعه محلی
 ├── DEPLOYMENT.md     # راهنمای استقرار
+├── DEPLOY_LIARA.md   # استقرار لیارا (خلاصه)
 └── README.md
 ```
+
+## قانون برنچ و لیارا (بخوانید)
+
+**مرجع رسمی:** [docs/BRANCH_AND_DEPLOY.md](./docs/BRANCH_AND_DEPLOY.md)
+
+| سرویس | برنچ |
+|--------|------|
+| فرانت لیارا | `main` |
+| بک‌اند لیارا | `beautijoo-backend-export` |
+
+- فقط کد با **CI سبز** وارد `main` شود.
+- بعد از تغییر `backend/` حتماً export را همگام کنید، بعد Redeploy لیارا.
+- کامیت روی GitHub به‌تنهایی سایت را عوض نمی‌کند.
+
+جزئیات بیشتر: [DEPLOY_LIARA.md](./DEPLOY_LIARA.md) · ایشو فنی #42
 
 ## تکنولوژی‌ها
 
@@ -38,64 +54,13 @@ beautijoo/
 | نقش | رنگ |
 |-----|-----|
 | Primary (coral) | `#fc7074` |
-| Secondary (navy) | `#374989` |
-| Neutral gray | `#808080` |
-| White | `#FFFFFF` |
 
-لوگو: فقط مرجانی (بدون navy داخل نشان).
+## توسعه محلی
 
-## عیب‌یابی لیارا (دیتابیس)
+راهنمای نصب و اجرا در مستندات `docs/` و اسکریپت‌های ریشهٔ پروژه.
 
-اگر پیام «ناسازگاری موقت دیتابیس» دیدید:
+## استقرار
 
-- **[docs/LIARA_SCHEMA_DRIFT.md](./docs/LIARA_SCHEMA_DRIFT.md)**
-- معمولاً با **Redeploy بکند** (اجرای migrate/ensure روی استارت) حل می‌شود — نه با تغییر فرانت.
-
-## شروع سریع (توسعه)
-
-### پیش‌نیازها
-- **Bun** (نسخه ۱.۱ یا بالاتر) — نصب:
-  ```bash
-  curl -fsSL https://bun.sh/install | bash
-  ```
-- Node.js 20+ (اختیاری؛ برای سازگاری و برخی ابزارها)
-- PostgreSQL 15+
-- Git
-
-> در ریشه پروژه `bun.lock` وجود دارد. برای توسعه محلی دستورات Bun اولویت دارند.
-
-### Backend
-```bash
-cd backend
-cp .env.example .env
-# تنظیم DATABASE_URL و JWT_SECRET
-bun install
-bunx prisma migrate dev
-bunx prisma db seed
-bun run start:dev
-```
-
-### Frontend
-```bash
-cd frontend
-cp .env.example .env.local
-# تنظیم NEXT_PUBLIC_API_URL
-bun install
-bun run dev
-```
-
-### از ریشه پروژه (workspaces)
-```bash
-bun install
-bun run backend:dev   # یا: cd backend && bun run start:dev
-bun run frontend:dev  # یا: cd frontend && bun run dev
-```
-
-## مستندات
-- [DEPLOYMENT.md](./DEPLOYMENT.md) — راهنمای استقرار (از جمله Liara)
-- [docs/FRONTEND_DESIGN_SYSTEM.md](./docs/FRONTEND_DESIGN_SYSTEM.md) — سیستم طراحی فرانت
-- [docs/LIARA_SCHEMA_DRIFT.md](./docs/LIARA_SCHEMA_DRIFT.md) — خطای schema drift روی لیارا
-- `docs/` — معماری، اسکیما، امنیت
-
-## لایسنس
-Proprietary — Beautijoo
+1. [docs/BRANCH_AND_DEPLOY.md](./docs/BRANCH_AND_DEPLOY.md)
+2. [DEPLOY_LIARA.md](./DEPLOY_LIARA.md)
+3. [DEPLOYMENT.md](./DEPLOYMENT.md)
