@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * منوی خدمات یکپارچه — تخصص + خانواده + جدول قیمت
- * UX مطابق طرح ماتریسی #60 (بدون صفحه جدا برای تخصص)
+ * منوی خدمات یکپارچه — تخصص → خانواده → جدول قیمت
+ * API /categories درخت تو در تو برمی‌گرداند (children + services).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -25,12 +25,35 @@ import { friendlyApiError } from '@/lib/api-errors';
 import { CATALOG_TEMPLATE, matrixLabels } from '@/lib/catalog-template';
 import { PriceMatrix } from '@/components/catalog/price-matrix';
 import { formatPrice } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
 
 type Step = 1 | 2 | 3;
 
+type CatNode = CatalogCategory & {
+  children?: CatNode[];
+  services?: { id: string; name: string; slug?: string }[];
+};
+
+function collectRoots(tree: CatNode[]): CatNode[] {
+  if (!tree.length) return [];
+  // API returns only roots with nested children
+  const hasNested = tree.some((c) => (c.children && c.children.length > 0) || c.parentId == null);
+  if (hasNested && tree.every((c) => !c.parentId || tree.every((x) => x.id !== c.parentId))) {
+    return tree.filter((c) => !c.parentId) .length ? tree.filter((c) => !c.parentId) : tree;
+  }
+  return tree.filter((c) => !c.parentId);
+}
+
+function childrenOf(root: CatNode | undefined, flat: CatNode[]): CatNode[] {
+  if (!root) return [];
+  if (root.children && root.children.length) return root.children;
+  return flat.filter((c) => c.parentId === root.id);
+}
+
 export default function ZibagarServicesPage() {
   const [step, setStep] = useState<Step>(1);
-  const [tree, setTree] = useState<CatalogCategory[]>([]);
+  const [tree, setTree] = useState<CatNode[]>([]);
+  const [flatServices, setFlatServices] = useState<{ id: string; name: string; categoryId?: string }[]>([]);
   const [mine, setMine] = useState<ProfessionalServiceItem[]>([]);
   const [selectedRootIds, setSelectedRootIds] = useState<string[]>([]);
   const [rootId, setRootId] = useState<string | null>(null);
@@ -48,13 +71,20 @@ export default function ZibagarServicesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [cats, services, pro] = await Promise.all([
+      const [cats, services, pro, allSvcs] = await Promise.all([
         fetchCategories(),
         fetchMyServices(),
         fetchMyProfessional().catch(() => null),
+        apiClient
+          .get<{ id: string; name: string; categoryId?: string }[] | { items?: { id: string; name: string; categoryId?: string }[] }>('/services')
+          .catch(() => [] as { id: string; name: string; categoryId?: string }[]),
       ]);
-      setTree(Array.isArray(cats) ? cats : []);
+      setTree((Array.isArray(cats) ? cats : []) as CatNode[]);
       setMine(Array.isArray(services) ? services : []);
+      const flat = Array.isArray(allSvcs)
+        ? allSvcs
+        : (allSvcs as { items?: { id: string; name: string; categoryId?: string }[] })?.items || [];
+      setFlatServices(flat);
       const sel = (pro as { selectedCategoryIds?: string[] } | null)?.selectedCategoryIds;
       if (Array.isArray(sel) && sel.length) setSelectedRootIds(sel);
     } catch (e) {
@@ -68,29 +98,48 @@ export default function ZibagarServicesPage() {
     void load();
   }, [load]);
 
-  const roots = useMemo(() => {
-    const list = tree.filter((c) => !c.parentId);
-    return list.length ? list : tree;
-  }, [tree]);
+  const roots = useMemo(() => collectRoots(tree), [tree]);
 
-  const families = useMemo(() => {
-    if (!rootId) return [];
-    return tree.filter((c) => c.parentId === rootId);
-  }, [tree, rootId]);
+  const rootNode = useMemo(() => roots.find((r) => r.id === rootId), [roots, rootId]);
 
-  const familyNode = useMemo(
-    () => tree.find((c) => c.id === familyId) || null,
-    [tree, familyId],
-  );
+  const families = useMemo(() => childrenOf(rootNode, tree), [rootNode, tree]);
+
+  const familyNode = useMemo(() => {
+    if (!familyId) return null;
+    const fromNested = families.find((f) => f.id === familyId);
+    if (fromNested) return fromNested;
+    // deep search
+    const walk = (nodes: CatNode[]): CatNode | null => {
+      for (const n of nodes) {
+        if (n.id === familyId) return n;
+        if (n.children?.length) {
+          const f = walk(n.children);
+          if (f) return f;
+        }
+      }
+      return null;
+    };
+    return walk(tree);
+  }, [familyId, families, tree]);
 
   const familyServices = useMemo(() => {
-    const svcs =
-      (familyNode as CatalogCategory & { services?: { id: string; name: string }[] })?.services ||
-      [];
+    const nested = familyNode?.services || [];
+    const fromFlat = familyId
+      ? flatServices.filter((s) => s.categoryId === familyId)
+      : [];
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const s of nested) byId.set(s.id, s);
+    for (const s of fromFlat) byId.set(s.id, s);
+    // if still empty and family is actually root with services
+    if (!byId.size && rootNode && familyId === rootId) {
+      for (const s of rootNode.services || []) byId.set(s.id, s);
+      for (const s of flatServices.filter((x) => x.categoryId === rootId)) byId.set(s.id, s);
+    }
+    let list = [...byId.values()];
     const q = familySearch.trim();
-    if (!q) return svcs;
-    return svcs.filter((s) => s.name.includes(q));
-  }, [familyNode, familySearch]);
+    if (q) list = list.filter((s) => s.name.includes(q));
+    return list;
+  }, [familyNode, familyId, flatServices, familySearch, rootNode, rootId]);
 
   const templateFamily = useMemo(() => {
     const root = roots.find((r) => r.id === rootId);
@@ -154,6 +203,7 @@ export default function ZibagarServicesPage() {
       }
       setRules(pr);
       setStep(3);
+      setMsg(null);
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -216,7 +266,6 @@ export default function ZibagarServicesPage() {
         <p className="mt-1 text-sm text-gray">فقط خدمات فعال شما به مشتری نشان داده می‌شود</p>
       </div>
 
-      {/* Step indicator — matches design */}
       <div className="flex items-center justify-center gap-0">
         {(
           [
@@ -258,7 +307,6 @@ export default function ZibagarServicesPage() {
         <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm text-red-700">{error}</p>
       )}
 
-      {/* STEP 1 — specialties */}
       {step === 1 && (
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <h2 className="text-center text-base font-semibold text-[#0B2C4A]">تخصص‌هایی که بلدی</h2>
@@ -308,15 +356,10 @@ export default function ZibagarServicesPage() {
         </Card>
       )}
 
-      {/* STEP 2 — families + services as toggles */}
       {step === 2 && (
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="text-sm text-gray underline"
-              onClick={() => setStep(1)}
-            >
+            <button type="button" className="text-sm text-gray underline" onClick={() => setStep(1)}>
               → تخصص‌ها
             </button>
             <div className="flex flex-wrap gap-1">
@@ -342,22 +385,52 @@ export default function ZibagarServicesPage() {
           </div>
 
           <h2 className="font-semibold text-[#0B2C4A]">خانواده خدمت</h2>
-          {!families.length ? (
-            <p className="text-sm text-gray">برای این تخصص خانواده‌ای در کاتالوگ نیست.</p>
+          {!rootId ? (
+            <p className="text-sm text-gray">یک تخصص را از بالا انتخاب کنید.</p>
+          ) : !families.length ? (
+            <div className="space-y-2">
+              <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-3 py-2">
+                برای این تخصص هنوز خانواده‌ای در کاتالوگ نیست. اگر ادمین تازه قالب را زده، چند ثانیه صبر کنید و «تلاش مجدد» را بزنید.
+              </p>
+              <Button size="sm" variant="outline" onClick={() => void load()}>
+                تلاش مجدد / بارگذاری دوباره
+              </Button>
+              {/* fallback: services directly on root */}
+              {(rootNode?.services?.length || flatServices.some((s) => s.categoryId === rootId)) && (
+                <div className="space-y-2 pt-2">
+                  <p className="text-xs text-gray">خدمات مستقیم این تخصص:</p>
+                  {(rootNode?.services || flatServices.filter((s) => s.categoryId === rootId)).map((s) => (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2.5"
+                    >
+                      <span className="text-sm font-medium">{s.name}</span>
+                      <Button size="sm" disabled={busy} onClick={() => void enableAndPrice(s.id, s.name)}>
+                        قیمت‌گذاری
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <ul className="space-y-2">
               {families.map((f) => {
                 const open = familyId === f.id;
                 const count =
-                  (f as CatalogCategory & { services?: unknown[] }).services?.length ?? 0;
+                  (f.services?.length || 0) ||
+                  flatServices.filter((s) => s.categoryId === f.id).length;
                 return (
-                  <li key={f.id} className="rounded-xl border border-border overflow-hidden">
+                  <li key={f.id} className="overflow-hidden rounded-xl border border-border">
                     <button
                       type="button"
                       className={`flex w-full items-center justify-between px-3 py-3 text-right text-sm font-medium ${
                         open ? 'bg-[#FFE6E2] text-coral' : 'bg-white'
                       }`}
-                      onClick={() => setFamilyId(open ? null : f.id)}
+                      onClick={() => {
+                        setFamilyId(open ? null : f.id);
+                        setFamilySearch('');
+                      }}
                     >
                       <span>{f.name}</span>
                       <span className="text-xs text-gray">{count.toLocaleString('fa-IR')} مورد</span>
@@ -379,27 +452,28 @@ export default function ZibagarServicesPage() {
                           return (
                             <div
                               key={s.id}
-                              className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2.5 border border-border"
+                              className="flex items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2.5"
                             >
-                              <span className="text-sm font-medium text-[#0B2C4A]">{s.name}</span>
-                              <div className="flex items-center gap-2">
-                                {active && (
-                                  <span className="text-[10px] text-emerald-600">فعال</span>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant={active ? 'outline' : 'primary'}
-                                  disabled={busy}
-                                  onClick={() => void enableAndPrice(s.id, s.name)}
-                                >
-                                  قیمت‌گذاری
-                                </Button>
-                              </div>
+                              <span className="text-sm font-medium text-[#0B2C4A]">
+                                {s.name}
+                                {active ? (
+                                  <span className="mr-2 text-[10px] text-emerald-600">فعال</span>
+                                ) : null}
+                              </span>
+                              <Button
+                                size="sm"
+                                disabled={busy}
+                                onClick={() => void enableAndPrice(s.id, s.name)}
+                              >
+                                قیمت‌گذاری
+                              </Button>
                             </div>
                           );
                         })}
                         {!familyServices.length && (
-                          <p className="text-xs text-gray">خدمتی نیست — ادمین کاتالوگ را کامل کند.</p>
+                          <p className="text-xs text-gray">
+                            خدمتی در این خانواده نیست. ادمین باید قالب را دوباره بارگذاری کند یا خدمت اضافه کند.
+                          </p>
                         )}
                       </div>
                     )}
@@ -411,14 +485,9 @@ export default function ZibagarServicesPage() {
         </Card>
       )}
 
-      {/* STEP 3 — price matrix + batch */}
       {step === 3 && psId && (
         <div className="space-y-3">
-          <button
-            type="button"
-            className="text-sm text-gray underline"
-            onClick={() => setStep(2)}
-          >
+          <button type="button" className="text-sm text-gray underline" onClick={() => setStep(2)}>
             → بازگشت به خدمات
           </button>
           <PriceMatrix
