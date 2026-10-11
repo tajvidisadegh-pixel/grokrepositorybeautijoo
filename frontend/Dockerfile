@@ -1,5 +1,5 @@
-# Beautijoo frontend — Next.js 15 standalone for Liara
-# Build context MUST be the frontend/ directory (not repo root).
+# Frontend-only context (when Liara root directory = frontend/)
+# Same contract: server.js + node_modules/next together; mirror under standalone/
 
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
@@ -15,25 +15,22 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 
 COPY package.json package-lock.json* ./
-# Full install for build (next must be present; do not omit deps needed to compile)
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
-
 COPY . .
 RUN npm run build
 
-# Fail the image build if standalone is incomplete (prevents runtime MODULE_NOT_FOUND)
 RUN set -e; \
-  if [ -f .next/standalone/server.js ]; then \
-    ROOT=.next/standalone; \
-  elif [ -f .next/standalone/frontend/server.js ]; then \
-    ROOT=.next/standalone/frontend; \
-  else \
-    echo "ERROR: standalone server.js not found"; find .next -maxdepth 3 -type f -name 'server.js' || true; exit 1; \
+  if [ -f .next/standalone/server.js ]; then S=.next/standalone; \
+  elif [ -f .next/standalone/frontend/server.js ]; then S=.next/standalone/frontend; \
+  else find .next -name server.js | head; exit 1; fi; \
+  if [ ! -d "$S/node_modules/next" ]; then \
+    mkdir -p "$S/node_modules"; \
+    cp -a node_modules/next "$S/node_modules/"; \
+    for p in react react-dom styled-jsx; do \
+      [ -d "node_modules/$p" ] && cp -a "node_modules/$p" "$S/node_modules/" || true; \
+    done; \
   fi; \
-  echo "STANDALONE_ROOT=$ROOT"; \
-  test -d "$ROOT/node_modules/next" || test -d "$ROOT/node_modules/next/dist" || { \
-    echo "ERROR: next missing inside standalone"; ls -la "$ROOT" "$ROOT/node_modules" 2>/dev/null | head -50; exit 1; \
-  }
+  mkdir -p /out && cp -a "$S"/. /out/ && mkdir -p /out/.next && cp -a .next/static /out/.next/static && cp -a public /out/public
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -41,25 +38,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-
-# Prefer flat layout: server.js at /app/server.js (not /app/standalone/...)
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-
-# Next sometimes nests under package folder name when tracing root differs
-RUN set -e; \
-  if [ -f ./server.js ]; then \
-    echo "server.js at /app"; \
-  elif [ -f ./frontend/server.js ]; then \
-    cp -a ./frontend/. ./ && rm -rf ./frontend; \
-  elif [ -f ./standalone/server.js ]; then \
-    cp -a ./standalone/. ./ && rm -rf ./standalone; \
-  else \
-    echo "ERROR: cannot locate server.js in runner"; find . -name server.js | head; exit 1; \
-  fi; \
-  test -f ./server.js
-
+COPY --from=builder /out/ ./
+RUN mkdir -p /app/standalone \
+  && cp -a /app/server.js /app/standalone/ \
+  && cp -a /app/node_modules /app/standalone/ \
+  && mkdir -p /app/standalone/.next && cp -a /app/.next/. /app/standalone/.next/ \
+  && cp -a /app/public /app/standalone/public \
+  && test -d /app/standalone/node_modules/next
 EXPOSE 3000
-# Do NOT use node standalone/server.js — that path breaks module resolution for next
 CMD ["node", "server.js"]
