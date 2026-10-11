@@ -6,137 +6,58 @@
 
 ```
 beautijoo/
-├── backend/          # NestJS + Prisma + PostgreSQL
-├── frontend/         # Next.js App Router (RTL, Persian)
-├── docs/             # مستندات معماری، ERD، امنیت، طراحی فرانت
-├── scripts/          # اسکریپت‌های کمکی
-├── docker/           # Docker Compose برای توسعه محلی
-├── DEPLOYMENT.md     # راهنمای استقرار
-├── DEPLOY_LIARA.md   # استقرار لیارا (خلاصه)
+├── backend/
+├── frontend/
+├── Dockerfile          # ایمیج فرانت وقتی لیارا به root ریپو وصل است
+├── frontend/Dockerfile # وقتی root directory لیارا = frontend/
+├── docs/
+├── DEPLOY_LIARA.md
 └── README.md
 ```
 
-## قانون برنچ و لیارا (الزامی)
-
-**مرجع رسمی:** [docs/BRANCH_AND_DEPLOY.md](./docs/BRANCH_AND_DEPLOY.md)
+## قانون برنچ و لیارا
 
 | سرویس | برنچ |
 |--------|------|
-| فرانت لیارا | **`main`** |
-| بک‌اند لیارا | **`beautijoo-backend-export`** |
+| فرانت | **`main`** |
+| بک‌اند | **`beautijoo-backend-export`** |
 
-- فقط کد با **CI سبز** وارد `main` شود.
-- بعد از تغییر `backend/` حتماً export را همگام کنید، بعد Redeploy لیارا.
-- کامیت روی GitHub به‌تنهایی سایت را عوض نمی‌کند.
-
-جزئیات: [DEPLOY_LIARA.md](./DEPLOY_LIARA.md) · ایشو فنی #42
+مرجع: [docs/BRANCH_AND_DEPLOY.md](./docs/BRANCH_AND_DEPLOY.md)
 
 ---
 
-## هشدار استقرار فرانت — ۵۰۲ و `Cannot find module 'next'`
+## ۵۰۲ — `Cannot find module 'next'` (لاگ: `/app/standalone/server.js`)
 
-### علامت در لاگ runtime لیارا
+### علت واقعی در این پروژه
 
-```text
-Error: Cannot find module 'next'
-Require stack: - /app/standalone/server.js
-```
+لیارا وقتی به **ریشهٔ ریپو** وصل است از **`Dockerfile` ریشه** بیلد می‌گیرد (نه فقط `frontend/Dockerfile`).
 
-یا سایت **۵۰۲ Bad Gateway** بعد از deploy «موفق».
-
-### علت
-
-Next با `output: 'standalone'` باید این‌طور اجرا شود:
+قبلاً بیلد با **npm workspaces** باعث می‌شد `next` به root hoist شود و داخل پوشهٔ `standalone` کپی نشود. موقع اجرا:
 
 ```text
-WORKDIR = جایی که server.js و node_modules (شامل next) کنار هم‌اند
-دستور: node server.js
+node /app/standalone/server.js  →  Error: Cannot find module 'next'  →  502
 ```
 
-اگر دستور استارت این باشد، **module resolution می‌شکند**:
+### قانون (در Dockerfile ریشه رعایت شده)
 
-```text
-node standalone/server.js     ← ممنوع
-node /app/standalone/server.js  ← ممنوع
-```
+1. فرانت **جدا** install/build می‌شود (بدون workspace hoist).
+2. `server.js` و `node_modules/next` کنار هم هستند.
+3. همان درخت زیر **`/app/standalone/`** هم mirror می‌شود تا اگر Start لیارا `standalone/server.js` باشد باز هم `next` پیدا شود.
+4. دستور ترجیحی: `node server.js` — اگر Start دستی داری، یا خالی بگذار یا همین.
 
-چون `next` نسبت به مسیر اشتباه resolve می‌شود و پروسه کرش می‌کند → پروکسی لیارا **۵۰۲** می‌دهد.
+### بعد از این فیکس
 
-### قانون تا دوباره پیش نیاید
-
-1. **Dockerfile فرانت:** `frontend/Dockerfile` — در image نهایی `server.js` در `/app/server.js` باشد.
-2. **دستور Start در لیارا:** خالی بگذار تا همان `CMD` داکر اجرا شود، یا فقط:
-   ```text
-   node server.js
-   ```
-3. **هرگز** Start دستی `node standalone/server.js` نگذار.
-4. **Build context** باید پوشهٔ **`frontend/`** باشد (نه root کل monorepo)، مگر Dockerfile مخصوص root نوشته شده باشد.
-5. پورت سرویس: **3000**.
-6. بیلد ایمیج اگر `next` داخل standalone نباشد باید **همان‌جا fail** شود (چک داخل Dockerfile) تا به runtime نرسد.
-
-### اگر دوباره ۵۰۲ دیدی
-
-1. لاگ runtime را برای `Cannot find module 'next'` چک کن.
-2. Start Command لیارا را اصلاح/پاک کن.
-3. از `main` با `frontend/Dockerfile` دوباره Deploy کن.
+Deploy دوباره از **`main`** (کامیت‌هایی که Dockerfile ریشه را اصلاح کرده‌اند). اگر Start سفارشی `node standalone/server.js` است، با image جدید باید کار کند؛ ترجیحاً Start را خالی کن.
 
 ---
 
-## هشدار استقرار فرانت — گیر کردن روی `Collecting page data`
+## `Collecting page data` طولانی
 
-### اشتباه رایج (یک ساعت «در حال ساختن»)
-
-لاگ شبیه این **خطا نیست** و بیلد را معمولاً متوقف نمی‌کند:
-
-```text
-Warning: 'x' is assigned a value but never used
-…
-Collecting page data ...
-```
-
-اگر ساعت‌ها روی **`Collecting page data`** بماند:
-
-| علت | توضیح |
-|-----|--------|
-| API در بیلد در دسترس نیست / کند است | صفحهٔ اصلی، sitemap و … به `NEXT_PUBLIC_API_URL` درخواست می‌زنند |
-| آدرس API اشتباه در env بیلد | مثلاً localhost |
-| بک‌اند هنوز بالا نیست | اول API، بعد فرانت |
-
-### قانون
-
-1. اول بک‌اند سالم؛ بعد بیلد فرانت.
-2. `NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1` (آدرس واقعی).
-3. timeout در `frontend/src/lib/public-api.ts` (~۱۲ث). بیش از ۲۰ دقیقه روی Collecting → **Cancel**.
-4. fetch بدون timeout در RSC/sitemap ممنوع.
+اول API بالا باشد؛ `NEXT_PUBLIC_API_URL` واقعی؛ بیش از ۲۰ دقیقه Cancel. جزئیات در بخش قبلی README / public-api timeout.
 
 ---
-
-## تکنولوژی‌ها
-
-| لایه       | تکنولوژی                          |
-|------------|-----------------------------------|
-| Frontend   | Next.js (App Router), TypeScript, Tailwind, RTL |
-| Backend    | NestJS, TypeScript, Prisma        |
-| Database   | PostgreSQL                        |
-| Auth       | JWT + Refresh Token + OTP-ready   |
-| API        | REST `/api/v1` + Swagger          |
-| Runtime / PM | Bun (اصلی) + Node.js 20+ (سازگاری) |
-
-## طراحی فرانت (الزامی برای هر تغییر UI)
-
-- **[docs/FRONTEND_DESIGN_SYSTEM.md](./docs/FRONTEND_DESIGN_SYSTEM.md)**
-- مرجع موکاپ: Issue **#68**
-
-| نقش | رنگ |
-|-----|-----|
-| Primary (coral) | `#fc7074` |
-
-## توسعه محلی
-
-راهنمای نصب و اجرا در `docs/` و اسکریپت‌های ریشه.
 
 ## استقرار
 
 1. [docs/BRANCH_AND_DEPLOY.md](./docs/BRANCH_AND_DEPLOY.md)
 2. [DEPLOY_LIARA.md](./DEPLOY_LIARA.md)
-3. [DEPLOYMENT.md](./DEPLOYMENT.md)
