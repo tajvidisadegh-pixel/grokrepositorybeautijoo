@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppCacheService } from '../cache/app-cache.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 
@@ -80,7 +81,10 @@ class UpdateCatalogAddOnDto {
 @RequirePermissions('admin.catalog.manage')
 @Controller('admin')
 export class AdminCatalogController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: AppCacheService,
+  ) {}
 
   @Get('service-categories')
   @ApiOperation({ summary: 'List all service categories (including inactive)' })
@@ -105,6 +109,7 @@ export class AdminCatalogController {
     let slug = (dto.slug?.trim() || slugify(name)).slice(0, 140);
     const existing = await this.prisma.serviceCategory.findUnique({ where: { slug } });
     if (existing) slug = `${slug}-${Date.now().toString(36)}`.slice(0, 140);
+    this.cache.invalidateCatalog();
     return this.prisma.serviceCategory.create({
       data: {
         name,
@@ -129,6 +134,7 @@ export class AdminCatalogController {
       const parent = await this.prisma.serviceCategory.findUnique({ where: { id: dto.parentId } });
       if (!parent) throw new NotFoundException('parent not found');
     }
+    this.cache.invalidateCatalog();
     return this.prisma.serviceCategory.update({
       where: { id },
       data: {
@@ -151,7 +157,8 @@ export class AdminCatalogController {
   async deleteCategory(@Param('id') id: string) {
     const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('category not found');
-    const updated = await this.prisma.serviceCategory.update({
+    const updated = this.cache.invalidateCatalog();
+    await this.prisma.serviceCategory.update({
       where: { id },
       data: { isActive: false },
       include: {
@@ -179,6 +186,7 @@ export class AdminCatalogController {
     let slug = (dto.slug?.trim() || slugify(name)).slice(0, 160);
     const existing = await this.prisma.service.findUnique({ where: { slug } });
     if (existing) slug = `${slug}-${Date.now().toString(36)}`.slice(0, 160);
+    this.cache.invalidateCatalog();
     return this.prisma.service.create({
       data: {
         name,
@@ -199,6 +207,7 @@ export class AdminCatalogController {
       const category = await this.prisma.serviceCategory.findUnique({ where: { id: dto.categoryId } });
       if (!category) throw new NotFoundException('category not found');
     }
+    this.cache.invalidateCatalog();
     return this.prisma.service.update({
       where: { id },
       data: {
@@ -217,6 +226,7 @@ export class AdminCatalogController {
   async deleteCatalogService(@Param('id') id: string) {
     const row = await this.prisma.service.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('service not found');
+    this.cache.invalidateCatalog();
     const updated = await this.prisma.service.update({
       where: { id },
       data: { isActive: false },
