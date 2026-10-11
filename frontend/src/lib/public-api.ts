@@ -10,6 +10,9 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ||
   'http://localhost:3000/api/v1';
 
+/** Prevent Liara/CI `next build` hanging forever on Collecting page data */
+const FETCH_TIMEOUT_MS = Number(process.env.PUBLIC_API_TIMEOUT_MS || 12_000);
+
 export class PublicApiError extends Error {
   constructor(
     public status: number,
@@ -22,11 +25,22 @@ export class PublicApiError extends Error {
 
 async function publicGet<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: { Accept: 'application/json', ...(init?.headers || {}) },
-    next: init?.next ?? { revalidate: 60 },
-  });
+  const timeoutSignal =
+    typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+      ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      : undefined;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      signal: init?.signal ?? timeoutSignal,
+      headers: { Accept: 'application/json', ...(init?.headers || {}) },
+      next: init?.next ?? { revalidate: 60 },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'network error';
+    throw new PublicApiError(0, `API unreachable (${FETCH_TIMEOUT_MS}ms): ${msg}`);
+  }
   const text = await res.text();
   let data: unknown = null;
   if (text) {
@@ -81,79 +95,42 @@ export function searchProfessionals(params: SearchParams = {}) {
   if (params.maxDuration != null) sp.set('maxDuration', String(params.maxDuration));
   if (params.sort) sp.set('sort', params.sort);
   if (params.availableDate) sp.set('availableDate', params.availableDate);
-  if (params.lat != null && params.lat !== '') sp.set('lat', String(params.lat));
-  if (params.lng != null && params.lng !== '') sp.set('lng', String(params.lng));
-  if (params.radiusKm != null && params.radiusKm !== '') sp.set('radiusKm', String(params.radiusKm));
+  if (params.lat != null) sp.set('lat', String(params.lat));
+  if (params.lng != null) sp.set('lng', String(params.lng));
+  if (params.radiusKm != null) sp.set('radiusKm', String(params.radiusKm));
   if (params.verifiedOnly) sp.set('verifiedOnly', 'true');
   if (params.gender) sp.set('gender', params.gender);
+  if (params.filterCategory) sp.set('filterCategory', 'true');
   const qs = sp.toString();
-  const path = params.filterCategory
-    ? `/service-filters/professionals${qs ? `?${qs}` : ''}`
-    : `/professionals${qs ? `?${qs}` : ''}`;
-  return publicGet<ProfessionalsSearchResponse>(path);
-}
-
-export function getProfessionalBySlug(slug: string) {
-  return publicGet<ProfessionalDetail>(`/professionals/${encodeURIComponent(slug)}`, {
-    next: { revalidate: 30 },
-  });
+  return publicGet<ProfessionalsSearchResponse>(`/professionals${qs ? `?${qs}` : ''}`);
 }
 
 export function listCategories() {
   return publicGet<ServiceCategory[]>('/categories');
 }
 
-export function listFilterCategories() {
-  return publicGet<ServiceCategory[]>('/service-filters/categories');
+export function getCategoryBySlug(slug: string) {
+  return publicGet<ServiceCategory>(`/categories/${encodeURIComponent(slug)}`);
+}
+
+export function getProfessionalBySlug(slug: string) {
+  return publicGet<ProfessionalDetail>(`/professionals/by-slug/${encodeURIComponent(slug)}`);
 }
 
 export function listServices(categorySlug?: string) {
-  return publicGet<ServiceItem[]>(
-    `/services${categorySlug ? `?category=${encodeURIComponent(categorySlug)}` : ''}`,
-  );
+  const qs = categorySlug ? `?category=${encodeURIComponent(categorySlug)}` : '';
+  return publicGet<ServiceItem[]>(`/services${qs}`);
 }
 
-/** Published homepage CMS (draft is never returned). */
 export type PublishedSiteConfig = {
-  content: {
-    hero?: {
-      enabled?: boolean;
-      title?: string;
-      subtitle?: string;
-      description?: string;
-      ctaText?: string;
-      ctaLink?: string;
-      badge?: string;
-      desktopImageUrl?: string | null;
-      mobileImageUrl?: string | null;
-    };
-    texts?: {
-      categoriesTitle?: string;
-      categoriesLinkText?: string;
-      featuredTitle?: string;
-      featuredLinkText?: string;
-      ctaTitle?: string;
-      ctaDescription?: string;
-      ctaPrimaryText?: string;
-      ctaPrimaryLink?: string;
-      ctaSecondaryText?: string;
-      ctaSecondaryLink?: string;
-    };
-    features?: {
-      showCategories?: boolean;
-      showFeaturedProfessionals?: boolean;
-      showBottomCta?: boolean;
-      showSearchInHero?: boolean;
-    };
-    publishedAt?: string | null;
+  content?: Record<string, unknown> & {
+    hero?: Record<string, unknown>;
+    texts?: Record<string, unknown>;
+    features?: Record<string, unknown>;
   };
-  sections: Array<{ id: string; label: string; enabled: boolean; sortOrder: number }>;
+  sections?: { id: string; label?: string; enabled?: boolean; sortOrder: number }[];
 };
 
 export function getPublishedSiteConfig() {
-  return publicGet<PublishedSiteConfig>('/public/site-config', {
-    next: { revalidate: 30, tags: ['site-cms'] },
-  });
+  return publicGet<PublishedSiteConfig>('/site/published');
 }
-
-export { API_URL };
