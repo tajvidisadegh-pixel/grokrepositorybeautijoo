@@ -1,122 +1,62 @@
 'use client';
 
+/**
+ * منوی خدمات یکپارچه — تخصص + خانواده + جدول قیمت
+ * UX مطابق طرح ماتریسی #60 (بدون صفحه جدا برای تخصص)
+ */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PanelLoading, PanelError, PanelEmpty } from '@/components/panel/state-blocks';
 import {
-  fetchMyServices,
-  setServiceOrder,
   fetchCategories,
-  fetchMyProfessional,
-  setMySelectedCategories,
+  fetchMyServices,
   upsertMyService,
-  patchMyService,
-  renameMyService,
-  deactivateMyService,
-  upsertMyAddOn,
-  uploadMyMedia,
-  deleteMyMedia,
   upsertMyPriceRule,
   fetchMyPriceRules,
-  upsertMyDurationRule,
-  fetchMyDurationRules,
-  createServiceNode,
-  createCategoryNode,
+  setMySelectedCategories,
+  fetchMyProfessional,
   type ProfessionalServiceItem,
   type CatalogCategory,
   type PriceRuleItem,
-  type DurationRuleItem,
-  type MediaAssetItem,
 } from '@/lib/panel-api';
-import { apiClient } from '@/lib/api';
-import { uploadMyMedia as uploadMyMediaWithProgress } from '@/lib/media-upload';
 import { friendlyApiError } from '@/lib/api-errors';
-import { formatPrice, parsePriceInput, formatPriceDigits } from '@/lib/utils';
-import {
-  collectLeaves,
-  findCategory,
-  flattenSearch,
-  navy,
-  rootOf,
-  serviceLabel,
-  statusOf,
-  type PathNode,
-} from './services-helpers';
-import { SpecialtyView } from './SpecialtyView';
-import { ServiceEditPanel } from './ServiceEditPanel';
+import { CATALOG_TEMPLATE, matrixLabels } from '@/lib/catalog-template';
+import { PriceMatrix } from '@/components/catalog/price-matrix';
+import { formatPrice } from '@/lib/utils';
+
+type Step = 1 | 2 | 3;
 
 export default function ZibagarServicesPage() {
+  const [step, setStep] = useState<Step>(1);
   const [tree, setTree] = useState<CatalogCategory[]>([]);
   const [mine, setMine] = useState<ProfessionalServiceItem[]>([]);
   const [selectedRootIds, setSelectedRootIds] = useState<string[]>([]);
+  const [rootId, setRootId] = useState<string | null>(null);
+  const [familyId, setFamilyId] = useState<string | null>(null);
+  const [activeServiceName, setActiveServiceName] = useState('');
+  const [psId, setPsId] = useState<string | null>(null);
+  const [rules, setRules] = useState<PriceRuleItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
-  const [editDirty, setEditDirty] = useState(false);
-
-  const [mode, setMode] = useState<'home' | 'specialty' | 'edit' | 'add'>('home');
-  const [activeRootId, setActiveRootId] = useState<string | null>(null);
-  const [path, setPath] = useState<PathNode[]>([]);
-  const [search, setSearch] = useState('');
-  const [selectedPsId, setSelectedPsId] = useState<string | null>(null);
-
-  const [price, setPrice] = useState(0);
-  const [durationMin, setDurationMin] = useState(60);
-  const [showModels, setShowModels] = useState(false);
-  const [priceRules, setPriceRules] = useState<PriceRuleItem[]>([]);
-  const [durationRules, setDurationRules] = useState<DurationRuleItem[]>([]);
-  const [ruleLabel, setRuleLabel] = useState('');
-  const [rulePrice, setRulePrice] = useState(0);
-  const [ruleDuration, setRuleDuration] = useState(60);
-
-  const [showAddOnForm, setShowAddOnForm] = useState(false);
-  const [addOnName, setAddOnName] = useState('');
-  const [addOnPrice, setAddOnPrice] = useState(0);
-  const [addOnExtra, setAddOnExtra] = useState(0);
-  const [editingAddOnId, setEditingAddOnId] = useState<string | null>(null);
-
-  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'ok' | 'err'>('idle');
-  const [uploadErr, setUploadErr] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [addSearch, setAddSearch] = useState('');
-
-  const [showCreateSpecialty, setShowCreateSpecialty] = useState(false);
-  const [showCatalogPicker, setShowCatalogPicker] = useState(false);
-  const [newSpecName, setNewSpecName] = useState('');
-  const [newSpecPrice, setNewSpecPrice] = useState(0);
-  const [newSpecDuration, setNewSpecDuration] = useState(60);
-  const [newSpecDesc, setNewSpecDesc] = useState('');
-
-  const [editingNamePsId, setEditingNamePsId] = useState<string | null>(null);
-  const [editNameValue, setEditNameValue] = useState('');
-  const [editingSubKey, setEditingSubKey] = useState<string | null>(null);
-  const [editSubLabel, setEditSubLabel] = useState('');
-  const [editSubPrice, setEditSubPrice] = useState(0);
-  const [editSubDuration, setEditSubDuration] = useState(60);
-
-  const roots = useMemo(() => (tree || []).filter((c) => !c.parentId), [tree]);
-  const myRoots = useMemo(() => roots.filter((r) => selectedRootIds.includes(r.id)), [roots, selectedRootIds]);
-  const searchIndex = useMemo(() => flattenSearch(tree), [tree]);
+  const [familySearch, setFamilySearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [cats, services, pro, pinsRes] = await Promise.all([
+      const [cats, services, pro] = await Promise.all([
         fetchCategories(),
         fetchMyServices(),
         fetchMyProfessional().catch(() => null),
-        apiClient.get<{ pinnedServiceIds?: string[] }>('/professionals/me/pinned-services').catch(() => null),
       ]);
-      setTree(cats || []);
-      setMine(services || []);
-      const ids = (pro?.selectedCategoryIds as string[] | null) || [];
-      setSelectedRootIds(Array.isArray(ids) ? ids.filter(Boolean) : []);
-      const pinIds = (pinsRes as { pinnedServiceIds?: string[] } | null)?.pinnedServiceIds;
-      if (Array.isArray(pinIds)) setPinnedIds(pinIds.filter(Boolean).slice(0, 3));
+      setTree(Array.isArray(cats) ? cats : []);
+      setMine(Array.isArray(services) ? services : []);
+      const sel = (pro as { selectedCategoryIds?: string[] } | null)?.selectedCategoryIds;
+      if (Array.isArray(sel) && sel.length) setSelectedRootIds(sel);
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -124,127 +64,52 @@ export default function ZibagarServicesPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
-
-  
   useEffect(() => {
-    if (mode !== 'edit') {
-      setEditDirty(false);
-      return;
-    }
-    setEditDirty(true);
-  }, [price, durationMin, priceRules, durationRules, mode]);
+    void load();
+  }, [load]);
 
-  useEffect(() => {
-    if (!editDirty || mode !== 'edit') return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [editDirty, mode]);
+  const roots = useMemo(() => {
+    const list = tree.filter((c) => !c.parentId);
+    return list.length ? list : tree;
+  }, [tree]);
 
-  const selectedPs = useMemo(
-    () => (selectedPsId ? mine.find((m) => m.id === selectedPsId) || null : null),
-    [mine, selectedPsId],
+  const families = useMemo(() => {
+    if (!rootId) return [];
+    return tree.filter((c) => c.parentId === rootId);
+  }, [tree, rootId]);
+
+  const familyNode = useMemo(
+    () => tree.find((c) => c.id === familyId) || null,
+    [tree, familyId],
   );
 
-  useEffect(() => {
-    if (!selectedPs) return;
-    setPrice(selectedPs.price || 0);
-    setDurationMin(selectedPs.durationMin || 60);
-    setShowModels((selectedPs.priceRules?.length || 0) > 0 || (selectedPs.durationRules?.length || 0) > 0);
-    setPriceRules(selectedPs.priceRules || []);
-    setDurationRules(selectedPs.durationRules || []);
-    (async () => {
-      try {
-        const [pr, dr] = await Promise.all([
-          fetchMyPriceRules(selectedPs.id),
-          fetchMyDurationRules(selectedPs.id),
-        ]);
-        if (pr.length) setPriceRules(pr);
-        if (dr.length) setDurationRules(dr);
-        if (pr.length || dr.length) setShowModels(true);
-      } catch { /* ignore */ }
-    })();
-  }, [selectedPsId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const familyServices = useMemo(() => {
+    const svcs =
+      (familyNode as CatalogCategory & { services?: { id: string; name: string }[] })?.services ||
+      [];
+    const q = familySearch.trim();
+    if (!q) return svcs;
+    return svcs.filter((s) => s.name.includes(q));
+  }, [familyNode, familySearch]);
 
-  const activeRoot = useMemo(
-    () => (activeRootId ? roots.find((r) => r.id === activeRootId) || null : null),
-    [roots, activeRootId],
-  );
+  const templateFamily = useMemo(() => {
+    const root = roots.find((r) => r.id === rootId);
+    if (!root || !familyNode) return null;
+    const sp = CATALOG_TEMPLATE.find((s) => s.name === root.name || s.slug === root.slug);
+    if (!sp) return null;
+    return sp.families.find((f) => f.name === familyNode.name) || null;
+  }, [roots, rootId, familyNode]);
 
-  const currentCategory = useMemo(() => {
-    if (!path.length) return activeRootId ? findCategory(tree, activeRootId) : null;
-    return findCategory(tree, path[path.length - 1].id);
-  }, [path, tree, activeRootId]);
-
-  const children = useMemo(() => {
-    if (!activeRootId) return [];
-    if (path.length === 0) return findCategory(tree, activeRootId)?.children || [];
-    return currentCategory?.children || [];
-  }, [path, currentCategory, activeRootId, tree]);
-
-  const leafServices = useMemo(() => {
-    if (path.length === 0 && activeRootId) return findCategory(tree, activeRootId)?.services || [];
-    return currentCategory?.services || [];
-  }, [path, currentCategory, activeRootId, tree]);
-
-  const specialtyMenu = useMemo(() => {
-    if (!activeRootId) return [];
-    const root = findCategory(tree, activeRootId);
-    const leaves = collectLeaves(root);
-    const leafIds = new Set(leaves.map((l) => l.id));
-    return mine
-      .filter(
-        (ps) =>
-          leafIds.has(ps.serviceId) ||
-          (ps.service?.category?.id && rootOf(tree, ps.service.category.id)?.id === activeRootId),
-      )
-      .sort((a, b) => serviceLabel(a).localeCompare(serviceLabel(b), 'fa'));
-  }, [activeRootId, tree, mine]);
-
-  const menuSections = useMemo(() => {
-    const map = new Map<string, ProfessionalServiceItem[]>();
-    for (const ps of specialtyMenu) {
-      const section = ps.service?.category?.name?.trim() || activeRoot?.name || 'خدمات';
-      if (!map.has(section)) map.set(section, []);
-      map.get(section)!.push(ps);
-    }
-    return Array.from(map.entries());
-  }, [specialtyMenu, activeRoot?.name]);
-
-  const specialtyMedia = useMemo(() => {
-    const items: MediaAssetItem[] = [];
-    for (const ps of specialtyMenu) {
-      for (const m of ps.mediaAssets || []) items.push(m);
-    }
-    return items;
-  }, [specialtyMenu]);
-
-  const searchResults = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    return searchIndex
-      .filter((r) => r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q))
-      .slice(0, 20);
-  }, [search, searchIndex]);
-
-  async function persistRoots(ids: string[]) {
-    setSelectedRootIds(ids);
-    await setMySelectedCategories(ids);
-  }
-
-  async function addRootSpecialty(rootId: string) {
-    if (selectedRootIds.includes(rootId)) return;
+  async function toggleRoot(id: string) {
+    const next = selectedRootIds.includes(id)
+      ? selectedRootIds.filter((x) => x !== id)
+      : [...selectedRootIds, id];
+    setSelectedRootIds(next);
     setBusy(true);
+    setError(null);
     try {
-      await persistRoots([...selectedRootIds, rootId]);
-      setActiveRootId(rootId);
-      setPath([]);
-      setMode('specialty');
-      setMsg(null);
+      await setMySelectedCategories(next);
+      setMsg('تخصص‌ها ذخیره شد');
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -252,52 +117,43 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  async function removeRootSpecialty(rootId: string) {
-    setBusy(true);
-    try {
-      await persistRoots(selectedRootIds.filter((id) => id !== rootId));
-      if (activeRootId === rootId) goHome();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function goHome() {
-    setMode('home');
-    setActiveRootId(null);
-    setPath([]);
-    setSelectedPsId(null);
-    setSearch('');
-  }
-
-  async function ensureAndEditService(
-    serviceId: string,
-    nameHint?: string,
-    initial?: { price?: number; durationMin?: number },
-  ) {
+  async function enableAndPrice(serviceId: string, serviceName: string) {
     setBusy(true);
     setError(null);
+    setActiveServiceName(serviceName);
     try {
-      let ps = mine.find((m) => m.serviceId === serviceId);
+      let ps = mine.find((m) => m.serviceId === serviceId || m.service?.id === serviceId);
       if (!ps) {
         await upsertMyService({
           serviceId,
-          durationMin: initial?.durationMin && initial.durationMin > 0 ? initial.durationMin : 60,
-          price: initial?.price && initial.price > 0 ? initial.price : 0,
+          durationMin: 60,
+          price: 0,
           isActive: true,
         });
-        await load();
         const refreshed = await fetchMyServices();
-        setMine(refreshed || []);
-        ps = (refreshed || []).find((m) => m.serviceId === serviceId);
+        setMine(refreshed);
+        ps = refreshed.find((m) => m.serviceId === serviceId || m.service?.id === serviceId);
       }
-      if (ps) {
-        setSelectedPsId(ps.id);
-        setMode('edit');
-        setMsg(null);
-      } else {
-        setError(nameHint ? `نتوانستیم «${nameHint}» را اضافه کنیم` : 'خدمت اضافه نشد');
+      if (!ps) throw new Error('خدمت فعال نشد');
+      setPsId(ps.id);
+      let pr = await fetchMyPriceRules(ps.id);
+
+      const variant = templateFamily?.variants.find((v) => v.name === serviceName);
+      if (templateFamily && variant) {
+        const labels = matrixLabels(templateFamily, variant);
+        const have = new Set(pr.map((r) => r.label));
+        for (const label of labels) {
+          if (!have.has(label)) {
+            await upsertMyPriceRule(ps.id, { label, price: 0 });
+          }
+        }
+        pr = await fetchMyPriceRules(ps.id);
+      } else if (pr.length === 0) {
+        await upsertMyPriceRule(ps.id, { label: 'قیمت پایه', price: ps.price || 0 });
+        pr = await fetchMyPriceRules(ps.id);
       }
+      setRules(pr);
+      setStep(3);
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -305,103 +161,27 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  async function createAndEditCustomService(
-    name: string,
-    initial?: { price?: number; durationMin?: number },
-  ) {
-    if (!activeRootId || !name.trim()) return;
+  async function saveCell(label: string, price: number, ruleId?: string) {
+    if (!psId) return;
     setBusy(true);
-    setError(null);
     try {
-      const parentCatId = path.length > 0 ? path[path.length - 1].id : activeRootId;
-      const created = await createServiceNode({
-        name: name.trim(),
-        categoryId: parentCatId,
-      });
-      setSearch('');
-      setMsg(`«${created.name}» اضافه شد`);
-      await load();
-      await ensureAndEditService(created.id, created.name, initial);
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createFeature(name: string) {
-    if (!activeRootId || !name.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const parentId = path.length > 0 ? path[path.length - 1].id : activeRootId;
-      const created = await createCategoryNode({
-        name: name.trim(),
-        parentId,
-      });
-      setMsg(`ویژگی «${created.name}» اضافه شد`);
-      await load();
-      setPath((p) => [...p, { id: created.id, name: created.name }]);
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createSpecialtyDirect() {
-    if (!newSpecName.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      let categoryId = selectedRootIds[0] || roots[0]?.id || null;
-      if (!categoryId) {
-        const cat = await createCategoryNode({ name: newSpecName.trim() });
-        categoryId = cat.id;
-        await persistRoots([cat.id]);
+      await upsertMyPriceRule(psId, { id: ruleId, label, price });
+      const next = await fetchMyPriceRules(psId);
+      setRules(next);
+      const positive = next.filter((r) => r.price > 0).map((r) => r.price);
+      if (positive.length) {
+        const min = Math.min(...positive);
+        const ps = mine.find((m) => m.id === psId);
+        if (ps?.serviceId) {
+          await upsertMyService({
+            serviceId: ps.serviceId,
+            durationMin: ps.durationMin || 60,
+            price: min,
+            isActive: true,
+          });
+        }
       }
-      const created = await createServiceNode({
-        name: newSpecName.trim(),
-        categoryId,
-        description: newSpecDesc.trim() || undefined,
-      });
-      await upsertMyService({
-        serviceId: created.id,
-        price: newSpecPrice || 0,
-        durationMin: newSpecDuration > 0 ? newSpecDuration : 60,
-        description: newSpecDesc.trim() || undefined,
-        isActive: true,
-      });
-      setNewSpecName('');
-      setNewSpecPrice(0);
-      setNewSpecDuration(60);
-      setNewSpecDesc('');
-      setShowCreateSpecialty(false);
-      setMsg(`تخصص «${created.name}» اضافه شد`);
-      await load();
-      const refreshed = await fetchMyServices();
-      setMine(refreshed || []);
-      const ps = (refreshed || []).find((m) => m.serviceId === created.id);
-      if (ps) {
-        setSelectedPsId(ps.id);
-        setMode('edit');
-      }
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onSavePs() {
-    // #40 item 53
-    if (!selectedPs) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await patchMyService(selectedPs.id, { price, durationMin, isActive: true });
       setMsg('ذخیره شد');
-      await load();
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -409,19 +189,16 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  async function applyFixedToAllUnderRoot() {
-    if (!activeRootId) return;
-    const root = findCategory(tree, activeRootId);
-    const leaves = collectLeaves(root);
-    if (!leaves.length) { setError('خدمتی برای اعمال وجود ندارد'); return; }
+  async function batchApply(labels: string[], price: number) {
+    if (!psId) return;
     setBusy(true);
-    setError(null);
     try {
-      for (const leaf of leaves) {
-        await upsertMyService({ serviceId: leaf.id, durationMin: durationMin || 60, price: price || 0, isActive: true });
+      for (const label of labels) {
+        const existing = rules.find((r) => r.label === label);
+        await upsertMyPriceRule(psId, { id: existing?.id, label, price });
       }
-      setMsg(`قیمت برای ${leaves.length} مورد اعمال شد`);
-      await load();
+      setRules(await fetchMyPriceRules(psId));
+      setMsg(`قیمت ${formatPrice(price)} روی ${labels.length.toLocaleString('fa-IR')} مورد اعمال شد`);
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -429,418 +206,234 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  async function onAddModel() {
-    if (!selectedPs || !ruleLabel.trim()) return;
-    setBusy(true);
-    try {
-      await upsertMyPriceRule(selectedPs.id, { label: ruleLabel.trim(), price: rulePrice || price || 0 });
-      await upsertMyDurationRule(selectedPs.id, { label: ruleLabel.trim(), durationMin: ruleDuration || durationMin || 60 });
-      setRuleLabel(''); setRulePrice(0); setRuleDuration(60);
-      setPriceRules(await fetchMyPriceRules(selectedPs.id));
-      setDurationRules(await fetchMyDurationRules(selectedPs.id));
-      setMsg('زیرمجموعه اضافه شد');
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onAddOn() {
-    if (!selectedPs || !addOnName.trim()) return;
-    setBusy(true);
-    try {
-      await upsertMyAddOn(selectedPs.id, {
-        ...(editingAddOnId ? { id: editingAddOnId } : {}),
-        name: addOnName.trim(),
-        price: addOnPrice || 0,
-        extraDurationMin: addOnExtra || 0,
-        isActive: true,
-      });
-      setAddOnName(''); setAddOnPrice(0); setAddOnExtra(0); setEditingAddOnId(null); setShowAddOnForm(false);
-      setMsg(editingAddOnId ? 'ویژگی به‌روزرسانی شد' : 'ویژگی اضافه شد');
-      await load();
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  
-  async function togglePin(psId: string) {
-    const next = pinnedIds.includes(psId)
-      ? pinnedIds.filter((id) => id !== psId)
-      : [...pinnedIds, psId].slice(0, 3);
-    setPinnedIds(next);
-    try {
-      await apiClient.post('/professionals/me/pinned-services', { serviceIds: next });
-      setMsg(next.includes(psId) ? 'خدمت پین شد' : 'پین برداشته شد');
-    } catch (e) {
-      setError(friendlyApiError(e));
-    }
-  }
-async function onToggleActive(ps: ProfessionalServiceItem) {
-    setBusy(true);
-    try {
-      await patchMyService(ps.id, { isActive: !(ps.isActive !== false) });
-      await load();
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onDeleteMedia(id: string) {
-    setBusy(true);
-    try {
-      await deleteMyMedia(id);
-      await load();
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function moveService(psId: string, dir: -1 | 1) {
-    const ids = mine.map((x) => x.id);
-    const i = ids.indexOf(psId);
-    if (i < 0) return;
-    const j = i + dir;
-    if (j < 0 || j >= ids.length) return;
-    const next = [...ids];
-    const tmp = next[i]; next[i] = next[j]; next[j] = tmp;
-    try {
-      await setServiceOrder(next);
-      const byId = new Map(mine.map((x) => [x.id, x]));
-      setMine(next.map((id) => byId.get(id)!).filter(Boolean));
-    } catch (e) { setError(friendlyApiError(e)); }
-  }
-
-  async function onUploadMedia(file: File, attachToPsId?: string) {
-    setUploadState('uploading');
-    setUploadErr(null);
-    try {
-      setUploadProgress(0);
-      const uploader = typeof uploadMyMediaWithProgress === 'function' ? uploadMyMediaWithProgress : uploadMyMedia;
-      await uploader(file, 'portfolio', attachToPsId, (pct: number) => setUploadProgress(pct));
-      setUploadProgress(100);
-      setUploadState('ok');
-      await load();
-    } catch (e) {
-      setUploadState('err');
-      setUploadErr(friendlyApiError(e));
-    } finally {
-      setTimeout(() => setUploadProgress(null), 800);
-    }
-  }
-
-  if (loading) return <PanelLoading />;
+  if (loading) return <PanelLoading label="بارگذاری منوی خدمات…" />;
   if (error && !tree.length) return <PanelError message={error} onRetry={load} />;
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 px-3 py-4 pb-24">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className={`text-lg font-bold ${navy.title}`}>
-            {mode === 'home' && 'تخصص‌های من'}
-            {mode === 'specialty' && (activeRoot?.name || 'تخصص')}
-            {mode === 'edit' && 'ویرایش خدمت'}
-            {mode === 'add' && 'افزودن تخصص'}
-          </h1>
-      <p className="text-xs text-gray">برای توقف موقت پذیرش یک خدمت، آن را «غیرفعال» کنید؛ بعداً دوباره فعال کنید.</p>
-          {msg && <p className="text-xs text-green-600">{msg}</p>}
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
-        {mode !== 'home' && (
-          <button type="button" onClick={goHome} className="text-sm text-gray-500 underline">← بازگشت</button>
-        )}
+    <div className="mx-auto max-w-lg space-y-5 pb-24" dir="rtl">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-[#0B2C4A]">منوی خدمات من</h1>
+        <p className="mt-1 text-sm text-gray">فقط خدمات فعال شما به مشتری نشان داده می‌شود</p>
       </div>
 
-      {mode === 'home' && (
-        <div className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-sm text-gray-500">تخصص‌ها را مدیریت کنید؛ زیرمجموعه‌ها زیر هر تخصص دیده می‌شوند.</p>
-            
+      {/* Step indicator — matches design */}
+      <div className="flex items-center justify-center gap-0">
+        {(
+          [
+            { n: 1 as Step, label: 'تخصص‌ها' },
+            { n: 2 as Step, label: 'خدمات' },
+            { n: 3 as Step, label: 'قیمت' },
+          ] as const
+        ).map((s, idx) => {
+          const active = step === s.n;
+          const done = step > s.n;
+          return (
+            <div key={s.n} className="flex items-center">
+              {idx > 0 && (
+                <div className={`h-0.5 w-8 sm:w-12 ${done || active ? 'bg-coral' : 'bg-gray-200'}`} />
+              )}
+              <div className="flex flex-col items-center gap-1">
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                    active || done
+                      ? 'bg-coral text-white'
+                      : 'border border-gray-200 bg-white text-gray-400'
+                  }`}
+                >
+                  {done ? '✓' : s.n}
+                </span>
+                <span className={`text-[11px] ${active ? 'font-semibold text-coral' : 'text-gray'}`}>
+                  {s.label}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {msg && (
+        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-800">{msg}</p>
+      )}
+      {error && (
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm text-red-700">{error}</p>
+      )}
+
+      {/* STEP 1 — specialties */}
+      {step === 1 && (
+        <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
+          <h2 className="text-center text-base font-semibold text-[#0B2C4A]">تخصص‌هایی که بلدی</h2>
+          {!roots.length ? (
+            <PanelEmpty
+              title="کاتالوگی نیست"
+              description="سوپرادمین باید از «کاتالوگ قالب» قالب استاندارد را بارگذاری کند."
+            />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {roots.map((r) => {
+                const on = selectedRootIds.includes(r.id);
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void toggleRoot(r.id)}
+                    className={`rounded-2xl border-2 px-3 py-4 text-sm font-medium transition ${
+                      on
+                        ? 'border-coral bg-[#FFE6E2] text-coral'
+                        : 'border-gray-200 bg-white text-[#0B2C4A]'
+                    }`}
+                  >
+                    <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs">
+                      {on ? '✓' : ''}
+                    </span>
+                    {r.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <Button
+            className="w-full rounded-xl"
+            disabled={!selectedRootIds.length || busy}
+            onClick={() => {
+              setRootId(selectedRootIds[0] || null);
+              setFamilyId(null);
+              setStep(2);
+              setMsg(null);
+            }}
+          >
+            ادامه به انتخاب خدمات
+          </Button>
+          <p className="text-center text-[11px] text-gray">دسته‌های محبوب فقط توسط ادمین تنظیم می‌شود</p>
+        </Card>
+      )}
+
+      {/* STEP 2 — families + services as toggles */}
+      {step === 2 && (
+        <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="text-sm text-gray underline"
+              onClick={() => setStep(1)}
+            >
+              → تخصص‌ها
+            </button>
+            <div className="flex flex-wrap gap-1">
+              {selectedRootIds.map((id) => {
+                const r = roots.find((x) => x.id === id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setRootId(id);
+                      setFamilyId(null);
+                    }}
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${
+                      rootId === id ? 'bg-coral text-white' : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {r?.name || '—'}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => setShowCatalogPicker(true)}
-            className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 text-right shadow-sm hover:border-[#2D6CDF]/40 disabled:opacity-50"
-          >
-            <span>
-              <span className="block text-sm font-semibold text-[#0B2C4A]">افزودن تخصص جدید</span>
-              <span className="mt-1 block text-xs text-gray-500">انتخاب تخصص از فهرست</span>
-            </span>
-            <span className="rounded-full bg-[#E7F1FF] px-3 py-1.5 text-xs font-medium text-[#2D6CDF]">افزودن</span>
-          </button>
-
-          {showCatalogPicker && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-              <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-xl">
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <div>
-                    <h2 className="font-bold text-[#0B2C4A]">افزودن تخصص جدید</h2>
-                    <p className="mt-0.5 text-xs text-gray-500">یک مورد را انتخاب کنید</p>
-                  </div>
-                  <button type="button" className="text-sm text-gray-500" onClick={() => setShowCatalogPicker(false)}>بستن</button>
-                </div>
-                <div className="max-h-[65vh] overflow-y-auto p-4">
-                  {roots.filter((r) => !selectedRootIds.includes(r.id)).length === 0 ? (
-                    <p className="py-8 text-center text-sm text-gray-500">
-                      {roots.length === 0
-                        ? 'هنوز تخصصی در کاتالوگ تعریف نشده است.'
-                        : 'همه تخصص‌های کاتالوگ انتخاب شده‌اند.'}
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {roots.filter((r) => !selectedRootIds.includes(r.id)).map((r) => (
-                        <li key={r.id}>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={async () => { await addRootSpecialty(r.id); setShowCatalogPicker(false); }}
-                            className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-[#F9FAFB] px-3 py-3 text-right text-sm hover:border-[#2D6CDF]/30 disabled:opacity-50"
-                          >
-                            <span className="font-medium text-[#0B2C4A]">{r.name}</span>
-                            <span className="text-xs text-[#2D6CDF]">انتخاب</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {mine.length === 0 && myRoots.length === 0 ? (
-            <PanelEmpty
-              title="هنوز تخصصی انتخاب نکرده‌اید"
-              description="روی «افزودن تخصص جدید» بزنید و از فهرست انتخاب کنید."
-              icon="✂️"
-            />
-          ) : mine.length > 0 ? (
-            <div className={`overflow-hidden rounded-2xl border ${navy.border} bg-white`}>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[320px] text-right text-sm">
-                  <thead>
-                    <tr className="bg-[#F3F4F6] text-[11px] font-semibold text-gray-500">
-                      <th className="px-3 py-2.5">تخصص / زیرمجموعه</th>
-                      <th className="px-3 py-2.5 whitespace-nowrap">قیمت</th>
-                      <th className="px-3 py-2.5 whitespace-nowrap">مدت</th>
-                      <th className="px-3 py-2.5">وضعیت</th>
-                      <th className="px-3 py-2.5">عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mine.map((ps, idx) => {
-                      const st = statusOf(ps);
-                      const subs = (ps.priceRules || []).filter((r) => r.isActive !== false);
-                      const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]';
-                      const isEditingName = editingNamePsId === ps.id;
-                      return (
-                        <tr key={ps.id} className={`border-t border-gray-100 ${rowBg}`}>
-                          <td className="px-3 py-2.5 align-top">
-                            {isEditingName ? (
-                              <div className="flex flex-wrap items-center gap-1">
-                                <Input autoFocus value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 max-w-[160px] text-right text-sm" />
-                                <button type="button" disabled={busy || !editNameValue.trim()} className="text-xs font-medium text-[#2D6CDF] disabled:opacity-50" onClick={async () => { setBusy(true); try { await renameMyService(ps.id, editNameValue.trim()); setEditingNamePsId(null); setMsg('نام تخصص ذخیره شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>ذخیره</button>
-                                <button type="button" className="text-xs text-gray-500" onClick={() => setEditingNamePsId(null)}>انصراف</button>
-                              </div>
-                            ) : (
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="font-medium text-[#0B2C4A]">{serviceLabel(ps)}</span>
-                                <button type="button" className="text-[10px] text-gray-400 hover:text-[#2D6CDF]" onClick={() => { setEditingNamePsId(ps.id); setEditNameValue(serviceLabel(ps)); setEditingSubKey(null); }}>ویرایش نام</button>
-                                <button type="button" className={`text-[10px] ${pinnedIds.includes(ps.id) ? 'font-semibold text-coral' : 'text-gray-400 hover:text-coral'}`} onClick={() => void togglePin(ps.id)} title="پین در صفحه عمومی (حداکثر ۳)">{pinnedIds.includes(ps.id) ? 'پین شده' : 'پین'}</button>
-                              </div>
-                            )}
-                            {subs.length > 0 && (
-                              <ul className="mt-1.5 space-y-1 border-r border-[#E7F1FF] pr-2">
-                                {subs.map((pr) => {
-                                  const dr = (ps.durationRules || []).find((d) => d.label === pr.label && d.isActive !== false);
-                                  const subKey = `${ps.id}:${pr.id}`;
-                                  const isEditingSub = editingSubKey === subKey;
-                                  return (
-                                    <li key={pr.id} className="text-[11px] text-gray-600">
-                                      {isEditingSub ? (
-                                        <div className="flex flex-wrap items-center gap-1 rounded-lg bg-[#F3F6F9] p-1.5">
-                                          <Input value={editSubLabel} onChange={(e) => setEditSubLabel(e.target.value)} className="h-7 w-24 text-right text-[11px]" placeholder="نام" />
-                                          <Input inputMode="numeric" value={editSubPrice ? formatPriceDigits(editSubPrice) : ''} onChange={(e) => setEditSubPrice(parsePriceInput(e.target.value))} className="h-7 w-20 text-right text-[11px]" placeholder="قیمت" />
-                                          <Input type="number" min={5} value={editSubDuration || ''} onChange={(e) => setEditSubDuration(Number(e.target.value) || 60)} className="h-7 w-14 text-right text-[11px]" placeholder="مدت" />
-                                          <button type="button" disabled={busy || !editSubLabel.trim()} className="text-[10px] font-medium text-[#2D6CDF] disabled:opacity-50" onClick={async () => { setBusy(true); try { await upsertMyPriceRule(ps.id, { id: pr.id, label: editSubLabel.trim(), price: editSubPrice || 0 }); if (dr) { await upsertMyDurationRule(ps.id, { id: dr.id, label: editSubLabel.trim(), durationMin: editSubDuration || 60 }); } else { await upsertMyDurationRule(ps.id, { label: editSubLabel.trim(), durationMin: editSubDuration || 60 }); } setEditingSubKey(null); setMsg('زیرمجموعه ذخیره شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>ذخیره</button>
-                                          <button type="button" className="text-[10px] text-gray-500" onClick={() => setEditingSubKey(null)}>انصراف</button>
-                                        </div>
-                                      ) : (
-                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                          <span className="text-gray-700">{pr.label}</span>
-                                          <span className="tabular-nums text-gray-500">{(pr.price ?? 0) > 0 ? formatPrice(pr.price) : '—'}</span>
-                                          <span className="tabular-nums text-gray-400">{dr && (dr.durationMin ?? 0) > 0 ? `${dr.durationMin} د` : '—'}</span>
-                                          <button type="button" className="text-[10px] text-[#2D6CDF] hover:underline" onClick={() => { setEditingSubKey(subKey); setEditSubLabel(pr.label); setEditSubPrice(pr.price || 0); setEditSubDuration(dr?.durationMin || 60); setEditingNamePsId(null); }}>ویرایش</button>
-                                        </div>
-                                      )}
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5 align-top tabular-nums whitespace-nowrap text-gray-700">{(ps.price ?? 0) > 0 ? formatPrice(ps.price) : '—'}</td>
-                          <td className="px-3 py-2.5 align-top tabular-nums whitespace-nowrap text-gray-600">{(ps.durationMin ?? 0) > 0 ? `${ps.durationMin} د` : '—'}</td>
-                          <td className="px-3 py-2.5 align-top">
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${st === 'ready' ? 'bg-[#E7F1FF] text-[#2D6CDF]' : 'bg-[#FFE6E2] text-[#FF6F61]'}`}>
-                              {ps.isActive === false ? 'غیرفعال' : st === 'ready' ? 'آماده' : 'ناقص'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 align-top">
-                            <div className="flex items-center gap-2">
-                              <button type="button" className="text-xs font-medium text-[#2D6CDF] hover:underline" onClick={() => { setSelectedPsId(ps.id); setMode('edit'); }}>جزئیات</button>
-                              <button type="button" className="text-xs text-red-600 hover:underline" onClick={async () => { if (!window.confirm(`حذف «${serviceLabel(ps)}»؟`)) return; setBusy(true); try { await deactivateMyService(ps.id); setMsg('حذف شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>حذف</button>
-                              <button type="button" className="text-xs text-amber-700 hover:underline" onClick={async () => { setBusy(true); try { const inactive = ps.isActive === false; await patchMyService(ps.id, { isActive: inactive }); setMsg(inactive ? 'فعال شد' : 'موقتاً غیرفعال شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>{ps.isActive === false ? 'فعال‌سازی' : 'موقتاً غیرفعال'}</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-
-          {myRoots.length > 0 && (
-            <div className="pt-2">
-              <p className="mb-2 text-xs font-semibold text-gray-400">دسته‌بندی‌ها</p>
-              <div className="flex flex-wrap gap-2">
-                {myRoots.map((r) => (
-                  <button key={r.id} type="button" onClick={() => { setActiveRootId(r.id); setPath([]); setMode('specialty'); }} className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:border-[#0B2C4A]/40">{r.name}</button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {mode === 'add' && (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-500">تخصص‌های تعریف‌شده توسط ادمین را انتخاب کنید.</p>
-          <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="جستجوی تخصص..." className="w-full" />
-          {!roots.length ? (
-            <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-gray-500">
-              هنوز تخصصی از پنل سوپرادمین ثبت نشده است.
-            </p>
+          <h2 className="font-semibold text-[#0B2C4A]">خانواده خدمت</h2>
+          {!families.length ? (
+            <p className="text-sm text-gray">برای این تخصص خانواده‌ای در کاتالوگ نیست.</p>
           ) : (
-            <ul className={`max-h-80 overflow-y-auto rounded-2xl border ${navy.border} bg-white p-1`}>
-              {roots
-                .filter((r) => !addSearch.trim() || r.name.includes(addSearch.trim()))
-                .map((r) => {
-                  const already = selectedRootIds.includes(r.id);
-                  return (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        disabled={busy || already}
-                        className={`w-full rounded-xl px-3 py-2.5 text-right text-sm hover:bg-[#F3F6F9] disabled:opacity-50 ${already ? 'text-[#2D6CDF]' : ''}`}
-                        onClick={() => void addRootSpecialty(r.id)}
-                      >
-                        {r.name}{already ? ' · انتخاب‌شده' : ''}
-                      </button>
-                    </li>
-                  );
-                })}
+            <ul className="space-y-2">
+              {families.map((f) => {
+                const open = familyId === f.id;
+                const count =
+                  (f as CatalogCategory & { services?: unknown[] }).services?.length ?? 0;
+                return (
+                  <li key={f.id} className="rounded-xl border border-border overflow-hidden">
+                    <button
+                      type="button"
+                      className={`flex w-full items-center justify-between px-3 py-3 text-right text-sm font-medium ${
+                        open ? 'bg-[#FFE6E2] text-coral' : 'bg-white'
+                      }`}
+                      onClick={() => setFamilyId(open ? null : f.id)}
+                    >
+                      <span>{f.name}</span>
+                      <span className="text-xs text-gray">{count.toLocaleString('fa-IR')} مورد</span>
+                    </button>
+                    {open && (
+                      <div className="space-y-2 border-t border-border bg-gray-50/80 p-3">
+                        <Input
+                          placeholder="جستجوی خدمت…"
+                          value={familySearch}
+                          onChange={(e) => setFamilySearch(e.target.value)}
+                          className="bg-white"
+                        />
+                        {familyServices.map((s) => {
+                          const active = mine.some(
+                            (m) =>
+                              (m.serviceId === s.id || m.service?.id === s.id) &&
+                              m.isActive !== false,
+                          );
+                          return (
+                            <div
+                              key={s.id}
+                              className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2.5 border border-border"
+                            >
+                              <span className="text-sm font-medium text-[#0B2C4A]">{s.name}</span>
+                              <div className="flex items-center gap-2">
+                                {active && (
+                                  <span className="text-[10px] text-emerald-600">فعال</span>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant={active ? 'outline' : 'primary'}
+                                  disabled={busy}
+                                  onClick={() => void enableAndPrice(s.id, s.name)}
+                                >
+                                  قیمت‌گذاری
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {!familyServices.length && (
+                          <p className="text-xs text-gray">خدمتی نیست — ادمین کاتالوگ را کامل کند.</p>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
+        </Card>
+      )}
+
+      {/* STEP 3 — price matrix + batch */}
+      {step === 3 && psId && (
+        <div className="space-y-3">
+          <button
+            type="button"
+            className="text-sm text-gray underline"
+            onClick={() => setStep(2)}
+          >
+            → بازگشت به خدمات
+          </button>
+          <PriceMatrix
+            title={activeServiceName || 'جدول قیمت'}
+            busy={busy}
+            cells={rules.map((r) => ({
+              label: r.label,
+              price: r.price,
+              ruleId: r.id,
+            }))}
+            onSaveCell={saveCell}
+            onBatchApply={batchApply}
+          />
         </div>
       )}
-
-      {mode === 'specialty' && activeRootId && (
-        <SpecialtyView
-          activeRootId={activeRootId}
-          activeRoot={activeRoot}
-          tree={tree}
-          mine={mine}
-          path={path}
-          setPath={setPath}
-          search={search}
-          setSearch={setSearch}
-          searchResults={searchResults}
-          categoryChildren={children}
-          leafServices={leafServices}
-          menuSections={menuSections}
-          specialtyMedia={specialtyMedia}
-          specialtyMenu={specialtyMenu}
-          busy={busy}
-          uploadState={uploadState}
-          uploadProgress={uploadProgress}
-          uploadErr={uploadErr}
-          ensureAndEditService={ensureAndEditService}
-          setSelectedPsId={setSelectedPsId}
-          setMode={setMode}
-          setBusy={setBusy}
-          setError={setError}
-          setMsg={setMsg}
-          load={load}
-          onDeleteMedia={onDeleteMedia}
-          onUploadMedia={onUploadMedia}
-          moveService={moveService}
-          removeRootSpecialty={removeRootSpecialty}
-          createAndEditCustomService={createAndEditCustomService}
-          createFeature={createFeature}
-        />
-      )}
-
-      {mode === 'edit' && selectedPs && (
-        <ServiceEditPanel
-          selectedPs={selectedPs}
-          busy={busy}
-          price={price}
-          setPrice={setPrice}
-          durationMin={durationMin}
-          setDurationMin={setDurationMin}
-          activeRootId={activeRootId}
-          showModels={showModels}
-          setShowModels={setShowModels}
-          priceRules={priceRules}
-          setPriceRules={setPriceRules}
-          durationRules={durationRules}
-          setDurationRules={setDurationRules}
-          ruleLabel={ruleLabel}
-          setRuleLabel={setRuleLabel}
-          rulePrice={rulePrice}
-          setRulePrice={setRulePrice}
-          ruleDuration={ruleDuration}
-          setRuleDuration={setRuleDuration}
-          showAddOnForm={showAddOnForm}
-          setShowAddOnForm={setShowAddOnForm}
-          addOnName={addOnName}
-          setAddOnName={setAddOnName}
-          addOnPrice={addOnPrice}
-          setAddOnPrice={setAddOnPrice}
-          addOnExtra={addOnExtra}
-          setAddOnExtra={setAddOnExtra}
-          editingAddOnId={editingAddOnId}
-          setEditingAddOnId={setEditingAddOnId}
-          uploadState={uploadState}
-          uploadProgress={uploadProgress}
-          uploadErr={uploadErr}
-          onSavePs={onSavePs}
-          applyFixedToAllUnderRoot={applyFixedToAllUnderRoot}
-          onAddModel={onAddModel}
-          onAddOn={onAddOn}
-          onToggleActive={onToggleActive}
-          onDeleteMedia={onDeleteMedia}
-          onUploadMedia={onUploadMedia}
-          load={load}
-        />
-      )}
-
-      <p className="text-center text-xs text-gray-400">
-        <Link href="/zibagar/profile/complete" className="underline">تکمیل پروفایل</Link>
-      </p>
     </div>
   );
 }
