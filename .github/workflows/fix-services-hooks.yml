@@ -1,0 +1,19 @@
+name: fix-services-hooks
+on:
+  push:
+    paths:
+      - scripts/fix_services_hooks_order.py
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_services_hooks_order.py
+      - run: |
+          git config user.name beautijoo-bot
+          git config user.email bot@beautijoo.ir
+          git add -A
+          git diff --staged --quiet || (git commit -m "fix: hooks order on zibagar services page" && git push)
