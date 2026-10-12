@@ -1,1 +1,1 @@
-RESTORE_VIA_SHELL
+@file:///tmp/bookings_good.ts
