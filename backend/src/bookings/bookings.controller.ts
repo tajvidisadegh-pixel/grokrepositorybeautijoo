@@ -98,68 +98,61 @@ export class BookingsController {
   one(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
   ) {
-    return this.service.getOne(id, userId, roles || []);
+    return this.service.getOne(id, userId);
   }
 
   @Patch(':id/reschedule')
   reschedule(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
     @Body() dto: RescheduleDto,
   ) {
-    return this.service.reschedule(id, userId, roles || [], dto.startAt);
+    return this.service.reschedule(id, userId, dto.startAt);
   }
 
   @Patch(':id/confirm')
   confirm(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
   ) {
-    return this.service.transition(id, userId, roles || [], 'confirm');
+    return this.service.transition(id, userId, 'confirm');
   }
 
   @Patch(':id/reject')
   reject(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
     @Body() dto: TransitionDto,
   ) {
-    return this.service.transition(id, userId, roles || [], 'reject', dto.reason);
+    return this.service.transition(id, userId, 'reject', dto.reason);
   }
 
   @Patch(':id/cancel')
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
     @Body() dto: TransitionDto,
   ) {
-    return this.service.transition(id, userId, roles || [], 'cancel', dto.reason);
+    return this.service.transition(id, userId, 'cancel', dto.reason);
   }
 
   @Patch(':id/complete')
   complete(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
   ) {
-    return this.service.transition(id, userId, roles || [], 'complete');
+    return this.service.transition(id, userId, 'complete');
   }
 
-  /** No-show without schema change: cancel + cancelReason=no_show (pro/admin only). */
+  /** Professional marks customer no-show (mapped to cancel with reason). */
   @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Patch(':id/no-show')
   noShow(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
-    @CurrentUser('roles') roles: string[],
   ) {
-    return this.service.transition(id, userId, roles || [], 'cancel', 'no_show');
+    return this.service.transition(id, userId, 'no_show', 'no_show');
   }
 
   @Roles('professional', 'admin', 'SUPER_ADMIN')
