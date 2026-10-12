@@ -375,7 +375,7 @@ export class BookingsService {
     return { items, meta: { page, limit, total } };
   }
 
-  async getOne(id: string, userId: string) {
+  async getOne(id: string, userId: string, _roles: string[] = []) {
     const b = await this.prisma.booking.findUnique({
       where: { id },
       include: {
@@ -397,6 +397,7 @@ export class BookingsService {
   async transition(
     id: string,
     userId: string,
+    roles: string[],
     action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show',
     reason?: string,
   ): Promise<unknown> {
@@ -473,7 +474,7 @@ export class BookingsService {
     throw new BadRequestException('عملیات نامعتبر');
   }
 
-  async reschedule(id: string, userId: string, startAtIso: string) {
+  async reschedule(id: string, userId: string, roles: string[], startAtIso: string) {
     const b = await this.prisma.booking.findUnique({ where: { id } });
     if (!b) throw new NotFoundException();
     if (b.customerId !== userId) throw new ForbiddenException();
