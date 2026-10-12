@@ -235,7 +235,6 @@ export class BookingsService {
               customerId,
               professionalId: data.professionalId,
               locationId: data.locationId,
-              // #64.1 — pending until payment confirms
               status: BookingStatus.pending,
               startAt,
               endAt,
@@ -400,7 +399,7 @@ export class BookingsService {
     userId: string,
     action: 'confirm' | 'reject' | 'cancel' | 'complete' | 'no_show',
     reason?: string,
-  ): Promise<unknown> {
+  ) {
     const b = await this.prisma.booking.findUnique({ where: { id }, include: { payment: true } });
     if (!b) throw new NotFoundException();
     const pro = await this.prisma.professional.findFirst({ where: { userId } });
@@ -457,8 +456,8 @@ export class BookingsService {
 
     if (action === 'no_show') {
       if (!isPro) throw new ForbiddenException();
-      const allowedNoShow: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
-      if (!allowedNoShow.includes(b.status)) {
+      const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+      if (!allowed.includes(b.status)) {
         throw new BadRequestException('این رزرو قابل ثبت عدم حضور نیست');
       }
       return this.prisma.booking.update({
