@@ -1,9 +1,8 @@
-name: Restore #64.1 bookings pending + payments confirmedAt
+name: Restore #64.1 pending booking + payments confirmedAt
 on:
   push:
     paths:
       - '.github/workflows/restore-64-1.yml'
-      - 'scripts/bookings64_p*'
       - 'scripts/payments64.b64'
   workflow_dispatch:
 jobs:
@@ -13,21 +12,47 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Decode and restore bookings.service + payments.service
+      - name: Restore payments.service + fix bookings signatures for #64.1
         run: |
           set -e
-          cat scripts/bookings64_p*.b64 | tr -d '\n' | base64 -d > backend/src/bookings/bookings.service.ts
-          base64 -d scripts/payments64.b64 > backend/src/payments/payments.service.ts
-          grep -q "BookingStatus.pending" backend/src/bookings/bookings.service.ts
-          grep -q "#64.1" backend/src/bookings/bookings.service.ts
+          # payments: decode base64 of full service (includes confirmedAt on pay)
+          if [ -f scripts/payments64.b64 ]; then
+            base64 -d scripts/payments64.b64 > backend/src/payments/payments.service.ts
+          fi
+          # bookings: ensure create is pending + fix method signatures to match controller
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text()
+          # create status already pending in current tree; ensure comment
+          if 'status: BookingStatus.pending' not in t:
+              raise SystemExit('missing pending create')
+          t = t.replace(
+              'async getOne(id: string, userId: string) {',
+              'async getOne(id: string, userId: string, _roles: string[] = []) {',
+          )
+          t = re.sub(
+              r'async transition\(\s*id: string,\s*userId: string,\s*action:',
+              'async transition(\n    id: string,\n    userId: string,\n    roles: string[],\n    action:',
+              t,
+              count=1,
+          )
+          t = t.replace(
+              'async reschedule(id: string, userId: string, startAtIso: string)',
+              'async reschedule(id: string, userId: string, roles: string[], startAtIso: string)',
+          )
+          p.write_text(t)
+          print('bookings signatures patched')
+          PY
           grep -q "confirmedAt" backend/src/payments/payments.service.ts
-          grep -q "roles: string\\[\\]" backend/src/bookings/bookings.service.ts
-          grep -q "async getOne(id: string, userId: string, roles: string\\[\\])" backend/src/bookings/bookings.service.ts
+          grep -q "BookingStatus.pending" backend/src/bookings/bookings.service.ts
+          grep -q "_roles: string\[\]" backend/src/bookings/bookings.service.ts || grep -q "roles: string\[\]" backend/src/bookings/bookings.service.ts
           wc -l backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts
-          git diff --staged --quiet || git commit -m "fix(#64.1): full restore — booking create pending until pay, confirmedAt on finalize, controller signatures"
+          git diff --staged --quiet || git commit -m "fix(#64.1): pending create until pay, confirmedAt on finalize, controller signature match"
           git push
