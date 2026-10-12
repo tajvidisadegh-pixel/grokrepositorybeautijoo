@@ -58,86 +58,70 @@ export class PaymentsService {
       });
     }
 
-    const result = await this.provider.create(
-      {
-        amount: booking.totalPrice,
-        description: `Beautijoo #{bookingId.slice(0, 8)}`,
-        callbackUrl,
-        idempotencyKey,
-      },
-    );
+    const result = await this.provider.initiate({
+      amount: booking.totalPrice,
+      bookingId,
+      idempotencyKey,
+      callbackUrl,
+    });
+
     await this.prisma.payment.update({
-      where: { idempotencyKey },
+      where: { bookingId },
       data: {
         providerRef: result.providerRef,
         status: 'processing',
+        provider: providerKey,
       },
     });
+
     return result;
   }
 
-  /**
-   * Gateway callback (provider-agnostic query params).
-   * Mock callbacks are refused in production.
-   */
   async callback(providerRef: string, gatewayStatus?: string) {
-    if (!providerRef) throw new BadRequestException('ستهداد تراکنش یافت نیست الممدی');
+    if (!providerRef) throw new BadRequestException('شناسه تراکنش درگاه ارسال نشده');
 
-    // Provider user-cancel (e.g. Status=NOK)
     if (gatewayStatus && gatewayStatus.toUpperCase() === 'NOK') {
       const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
-      if (payment && payment.status !== 'paid') {
+      if (payment && payment.status !== PaymentStatus.paid) {
         await this.prisma.payment.update({
           where: { id: payment.id },
-          data: { status: 'cancelled' },
+          data: { status: PaymentStatus.failed },
         });
       }
-      return { status: 'cancelled', bookingId: payment?.bookingId ?? null };
+      return { status: 'failed', bookingId: payment?.bookingId };
     }
 
-    const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
+    const payment = await this.prisma.payment.findFirst({
+      where: { providerRef },
+      include: { booking: true },
+    });
     if (!payment) throw new NotFoundException('تراکنش یافت نشد');
 
-    // Idempotency: already paid – do not recompute commission snapshot
-    if (payment.status === 'paid') {
-      return { status: 'paid', bookingId: payment.bookingId };
+    if (payment.status === PaymentStatus.paid) {
+      return { status: 'paid', bookingId: payment.bookingId, refId: providerRef };
     }
 
-    // Hard guard: never accept mock (or missing real provider) as PAID in production
-    const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
-    const storedProvider = (payment.provider || '').toLowerCase();
-    if (isProd && (storedProvider === 'mock' || storedProvider === 'disabled' || !storedProvider)) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'failed', failedAt: new Date() },
-      });
-      throw new BadRequestException(
-        'نیست پرداخت درگاه است production آنلای ارائه هنال استرداد',
-      );
+    if (process.env.NODE_ENV === 'production' && this.providerName() === 'mock') {
+      throw new BadRequestException('mock payment is not allowed in production');
     }
 
     const verified = await this.provider.verify(providerRef, payment.amount);
     if (!verified.success) {
       await this.prisma.payment.update({
         where: { id: payment.id },
-        data: { status: 'failed', failedAt: new Date() },
+        data: { status: PaymentStatus.failed },
       });
       return { status: 'failed', bookingId: payment.bookingId };
     }
 
-    let rate = DEFAULT_PLATFORM_COMMISSION_RATE;
-    try {
-      const setting = await this.prisma.platformSetting.findUnique({
-        where: { key: PLATFORM_COMMISSION_RATE_KEY },
-      });
-      if (setting?.value != null && Number.isFinite(Number(setting.value))) {
-        rate = Number(setting.value);
-      }
-    } catch {
-      /* ignore */
-    }
-
-    const { commissionRate, commissionAmount, professionalNetAmount } = calculateCommission(
+    const rateRow = await this.prisma.platformSetting.findUnique({
+      where: { key: PLATFORM_COMMISSION_RATE_KEY },
+    });
+    const rate =
+      rateRow?.value != null && Number.isFinite(Number(rateRow.value))
+        ? Number(rateRow.value)
+        : DEFAULT_PLATFORM_COMMISSION_RATE;
+    const { commissionAmount, professionalNetAmount } = calculateCommission(
       payment.amount,
       rate,
     );
@@ -145,11 +129,10 @@ export class PaymentsService {
     await this.prisma.payment.update({
       where: { id: payment.id },
       data: {
-        status: 'paid',
+        status: PaymentStatus.paid,
         paidAt: new Date(),
-        platformCommissionRate: commissionRate,
         platformCommissionAmount: commissionAmount,
-        professionalNetAmount: professionalNetCamount,
+        professionalNetAmount: professionalNetAmount,
         metadata: {
           ...(typeof payment.metadata === 'object' && payment.metadata !== null
             ? (payment.metadata as object)
@@ -159,7 +142,6 @@ export class PaymentsService {
       },
     });
 
-    // Finalize booking after successful payment (pending → confirmed)
     const booking = await this.prisma.booking.findUnique({
       where: { id: payment.bookingId },
     });
@@ -181,11 +163,11 @@ export class PaymentsService {
     if (!payment) throw new NotFoundException('تراکنش یافت نشد');
     if (payment.status !== PaymentStatus.paid) {
       throw new BadRequestException(
-        `فقش ڪراکنش‌های پرداخت‌شده قابل استخداد هستند (وضعیت فعلی: ${payment.status})`,
+        `فقط تراکنش‌های پرداخت‌شده قابل استرداد هستند (وضعیت فعلی: ${payment.status})`,
       );
     }
     if (!payment.providerRef) {
-      throw new BadRequestException('شناسه ارائه‌دهنده پرداخت موجند نیست');
+      throw new BadRequestException('شناسه ارائه‌دهنده پرداخت موجود نیست');
     }
 
     const result = await this.provider.refund({
@@ -195,7 +177,7 @@ export class PaymentsService {
     });
 
     if (!result.success) {
-      throw new BadRequestException('استرداد ڪوسط درگاه پرداخت ناموفق بود');
+      throw new BadRequestException('استرداد توسط درگاه پرداخت ناموفق بود');
     }
 
     const updated = await this.prisma.payment.update({
@@ -206,7 +188,8 @@ export class PaymentsService {
           ...(typeof payment.metadata === 'object' && payment.metadata !== null
             ? (payment.metadata as object)
             : {}),
-          refund: { refundRef: result.refundRef,
+          refund: {
+            refundRef: result.refundRef,
             reason: reason ?? null,
             refundedAt: new Date().toISOString(),
             refundedBy: adminUserId ?? null,
@@ -215,15 +198,12 @@ export class PaymentsService {
       },
     });
 
-    if (
-      payment.booking &&
-      ['pending', 'confirmed'].includes(payment.booking.status)
-    ) {
+    if (payment.booking && ['pending', 'confirmed'].includes(payment.booking.status)) {
       await this.prisma.booking.update({
         where: { id: payment.bookingId },
         data: {
           status: 'cancelled',
-          cancelReason: reason ?? 'استخداد پرداخت',
+          cancelReason: reason ?? 'استرداد پرداخت',
           cancelledAt: new Date(),
         },
       });
