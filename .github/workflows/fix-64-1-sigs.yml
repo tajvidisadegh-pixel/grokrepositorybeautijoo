@@ -1,0 +1,60 @@
+name: Fix #64.1 bookings signatures match controller
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-64-1-sigs.yml'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Align signatures with controller + keep pending
+        run: |
+          set -e
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text()
+          t = t.replace(
+              'async getOne(id: string, userId: string, _roles: string[] = []) {',
+              'async getOne(id: string, userId: string) {',
+          )
+          t = t.replace(
+              'async getOne(id: string, userId: string, roles: string[]) {',
+              'async getOne(id: string, userId: string) {',
+          )
+          t = re.sub(
+              r'async transition\(\s*id: string,\s*userId: string,\s*roles: string\[\],\s*action:',
+              'async transition(\n    id: string,\n    userId: string,\n    action:',
+              t,
+              count=1,
+          )
+          t = t.replace(
+              'async reschedule(id: string, userId: string, roles: string[], startAtIso: string)',
+              'async reschedule(id: string, userId: string, startAtIso: string)',
+          )
+          if 'status: BookingStatus.pending' not in t:
+              raise SystemExit('missing pending')
+          if '#64.1' not in t:
+              t = t.replace(
+                  'status: BookingStatus.pending,',
+                  '// #64.1 — pending until payment confirms\n              status: BookingStatus.pending,',
+                  1,
+              )
+          p.write_text(t)
+          print('ok')
+          PY
+          grep -q "confirmedAt" backend/src/payments/payments.service.ts
+          grep -q "BookingStatus.pending" backend/src/bookings/bookings.service.ts
+          wc -l backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git diff --staged --quiet || git commit -m "fix(#64.1): match controller signatures (no roles arg); keep pending-until-paid"
+          git push
