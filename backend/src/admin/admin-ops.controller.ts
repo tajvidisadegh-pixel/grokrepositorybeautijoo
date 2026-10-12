@@ -169,11 +169,31 @@ export class AdminOpsController {
   async notifyByFilter(@Body() dto: NotifyByFilterDto) {
     const limit = Math.min(5000, Math.max(1, Number(dto.limit) || 500));
     const filters = dto.filters || {};
-    const where: Prisma.UserWhereInput = {};
+    const where: Prisma.UserWhereInput = {
+      status: UserStatus.active,
+    };
+    const accountType = filters.accountType;
+    if (accountType === 'customer' || accountType === 'professional') {
+      where.accountType = accountType as any;
+    }
     if (filters.neverNotified) where.notifications = { none: {} };
-    if (filters.hasPaid) where.bookingsAsCustomer = { some: { payment: { is: { status: PaymentStatus.paid } } } };
-    const users = await this.prisma.user.findMany({ where, take: limit, select: { id: true } });
-    return this.notifyUsers({ userIds: users.map(u => u.id), title: dto.title, body: dto.body, sms: dto.sms });
+    if (filters.hasPaid) {
+      where.bookingsAsCustomer = {
+        some: { payment: { is: { status: PaymentStatus.paid } } },
+      };
+    }
+    const users = await this.prisma.user.findMany({
+      where,
+      take: limit,
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return this.notifyUsers({
+      userIds: users.map((u) => u.id),
+      title: dto.title,
+      body: dto.body,
+      sms: dto.sms,
+    });
   }
 
   @RequirePermissions('admin.notifications.send')
