@@ -1,0 +1,33 @@
+name: Restore #64.1 bookings pending + payments confirmedAt
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-64-1.yml'
+      - 'scripts/bookings64_p*'
+      - 'scripts/payments64.b64'
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and restore bookings.service + payments.service
+        run: |
+          set -e
+          cat scripts/bookings64_p*.b64 | tr -d '\n' | base64 -d > backend/src/bookings/bookings.service.ts
+          base64 -d scripts/payments64.b64 > backend/src/payments/payments.service.ts
+          grep -q "BookingStatus.pending" backend/src/bookings/bookings.service.ts
+          grep -q "#64.1" backend/src/bookings/bookings.service.ts
+          grep -q "confirmedAt" backend/src/payments/payments.service.ts
+          grep -q "roles: string\\[\\]" backend/src/bookings/bookings.service.ts
+          grep -q "async getOne(id: string, userId: string, roles: string\\[\\])" backend/src/bookings/bookings.service.ts
+          wc -l backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts
+          git diff --staged --quiet || git commit -m "fix(#64.1): full restore — booking create pending until pay, confirmedAt on finalize, controller signatures"
+          git push
