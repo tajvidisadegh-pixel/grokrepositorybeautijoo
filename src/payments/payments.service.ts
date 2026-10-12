@@ -106,7 +106,7 @@ export class PaymentsService {
     }
 
     const verified = await this.provider.verify(providerRef, payment.amount);
-    if (!verified.ok) {
+    if (!verified.success) {
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { status: PaymentStatus.failed },
