@@ -82,7 +82,6 @@ export function PriceMatrix({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm" dir="rtl">
-      {/* Header */}
       <div className="border-b border-border bg-gradient-to-l from-[#FFF5F3] to-white px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -103,7 +102,6 @@ export function PriceMatrix({
           )}
         </div>
 
-        {/* مدت + راهنما در یک ردیف */}
         {showDuration && (
           <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl bg-white/80 p-3 ring-1 ring-border">
             <div className="min-w-[7.5rem] flex-1">
@@ -136,7 +134,6 @@ export function PriceMatrix({
         )}
       </div>
 
-      {/* اعمال دسته‌ای */}
       <div className="border-b border-border bg-[#FFE6E2]/40 px-4 py-3">
         <p className="mb-2 text-sm font-semibold text-navy">قیمت یکسان روی موارد انتخاب‌شده</p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -166,7 +163,6 @@ export function PriceMatrix({
         </p>
       </div>
 
-      {/* ردیف‌های قیمت */}
       <ul className="divide-y divide-border">
         {cells.length === 0 && (
           <li className="px-4 py-10 text-center text-sm text-gray">ردیف قیمتی نیست</li>
@@ -216,7 +212,7 @@ export function PriceMatrix({
                 <Button
                   size="sm"
                   className="h-11 shrink-0 px-5"
-                  variant={saved ? 'outline' : 'default'}
+                  variant={saved ? 'outline' : 'primary'}
                   disabled={busy || parsePrice(val) < minPrice}
                   onClick={() => void onSaveCell(c.label, parsePrice(val), c.ruleId)}
                 >
