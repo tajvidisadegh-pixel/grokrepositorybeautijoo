@@ -1,0 +1,35 @@
+name: Fix 64.3c no_show
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-64-3c.yml'
+      - 'scripts/apply_64_3.py'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 80
+      - name: Restore files from green commit
+        run: |
+          set -eux
+          git show fc63eba0d6b21643e2714853b392c7c99a725ae9:backend/prisma/schema.prisma > backend/prisma/schema.prisma
+          git show fc63eba0d6b21643e2714853b392c7c99a725ae9:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          test -s backend/prisma/schema.prisma
+          test -s backend/src/bookings/bookings.service.ts
+          grep -q 'enum BookingStatus' backend/prisma/schema.prisma
+          grep -q 'class BookingsService' backend/src/bookings/bookings.service.ts
+      - name: Apply 64.3 patch
+        run: python3 scripts/apply_64_3.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/prisma/schema.prisma backend/src/bookings/bookings.service.ts backend/src/bookings/bookings.controller.ts frontend/src/lib/booking-api.ts frontend/src/app/zibagar/bookings/page.tsx
+          git status
+          git commit -m "fix(#64.3): no_show distinct status, never refund; restore broken files" || true
+          git push
