@@ -15,7 +15,7 @@ import {
   DEFAULT_PLATFORM_COMMISSION_RATE,
   PLATFORM_COMMISSION_RATE_KEY,
 } from './financial.util';
-import { PaymentStatus } from '@prisma/client';
+import { BookingStatus, PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class PaymentsService {
@@ -28,11 +28,53 @@ export class PaymentsService {
     return this.provider.name || 'disabled';
   }
 
+  /**
+   * #64.2 — If gateway is off or initiate fails, do not leave a pending
+   * booking locking the professional calendar. Cancel unpaid pending only
+   * (never touch paid bookings).
+   */
+  private async releaseUnpaidPendingBooking(
+    bookingId: string,
+    reason: string,
+  ): Promise<void> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { payment: true },
+    });
+    if (!booking) return;
+    if (booking.payment?.status === PaymentStatus.paid) return;
+    if (booking.status !== BookingStatus.pending) return;
+
+    if (booking.payment && booking.payment.status !== PaymentStatus.paid) {
+      await this.prisma.payment.update({
+        where: { id: booking.payment.id },
+        data: {
+          status: PaymentStatus.cancelled,
+          failedAt: new Date(),
+        },
+      });
+    }
+
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: BookingStatus.expired,
+        cancelReason: reason.slice(0, 255),
+        cancelledAt: new Date(),
+      },
+    });
+  }
+
   async initiate(userId: string, bookingId: string, callbackUrl: string) {
     const providerKey = this.providerName();
     if (providerKey === 'disabled') {
+      // #64.2 — gateway off: free the slot, then surface error
+      await this.releaseUnpaidPendingBooking(
+        bookingId,
+        'payment_provider_disabled',
+      );
       throw new ServiceUnavailableException(
-        'پرداخت آنلاین در حال حاضر فعال نیست. درگاه واقعی پیکربندی نشده است.',
+        'پرداخت آنلاین در حال حاضر فعال نیست. درگاه واقعی پیکربندی نشده است. رزرو نگه‌داشته نشد.',
       );
     }
 
@@ -42,6 +84,9 @@ export class PaymentsService {
     });
     if (!booking) throw new NotFoundException();
     if (booking.customerId !== userId) throw new ForbiddenException();
+    if (booking.status === BookingStatus.expired || booking.status === BookingStatus.cancelled) {
+      throw new BadRequestException('این رزرو دیگر قابل پرداخت نیست');
+    }
     if (booking.payment?.status === 'paid') throw new ConflictException('قبلاً پرداخت شده');
 
     const idempotencyKey = booking.payment?.idempotencyKey || randomUUID();
@@ -58,23 +103,53 @@ export class PaymentsService {
       });
     }
 
-    const result = await this.provider.initiate({
-      amount: booking.totalPrice,
-      bookingId,
-      idempotencyKey,
-      callbackUrl,
-    });
+    try {
+      const result = await this.provider.initiate({
+        amount: booking.totalPrice,
+        bookingId,
+        idempotencyKey,
+        callbackUrl,
+      });
 
-    await this.prisma.payment.update({
-      where: { bookingId },
-      data: {
-        providerRef: result.providerRef,
-        status: 'processing',
-        provider: providerKey,
-      },
-    });
+      if (!result?.redirectUrl && !result?.providerRef) {
+        await this.releaseUnpaidPendingBooking(
+          bookingId,
+          'payment_initiate_no_redirect',
+        );
+        throw new ServiceUnavailableException(
+          'لینک درگاه دریافت نشد. رزرو نگه‌داشته نشد؛ دوباره تلاش کنید.',
+        );
+      }
 
-    return result;
+      await this.prisma.payment.update({
+        where: { bookingId },
+        data: {
+          providerRef: result.providerRef,
+          status: 'processing',
+          provider: providerKey,
+        },
+      });
+
+      return result;
+    } catch (e) {
+      if (
+        e instanceof ServiceUnavailableException ||
+        e instanceof BadRequestException ||
+        e instanceof ConflictException ||
+        e instanceof ForbiddenException ||
+        e instanceof NotFoundException
+      ) {
+        throw e;
+      }
+      // #64.2 — provider/network failure: release calendar hold
+      await this.releaseUnpaidPendingBooking(
+        bookingId,
+        'payment_initiate_failed',
+      );
+      throw new ServiceUnavailableException(
+        'شروع پرداخت ناموفق بود. رزرو نگه‌داشته نشد؛ بعداً دوباره تلاش کنید.',
+      );
+    }
   }
 
   async callback(providerRef: string, gatewayStatus?: string) {
@@ -87,6 +162,11 @@ export class PaymentsService {
           where: { id: payment.id },
           data: { status: PaymentStatus.failed },
         });
+        // #64.2 — user cancelled at gateway: free unpaid pending slot
+        await this.releaseUnpaidPendingBooking(
+          payment.bookingId,
+          'gateway_user_cancel',
+        );
       }
       return { status: 'failed', bookingId: payment?.bookingId };
     }
@@ -111,6 +191,10 @@ export class PaymentsService {
         where: { id: payment.id },
         data: { status: PaymentStatus.failed },
       });
+      await this.releaseUnpaidPendingBooking(
+        payment.bookingId,
+        'payment_verify_failed',
+      );
       return { status: 'failed', bookingId: payment.bookingId };
     }
 
