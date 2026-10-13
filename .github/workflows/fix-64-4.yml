@@ -1,0 +1,36 @@
+name: Fix 64.4 no_show schema alignment UI
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-64-4.yml'
+      - 'scripts/apply_64_4.py'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
+      - name: Restore admin bookings if PLACEHOLDER
+        run: |
+          set -eux
+          f=frontend/src/app/admin/bookings/page.tsx
+          if grep -q PLACEHOLDER "$f" || [ "$(wc -c < "$f")" -lt 500 ]; then
+            git show b0258443398d3cef298fd64b4e334dd6c9779b42:frontend/src/app/admin/bookings/page.tsx > "$f" || \
+            git show f6e9d4a06fe084ddef777aab8433da36c4db46e9:frontend/src/app/admin/bookings/page.tsx > "$f"
+          fi
+          test -s "$f"
+          grep -q 'STATUS_OPTS' "$f"
+      - name: Apply 64.4 UI filters
+        run: python3 scripts/apply_64_4.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/bookings/page.tsx frontend/src/app/panel/bookings/page.tsx
+          git status
+          git commit -m "fix(#64.4): no_show in admin/panel filters; restore admin page" || true
+          git push
