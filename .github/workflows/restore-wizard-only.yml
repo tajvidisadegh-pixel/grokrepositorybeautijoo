@@ -1,0 +1,33 @@
+name: Restore booking-wizard only
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-wizard-only.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore wizard from known-good commit
+        run: |
+          set -e
+          git show efdc39f:frontend/src/components/booking/booking-wizard.tsx > frontend/src/components/booking/booking-wizard.tsx
+          # soft #64.2 messaging (backend already releases unpaid pending)
+          sed -i 's/رزرو ذخیره شد اما هنوز نهایی نیست — لینک درگاه دریافت نشد./لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید./g' frontend/src/components/booking/booking-wizard.tsx
+          sed -i 's/رزرو ذخیره شد اما نهایی نیست. پرداخت آنلاین فعلاً در دسترس نیست یا نیاز به پیکربندی درگاه دارد./پرداخت آنلاین در دسترس نیست. رزرو قطعی ثبت نشد و زمان آزاد ماند./g' frontend/src/components/booking/booking-wizard.tsx
+          test -s frontend/src/components/booking/booking-wizard.tsx
+          ! grep -q SEE_FILE frontend/src/components/booking/booking-wizard.tsx
+          head -1 frontend/src/components/booking/booking-wizard.tsx | grep -q "use client"
+          wc -l frontend/src/components/booking/booking-wizard.tsx
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/booking/booking-wizard.tsx
+          git diff --staged --quiet || git commit -m "fix(ci): restore booking-wizard.tsx from efdc39f + #64.2 payment-fail copy"
+          git push
