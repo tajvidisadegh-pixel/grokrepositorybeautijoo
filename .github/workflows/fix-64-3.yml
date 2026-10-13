@@ -1,0 +1,143 @@
+name: Fix 64.3 no_show
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-64-3.yml'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+      - name: Restore schema + bookings.service and apply #64.3
+        run: |
+          set -e
+          git show fc63eba0d6b21643e2714853b392c7c99a725ae9:backend/prisma/schema.prisma > backend/prisma/schema.prisma
+          git show fc63eba0d6b21643e2714853b392c7c99a725ae9:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          test -s backend/prisma/schema.prisma
+          test -s backend/src/bookings/bookings.service.ts
+          grep -q 'enum BookingStatus' backend/prisma/schema.prisma
+          grep -q 'class BookingsService' backend/src/bookings/bookings.service.ts
+          python3 << 'PY'
+          from pathlib import Path
+          schema = Path('backend/prisma/schema.prisma').read_text()
+          old_enum = """enum BookingStatus {
+  pending
+  confirmed
+  rejected
+  cancelled
+  completed
+  expired
+}"""
+          new_enum = """enum BookingStatus {
+  pending
+  confirmed
+  rejected
+  cancelled
+  completed
+  expired
+  no_show
+}"""
+          if 'no_show' not in schema.split('enum BookingStatus')[1].split('}')[0]:
+              if old_enum not in schema:
+                  raise SystemExit('enum block missing')
+              schema = schema.replace(old_enum, new_enum, 1)
+              Path('backend/prisma/schema.prisma').write_text(schema)
+          print('schema ok', Path('backend/prisma/schema.prisma').stat().st_size)
+
+          svc = Path('backend/src/bookings/bookings.service.ts').read_text()
+          old_ns = """    if (action === 'no_show') {
+      if (!isPro) throw new ForbiddenException();
+      const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+      if (!allowed.includes(b.status)) {
+        throw new BadRequestException('این رزرو قابل ثبت عدم حضور نیست');
+      }
+      return this.prisma.booking.update({
+        where: { id },
+        data: {
+          status: BookingStatus.cancelled,
+          cancelReason: reason || 'no_show',
+          cancelledAt: new Date(),
+        },
+      });
+    }"""
+          new_ns = """    if (action === 'no_show') {
+      // #64.3 — distinct status; NEVER refund (payment stays paid if already paid)
+      if (!isPro) throw new ForbiddenException();
+      const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+      if (!allowed.includes(b.status)) {
+        throw new BadRequestException('این رزرو قابل ثبت عدم حضور نیست');
+      }
+      // Slot freed: overlap only counts pending/confirmed. Do not call payments.refund.
+      return this.prisma.booking.update({
+        where: { id },
+        data: {
+          status: BookingStatus.no_show,
+          cancelReason: reason || 'no_show',
+          cancelledAt: new Date(),
+        },
+      });
+    }"""
+          if 'BookingStatus.no_show' not in svc:
+              if old_ns not in svc:
+                  raise SystemExit('no_show block not found')
+              svc = svc.replace(old_ns, new_ns, 1)
+              Path('backend/src/bookings/bookings.service.ts').write_text(svc)
+          assert 'BookingStatus.no_show' in Path('backend/src/bookings/bookings.service.ts').read_text()
+          assert 'PLACEHOLDER' not in Path('backend/src/bookings/bookings.service.ts').read_text()
+          print('svc ok', Path('backend/src/bookings/bookings.service.ts').stat().st_size)
+          PY
+      - name: Patch controller comment + frontend labels
+        run: |
+          set -e
+          python3 << 'PY'
+          from pathlib import Path
+          ctrl = Path('backend/src/bookings/bookings.controller.ts')
+          t = ctrl.read_text()
+          t2 = t.replace(
+            '  /** Professional marks customer no-show (mapped to cancel with reason). */',
+            '  /** Professional marks customer no-show (#64.3: status=no_show, never refund). */',
+          )
+          if t2 != t:
+              ctrl.write_text(t2)
+              print('ctrl updated')
+          api = Path('frontend/src/lib/booking-api.ts')
+          a = api.read_text()
+          if "no_show:" not in a:
+              a2 = a.replace(
+                  "    completed: 'تکمیل شده',",
+                  "    no_show: 'عدم حضور',\n    completed: 'تکمیل شده',",
+              )
+              if a2 != a:
+                  api.write_text(a2)
+                  print('api updated')
+          zb = Path('frontend/src/app/zibagar/bookings/page.tsx')
+          z = zb.read_text()
+          if "value: 'no_show'" not in z:
+              z = z.replace(
+                  "  { value: 'expired', label: 'منقضی' },",
+                  "  { value: 'expired', label: 'منقضی' },\n  { value: 'no_show', label: 'عدم حضور' },",
+                  1,
+              )
+          if "st === 'cancelled' || st === 'rejected')" in z and "no_show" not in z.split("st === 'cancelled'")[1][:100]:
+              z = z.replace(
+                  "if (st === 'cancelled' || st === 'rejected') {",
+                  "if (st === 'cancelled' || st === 'rejected' || st === 'no_show') {",
+                  1,
+              )
+          zb.write_text(z)
+          print('frontend ok')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/prisma/schema.prisma backend/src/bookings/bookings.service.ts backend/src/bookings/bookings.controller.ts frontend/src/lib/booking-api.ts frontend/src/app/zibagar/bookings/page.tsx
+          git status
+          git diff --staged --stat
+          git commit -m "fix(#64.3): no_show distinct status — never refund; restore broken files"
+          git push
