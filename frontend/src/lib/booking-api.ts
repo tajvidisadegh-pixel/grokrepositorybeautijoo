@@ -78,6 +78,7 @@ export function persianBookingStatus(status: string): string {
     rejected: 'رد شده',
     cancelled: 'لغو شده',
     expired: 'منقضی (پرداخت نشده)',
+    no_show: 'عدم حضور',
     completed: 'تکمیل شده',
   };
   return map[status] || status;

@@ -31,6 +31,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'rejected', label: 'ردشده' },
   { value: 'cancelled', label: 'لغوشده' },
   { value: 'expired', label: 'منقضی' },
+  { value: 'no_show', label: 'عدم حضور' },
 ];
 
 const TEHRAN_TZ = 'Asia/Tehran';
@@ -86,7 +87,7 @@ function bookingTimeline(b: { status?: string; createdAt?: string; startAt?: str
   if (st === 'completed' || st === 'done') {
     steps.push({ label: 'انجام شد', at: b.updatedAt || b.startAt });
   }
-  if (st === 'cancelled' || st === 'rejected') {
+  if (st === 'cancelled' || st === 'rejected' || st === 'no_show') {
     steps.push({ label: st === 'rejected' ? 'رد شد' : 'لغو شد', at: b.updatedAt });
   }
   return steps;
