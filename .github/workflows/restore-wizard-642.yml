@@ -1,0 +1,88 @@
+name: Restore wizard 64.2 complete
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-wizard-642.yml'
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 40
+      - name: Restore wizard from pre-placeholder + apply cancelMyBooking
+        run: |
+          set -e
+          git show 23411db:frontend/src/components/booking/booking-wizard.tsx > frontend/src/components/booking/booking-wizard.tsx
+          python3 << 'PY'
+          from pathlib import Path
+          wpath = Path('frontend/src/components/booking/booking-wizard.tsx')
+          w = wpath.read_text()
+          if 'SEE_FILE' in w or len(w) < 1000 or w.strip() == 'PLACEHOLDER':
+              raise SystemExit('wizard still broken after restore')
+          if 'cancelMyBooking' not in w:
+              w = w.replace(
+                  '  initiatePayment,\n  slotToStartAt,',
+                  '  initiatePayment,\n  cancelMyBooking,\n  slotToStartAt,',
+                  1,
+              )
+          old = (
+              "        if (pay.redirectUrl) {\n"
+              "          window.location.href = pay.redirectUrl;\n"
+              "          return;\n"
+              "        }\n"
+              "        setPaymentInfo(\n"
+              "          'لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید.',\n"
+              "        );\n"
+              "      } catch {\n"
+              "        setPaymentInfo(\n"
+              "          'پرداخت آنلاین در دسترس نیست. رزرو قطعی ثبت نشد و زمان آزاد ماند.',\n"
+              "        );\n"
+              "      }"
+          )
+          new = (
+              "        if (pay.redirectUrl) {\n"
+              "          window.location.href = pay.redirectUrl;\n"
+              "          return;\n"
+              "        }\n"
+              "        // #64.2 — no gateway URL: free calendar hold\n"
+              "        try {\n"
+              "          await cancelMyBooking(created.id, 'payment_no_redirect');\n"
+              "        } catch {\n"
+              "          /* already released server-side */\n"
+              "        }\n"
+              "        setPaymentInfo(\n"
+              "          'لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید.',\n"
+              "        );\n"
+              "      } catch {\n"
+              "        // #64.2 — gateway off / initiate failed: free calendar hold\n"
+              "        try {\n"
+              "          await cancelMyBooking(created.id, 'payment_unavailable');\n"
+              "        } catch {\n"
+              "          /* already released server-side */\n"
+              "        }\n"
+              "        setPaymentInfo(\n"
+              "          'پرداخت آنلاین در دسترس نیست. رزرو قطعی ثبت نشد و زمان آزاد ماند.',\n"
+              "        );\n"
+              "      }"
+          )
+          if 'cancelMyBooking(created.id' not in w:
+              if old not in w:
+                  raise SystemExit('payment block not found in wizard')
+              w = w.replace(old, new, 1)
+          wpath.write_text(w)
+          text = wpath.read_text()
+          assert 'cancelMyBooking' in text
+          assert 'payment_unavailable' in text or 'payment_no_redirect' in text
+          print('wizard restored+patched', wpath.stat().st_size)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/booking/booking-wizard.tsx
+          git diff --staged --quiet || git commit -m "fix(#64.2): complete wizard cancelMyBooking on payment fail"
+          git push
