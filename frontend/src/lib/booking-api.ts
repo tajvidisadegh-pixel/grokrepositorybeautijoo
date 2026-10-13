@@ -59,6 +59,13 @@ export function initiatePayment(bookingId: string, callbackUrl: string) {
   }>('/payments/initiate', { bookingId, callbackUrl });
 }
 
+/** Customer cancel — used when payment cannot start (#64.2). */
+export function cancelMyBooking(id: string, reason?: string) {
+  return apiClient.patch<BookingRecord>(`/bookings/${id}/cancel`, {
+    reason: reason || 'payment_unavailable',
+  });
+}
+
 /** Build startAt ISO to match backend UTC slot comparison */
 export function slotToStartAt(date: string, slotStart: string): string {
   return `${date}T${slotStart}:00.000Z`;
@@ -70,6 +77,7 @@ export function persianBookingStatus(status: string): string {
     confirmed: 'تأیید شده',
     rejected: 'رد شده',
     cancelled: 'لغو شده',
+    expired: 'منقضی (پرداخت نشده)',
     completed: 'تکمیل شده',
   };
   return map[status] || status;
