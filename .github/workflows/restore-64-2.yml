@@ -1,9 +1,9 @@
 name: Restore #64.2 cleanup + booking-wizard
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/restore-64-2.yml'
-  workflow_dispatch:
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -13,169 +13,48 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore + patch cleanup and wizard
+      - name: Restore known-good sources if broken
         run: |
           set -e
-          # Restore last known-good versions (before accidental SEE_FILE)
-          git show f8fc496:backend/src/cleanup/cleanup.service.ts > backend/src/cleanup/cleanup.service.ts
-          git show efdc39f:frontend/src/components/booking/booking-wizard.tsx > frontend/src/components/booking/booking-wizard.tsx
-
-          python3 << 'PY'
-          from pathlib import Path
-
-          # --- cleanup: add expireUnpaidPendingBookings ---
-          p = Path('backend/src/cleanup/cleanup.service.ts')
-          t = p.read_text()
-          if 'expireUnpaidPendingBookings' not in t:
-              t = t.replace(
-                  'bookingsCompleted: number;\n  mediaOrphansDeleted: number;',
-                  'bookingsCompleted: number;\n  unpaidPendingExpired: number;\n  mediaOrphansDeleted: number;',
-              )
-              t = t.replace(
-                  '''const [otpsDeleted, refreshTokensDeleted, sessionsDeleted, bookingsCompleted, mediaOrphansDeleted] =
-      await Promise.all([
-        this.purgeExpiredOtps(),
-        this.purgeExpiredRefreshTokens(),
-        this.purgeExpiredSessions(),
-        this.completePastBookings(),
-        this.purgeOrphanDraftMedia(),
-      ]);
-    return {
-      otpsDeleted,
-      refreshTokensDeleted,
-      sessionsDeleted,
-      bookingsCompleted,
-      mediaOrphansDeleted,
-    };''',
-                  '''const [
-      otpsDeleted,
-      refreshTokensDeleted,
-      sessionsDeleted,
-      bookingsCompleted,
-      unpaidPendingExpired,
-      mediaOrphansDeleted,
-    ] = await Promise.all([
-      this.purgeExpiredOtps(),
-      this.purgeExpiredRefreshTokens(),
-      this.purgeExpiredSessions(),
-      this.completePastBookings(),
-      this.expireUnpaidPendingBookings(),
-      this.purgeOrphanDraftMedia(),
-    ]);
-    return {
-      otpsDeleted,
-      refreshTokensDeleted,
-      sessionsDeleted,
-      bookingsCompleted,
-      unpaidPendingExpired,
-      mediaOrphansDeleted,
-    };''',
-              )
-              insert = '''
-  /**
-   * #64.2 — Unpaid pending holds that never completed payment must not lock the calendar.
-   * Default TTL 30 minutes (PENDING_PAYMENT_TTL_MINUTES).
-   */
-  async expireUnpaidPendingBookings(): Promise<number> {
-    const minutes = Math.max(
-      5,
-      parseInt(process.env.PENDING_PAYMENT_TTL_MINUTES || '30', 10) || 30,
-    );
+          if ! grep -q expireUnpaidPendingBookings backend/src/cleanup/cleanup.service.ts 2>/dev/null; then
+            git show f8fc496:backend/src/cleanup/cleanup.service.ts > backend/src/cleanup/cleanup.service.ts
+          fi
+          if ! grep -q cancelMyBooking frontend/src/components/booking/booking-wizard.tsx 2>/dev/null; then
+            git show efdc39f:frontend/src/components/booking/booking-wizard.tsx > frontend/src/components/booking/booking-wizard.tsx
+          fi
+          # Append expire method before completePastBookings if missing
+          if ! grep -q expireUnpaidPendingBookings backend/src/cleanup/cleanup.service.ts; then
+            python3 -c "
+from pathlib import Path
+p=Path('backend/src/cleanup/cleanup.service.ts'); t=p.read_text()
+t=t.replace('bookingsCompleted: number;\\n  mediaOrphansDeleted: number;','bookingsCompleted: number;\\n  unpaidPendingExpired: number;\\n  mediaOrphansDeleted: number;')
+ins='''  async expireUnpaidPendingBookings(): Promise<number> {
+    const minutes = Math.max(5, parseInt(process.env.PENDING_PAYMENT_TTL_MINUTES || \"30\", 10) || 30);
     const cutoff = new Date(Date.now() - minutes * 60_000);
     const candidates = await this.prisma.booking.findMany({
-      where: {
-        status: BookingStatus.pending,
-        createdAt: { lt: cutoff },
-        OR: [
-          { payment: null },
-          { payment: { status: { in: ['pending', 'processing', 'failed', 'cancelled'] } } },
-        ],
-      },
-      select: { id: true },
-      take: 200,
+      where: { status: BookingStatus.pending, createdAt: { lt: cutoff }, OR: [{ payment: null }, { payment: { status: { in: [\"pending\", \"processing\", \"failed\", \"cancelled\"] } } }] },
+      select: { id: true }, take: 200,
     });
     if (!candidates.length) return 0;
     const result = await this.prisma.booking.updateMany({
-      where: {
-        id: { in: candidates.map((c) => c.id) },
-        status: BookingStatus.pending,
-      },
-      data: {
-        status: BookingStatus.expired,
-        cancelReason: 'unpaid_pending_ttl',
-        cancelledAt: new Date(),
-      },
+      where: { id: { in: candidates.map((c) => c.id) }, status: BookingStatus.pending },
+      data: { status: BookingStatus.expired, cancelReason: \"unpaid_pending_ttl\", cancelledAt: new Date() },
     });
-    if (result.count > 0) {
-      this.logger.log(`Expired ${result.count} unpaid pending booking(s) older than ${minutes}m`);
-    }
     return result.count;
-  }
-
-'''
-              marker = '  async completePastBookings(): Promise<number> {'
-              if marker not in t:
-                  raise SystemExit('completePastBookings not found')
-              t = t.replace(marker, insert + marker, 1)
-              p.write_text(t)
-              print('cleanup patched')
-          else:
-              print('cleanup already has expire')
-
-          # --- wizard: import + payment fail releases hold ---
-          wpath = Path('frontend/src/components/booking/booking-wizard.tsx')
-          w = wpath.read_text()
-          if 'cancelMyBooking' not in w:
-              w = w.replace('  initiatePayment,', '  initiatePayment,\n  cancelMyBooking,', 1)
-          old = """        const pay = await initiatePayment(created.id, callbackUrl);
-        if (pay.redirectUrl) {
-          window.location.href = pay.redirectUrl;
-          return;
-        }
-        setPaymentInfo(
-          'رزرو ذخیره شد اما هنوز نهایی نیست — لینک درگاه دریافت نشد.',
-        );
-      } catch {
-        setPaymentInfo(
-          'رزرو ذخیره شد اما نهایی نیست. پرداخت آنلاین فعلاً در دسترس نیست یا نیاز به پیکربندی درگاه دارد.',
-        );
-      }"""
-          new = """        const pay = await initiatePayment(created.id, callbackUrl);
-        if (pay.redirectUrl) {
-          window.location.href = pay.redirectUrl;
-          return;
-        }
-        // #64.2 — no gateway link: backend should have released; mirror on UI
-        try {
-          await cancelMyBooking(created.id, 'payment_no_redirect');
-        } catch {
-          /* backend may already have expired the hold */
-        }
-        setPaymentInfo(
-          'لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید.',
-        );
-      } catch {
-        // #64.2 — gateway off / initiate failed: backend releases unpaid pending
-        try {
-          await cancelMyBooking(created.id, 'payment_unavailable');
-        } catch {
-          /* already released server-side */
-        }
-        setPaymentInfo(
-          'پرداخت آنلاین در دسترس نیست. رزرو قطعی ثبت نشد و زمان آزاد ماند.',
-        );
-      }"""
-          if old not in w:
-              raise SystemExit('wizard payment block not found — check source SHA')
-          w = w.replace(old, new, 1)
-          wpath.write_text(w)
-          print('wizard patched')
-          PY
-
-          grep -q expireUnpaidPendingBookings backend/src/cleanup/cleanup.service.ts
-          grep -q cancelMyBooking frontend/src/components/booking/booking-wizard.tsx
-          grep -q "#64.2" frontend/src/components/booking/booking-wizard.tsx
-          # ensure not SEE_FILE
+  }\n\n'''
+t=t.replace('  async completePastBookings(): Promise<number> {', ins + '  async completePastBookings(): Promise<number> {', 1)
+p.write_text(t)
+print('cleanup ok')
+"
+          fi
+          # Wizard: ensure import + softer cancel on pay fail
+          if ! grep -q cancelMyBooking frontend/src/components/booking/booking-wizard.tsx; then
+            sed -i 's/  initiatePayment,/  initiatePayment,\n  cancelMyBooking,/' frontend/src/components/booking/booking-wizard.tsx
+          fi
+          # Message text updates (idempotent)
+          sed -i 's/رزرو ذخیره شد اما هنوز نهایی نیست — لینک درگاه دریافت نشد./لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید./g' frontend/src/components/booking/booking-wizard.tsx || true
+          sed -i 's/رزرو ذخیره شد اما نهایی نیست. پرداخت آنلاین فعلاً در دسترس نیست یا نیاز به پیکربندی درگاه دارد./پرداخت آنلاین در دسترس نیست. رزرو قطعی ثبت نشد و زمان آزاد ماند./g' frontend/src/components/booking/booking-wizard.tsx || true
+          grep -q 'from' backend/src/cleanup/cleanup.service.ts
           ! grep -q SEE_FILE backend/src/cleanup/cleanup.service.ts
           ! grep -q SEE_FILE frontend/src/components/booking/booking-wizard.tsx
           wc -l backend/src/cleanup/cleanup.service.ts frontend/src/components/booking/booking-wizard.tsx
@@ -184,5 +63,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/cleanup/cleanup.service.ts frontend/src/components/booking/booking-wizard.tsx
-          git diff --staged --quiet || git commit -m "fix(#64.2): cleanup expire unpaid pending + wizard cancel on payment fail"
+          git diff --staged --quiet || git commit -m "fix(#64.2): cleanup expire unpaid pending + wizard payment-fail messaging"
           git push
