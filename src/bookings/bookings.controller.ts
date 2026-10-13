@@ -145,7 +145,7 @@ export class BookingsController {
     return this.service.transition(id, userId, 'complete');
   }
 
-  /** Professional marks customer no-show (mapped to cancel with reason). */
+  /** Professional marks customer no-show (#64.3: status=no_show, never refund). */
   @Roles('professional', 'admin', 'SUPER_ADMIN')
   @Patch(':id/no-show')
   noShow(
