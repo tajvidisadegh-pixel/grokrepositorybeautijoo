@@ -1,0 +1,31 @@
+name: Apply #64.2 wizard cancelMyBooking
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-64-2-wizard.yml'
+      - 'scripts/wizard_642_*'
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode wizard
+        run: |
+          set -e
+          cat scripts/wizard_642_* | tr -d '\n' | base64 -d > frontend/src/components/booking/booking-wizard.tsx
+          grep -q cancelMyBooking frontend/src/components/booking/booking-wizard.tsx
+          grep -q "#64.2" frontend/src/components/booking/booking-wizard.tsx
+          ! grep -q SEE_FILE frontend/src/components/booking/booking-wizard.tsx
+          head -1 frontend/src/components/booking/booking-wizard.tsx | grep -q "use client"
+          test $(wc -c < frontend/src/components/booking/booking-wizard.tsx) -gt 20000
+          wc -l frontend/src/components/booking/booking-wizard.tsx
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/booking/booking-wizard.tsx
+          git diff --staged --quiet || git commit -m "fix(#64.2): complete wizard — cancelMyBooking when payment cannot start"
+          git push
