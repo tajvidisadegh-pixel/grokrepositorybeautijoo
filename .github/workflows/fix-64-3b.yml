@@ -1,0 +1,79 @@
+name: Fix 64.3b no_show
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-64-3b.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 80
+      - name: Restore and patch
+        run: |
+          set -eux
+          git show fc63eba0d6b21643e2714853b392c7c99a725ae9:backend/prisma/schema.prisma > backend/prisma/schema.prisma
+          git show fc63eba0d6b21643e2714853b392c7c99a725ae9:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          if ! grep -q 'no_show' backend/prisma/schema.prisma; then
+            sed -i '/enum BookingStatus {/,/}/{
+              /expired/a\  no_show
+            }' backend/prisma/schema.prisma
+          fi
+          grep -A10 'enum BookingStatus' backend/prisma/schema.prisma | head -12
+          python3 -c "
+from pathlib import Path
+p = Path('backend/src/bookings/bookings.service.ts')
+t = p.read_text()
+assert 'class BookingsService' in t
+assert 'PLACEHOLDER' not in t
+idx = t.find(\"if (action === 'no_show')\")
+assert idx > 0
+end = t.find(\"throw new BadRequestException('عملیات نامعتبر')\", idx)
+block = t[idx:end]
+block2 = block.replace('status: BookingStatus.cancelled,', 'status: BookingStatus.no_show,', 1)
+if 'NEVER refund' not in block2:
+    block2 = block2.replace(
+        \"if (action === 'no_show') {\\n      if (!isPro)\",
+        \"if (action === 'no_show') {\\n      // #64.3 NEVER refund\\n      if (!isPro)\",
+        1,
+    )
+t = t[:idx] + block2 + t[end:]
+p.write_text(t)
+assert 'BookingStatus.no_show' in p.read_text()
+print('svc patched', p.stat().st_size)
+"
+          python3 -c "
+from pathlib import Path
+ctrl = Path('backend/src/bookings/bookings.controller.ts')
+t = ctrl.read_text()
+t = t.replace(
+  'Professional marks customer no-show (mapped to cancel with reason).',
+  'Professional marks customer no-show (#64.3: status=no_show, never refund).',
+)
+ctrl.write_text(t)
+api = Path('frontend/src/lib/booking-api.ts')
+a = api.read_text()
+if 'no_show:' not in a:
+  a = a.replace(\"completed: 'تکمیل شده',\", \"no_show: 'عدم حضور',\\n    completed: 'تکمیل شده',\")
+  api.write_text(a)
+zb = Path('frontend/src/app/zibagar/bookings/page.tsx')
+z = zb.read_text()
+if \"value: 'no_show'\" not in z:
+  z = z.replace(\"{ value: 'expired', label: 'منقضی' },\", \"{ value: 'expired', label: 'منقضی' },\\n  { value: 'no_show', label: 'عدم حضور' },\")
+z = z.replace(\"st === 'cancelled' || st === 'rejected')\", \"st === 'cancelled' || st === 'rejected' || st === 'no_show')\")
+zb.write_text(z)
+print('fe ok')
+"
+      - name: Commit push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git diff --staged --stat
+          git commit -m "fix(#64.3): no_show status never refund; restore schema and bookings.service" || echo 'nothing'
+          git push
