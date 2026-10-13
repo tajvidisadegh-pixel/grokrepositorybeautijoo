@@ -6,6 +6,7 @@ describe('CleanupService (unit)', () => {
     refresh?: number;
     session?: number;
     booking?: number;
+    unpaid?: number;
     media?: Array<{ id: string; storageKey: string | null }>;
   }) {
     const prisma: any = {
@@ -19,7 +20,12 @@ describe('CleanupService (unit)', () => {
         deleteMany: jest.fn().mockResolvedValue({ count: overrides.session ?? 0 }),
       },
       booking: {
-        updateMany: jest.fn().mockResolvedValue({ count: overrides.booking ?? 0 }),
+        findMany: jest.fn().mockResolvedValue(
+          Array.from({ length: overrides.unpaid ?? 0 }, (_, i) => ({ id: `u${i}` })),
+        ),
+        updateMany: jest.fn().mockResolvedValue({
+          count: overrides.booking ?? overrides.unpaid ?? 0,
+        }),
       },
       mediaAsset: {
         findMany: jest.fn().mockResolvedValue(overrides.media ?? []),
@@ -47,6 +53,7 @@ describe('CleanupService (unit)', () => {
       refresh: 2,
       session: 1,
       booking: 4,
+      unpaid: 0,
       media: [],
     });
     const stats = await svc.runAll();
@@ -55,6 +62,7 @@ describe('CleanupService (unit)', () => {
       refreshTokensDeleted: 2,
       sessionsDeleted: 1,
       bookingsCompleted: 4,
+      unpaidPendingExpired: 0,
       mediaOrphansDeleted: 0,
     });
   });
@@ -79,5 +87,16 @@ describe('CleanupService (unit)', () => {
     expect(prisma.booking.updateMany).toHaveBeenCalled();
     const arg = prisma.booking.updateMany.mock.calls[0][0];
     expect(arg.data.status).toBe('completed');
+  });
+
+  it('expireUnpaidPendingBookings expires old unpaid pending', async () => {
+    const { svc, prisma } = makeService({ unpaid: 2 });
+    const n = await svc.expireUnpaidPendingBookings();
+    expect(n).toBe(2);
+    expect(prisma.booking.findMany).toHaveBeenCalled();
+    expect(prisma.booking.updateMany).toHaveBeenCalled();
+    const arg = prisma.booking.updateMany.mock.calls[0][0];
+    expect(arg.data.status).toBe('expired');
+    expect(arg.data.cancelReason).toBe('unpaid_pending_ttl');
   });
 });
