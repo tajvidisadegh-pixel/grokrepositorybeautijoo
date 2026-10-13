@@ -1,0 +1,31 @@
+name: Restore #64.2 cleanup + booking-wizard
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-64-2.yml'
+      - 'scripts/cleanup64.b64'
+      - 'scripts/wizard64_p*'
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode cleanup + booking-wizard
+        run: |
+          set -e
+          base64 -d scripts/cleanup64.b64 > backend/src/cleanup/cleanup.service.ts
+          cat scripts/wizard64_p* | tr -d '\n' | base64 -d > frontend/src/components/booking/booking-wizard.tsx
+          grep -q expireUnpaidPendingBookings backend/src/cleanup/cleanup.service.ts
+          grep -q cancelMyBooking frontend/src/components/booking/booking-wizard.tsx
+          grep -q "#64.2" frontend/src/components/booking/booking-wizard.tsx
+          wc -l backend/src/cleanup/cleanup.service.ts frontend/src/components/booking/booking-wizard.tsx
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/cleanup/cleanup.service.ts frontend/src/components/booking/booking-wizard.tsx
+          git diff --staged --quiet || git commit -m "fix(#64.2): cleanup expire unpaid pending + wizard cancel on payment fail"
+          git push
