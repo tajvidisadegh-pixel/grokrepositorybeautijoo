@@ -45,8 +45,8 @@ function bookingTimeline(b: { status?: string; createdAt?: string; startAt?: str
   if (st === 'completed' || st === 'done') {
     steps.push({ label: 'انجام شد', at: b.updatedAt || b.startAt });
   }
-  if (st === 'cancelled' || st === 'rejected') {
-    steps.push({ label: st === 'rejected' ? 'رد شد' : 'لغو شد', at: b.updatedAt });
+  if (st === 'cancelled' || st === 'rejected' || st === 'no_show') {
+    steps.push({ label: st === 'rejected' ? 'رد شد' : st === 'no_show' ? 'عدم حضور' : 'لغو شد', at: b.updatedAt });
   }
   return steps;
 }
@@ -266,6 +266,8 @@ async function submitReview(bookingId: string) {
           { v: 'confirmed', l: 'تأییدشده' },
           { v: 'completed', l: 'انجام‌شده' },
           { v: 'cancelled', l: 'کنسل‌شده' },
+          { v: 'no_show', l: 'عدم حضور' },
+          { v: 'expired', l: 'منقضی' },
         ].map((o) => (
           <button
             key={o.v || 'all'}
