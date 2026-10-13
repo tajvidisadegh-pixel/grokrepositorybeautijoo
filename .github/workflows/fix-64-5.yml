@@ -1,0 +1,24 @@
+name: Fix 64.5 callbackUrl domain lock
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-64-5.yml'
+      - 'scripts/apply_64_5.py'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply #64.5
+        run: python3 scripts/apply_64_5.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/payments/payments.service.ts
+          git diff --staged --stat
+          git commit -m "fix(#64.5): validate payment callbackUrl against CORS_ORIGINS" || true
+          git push
