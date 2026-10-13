@@ -182,8 +182,12 @@ export class PaymentsService {
       return { status: 'paid', bookingId: payment.bookingId, refId: providerRef };
     }
 
-    const verified = await this.provider.verify({ providerRef, amount: payment.amount });
-    if (!verified.ok) {
+    if (process.env.NODE_ENV === 'production' && this.providerName() === 'mock') {
+      throw new BadRequestException('mock payment is not allowed in production');
+    }
+
+    const verified = await this.provider.verify(providerRef, payment.amount);
+    if (!verified.success) {
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { status: PaymentStatus.failed },
@@ -195,16 +199,14 @@ export class PaymentsService {
       return { status: 'failed', bookingId: payment.bookingId };
     }
 
-    const rate = await this.prisma.systemSetting
-      .findUnique({ where: { key: PLATFORM_COMMISSION_RATE_KEY } })
-      .then((s) =>
-        s?.value != null
-          ? Number(s.value)
-          : DEFAULT_PLATFORM_COMMISSION_RATE,
-      )
-      .catch(() => DEFAULT_PLATFORM_COMMISSION_RATE);
-
-    const { platformCommissionAmount, professionalNetAmount } = calculateCommission(
+    const rateRow = await this.prisma.platformSetting.findUnique({
+      where: { key: PLATFORM_COMMISSION_RATE_KEY },
+    });
+    const rate =
+      rateRow?.value != null && Number.isFinite(Number(rateRow.value))
+        ? Number(rateRow.value)
+        : DEFAULT_PLATFORM_COMMISSION_RATE;
+    const { commissionAmount, professionalNetAmount } = calculateCommission(
       payment.amount,
       rate,
     );
@@ -214,9 +216,8 @@ export class PaymentsService {
       data: {
         status: PaymentStatus.paid,
         paidAt: new Date(),
-        platformCommissionRate: rate,
-        platformCommissionAmount,
-        professionalNetAmount,
+        platformCommissionAmount: commissionAmount,
+        professionalNetAmount: professionalNetAmount,
         metadata: {
           ...(typeof payment.metadata === 'object' && payment.metadata !== null
             ? (payment.metadata as object)
