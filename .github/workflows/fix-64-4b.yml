@@ -1,0 +1,24 @@
+name: Fix 64.4b admin no_show filter
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-64-4b.yml'
+      - 'scripts/apply_64_4b.py'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch admin STATUS_OPTS
+        run: python3 scripts/apply_64_4b.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/bookings/page.tsx
+          git diff --staged --stat
+          git commit -m "fix(#64.4): add no_show and expired to admin bookings filter" || true
+          git push
