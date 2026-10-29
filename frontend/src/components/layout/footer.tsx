@@ -104,6 +104,29 @@ export function Footer() {
           </ul>
         </div>
       </div>
+
+      {/* نماد اعتماد الکترونیکی (اینماد) — کد رسمی */}
+      <div className="border-t border-white/10 bg-blue-dark/30 px-4 py-5">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 sm:flex-row sm:gap-6">
+          <a
+            referrerPolicy="origin"
+            target="_blank"
+            rel="noopener noreferrer"
+            href="https://trustseal.enamad.ir/?id=7847181&Code=oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              referrerPolicy="origin"
+              src="https://trustseal.enamad.ir/logo.aspx?id=7847181&Code=oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G"
+              alt="نماد اعتماد الکترونیکی"
+              style={{ cursor: 'pointer', width: '125px', height: 'auto' }}
+              // @ts-expect-error official Enamad attribute required by the seal
+              code="oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G"
+            />
+          </a>
+        </div>
+      </div>
+
       <div className="border-t border-white/10 bg-blue-dark/40 py-4 text-center text-xs text-white/60">
         ©{' '}
         {new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date())}{' '}
