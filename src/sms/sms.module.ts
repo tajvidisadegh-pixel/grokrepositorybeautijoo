@@ -51,8 +51,9 @@ function createSmsProvider(config: ConfigService): SmsProvider {
       );
     }
 
+    // Searchable boot line — never log the API key value or OTP codes.
     logger.log(
-      `SMS provider: SMS.ir (template=${templateId}, param=${otpParamName}, line=${lineNumber ? 'set' : 'unset'})`,
+      `SMS_BOOT provider=smsir template=${templateId} param=${otpParamName} apiKeySet=yes line=${lineNumber ? 'set' : 'unset'} baseUrl=${baseUrl}`,
     );
     return new SmsIrProvider({
       apiKey,
@@ -80,10 +81,10 @@ function createSmsProvider(config: ConfigService): SmsProvider {
         );
       }
       logger.warn(
-        'ALLOW_MOCK_SMS=true — using MockSmsProvider in production (OTP will NOT reach phones).',
+        'SMS_BOOT provider=mock ALLOW_MOCK_SMS=true — OTP will NOT reach phones (production diagnostic mode).',
       );
     } else {
-      logger.log('SMS provider: mock (development)');
+      logger.log('SMS_BOOT provider=mock (development)');
     }
     return new MockSmsProvider();
   }

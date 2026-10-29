@@ -17,6 +17,10 @@ export type SmsIrConfig = {
  * OTP: POST /v1/send/verify
  * Notifications: POST /v1/send (line + message text)
  * Docs: https://sms.ir/rest-api/
+ *
+ * Official success body (verify):
+ *   { "status": 1, "message": "موفق", "data": { "messageId": number, "cost": number } }
+ * Status table: 1 = success; 0/10/11/12/... = failure.
  */
 @Injectable()
 export class SmsIrProvider implements SmsProvider {
@@ -40,8 +44,11 @@ export class SmsIrProvider implements SmsProvider {
       ],
     };
 
-    await this.postJson('/v1/send/verify', body, 'OTP');
     // Never log the OTP code itself.
+    this.logger.log(
+      `SMS.ir OTP request template=${this.cfg.otpTemplateId} param=${this.cfg.otpParamName} to=${maskPhone(mobile)}`,
+    );
+    await this.postJson('/v1/send/verify', body, 'OTP');
     this.logger.log(`OTP SMS accepted by SMS.ir for ${maskPhone(mobile)}`);
   }
 
@@ -91,18 +98,32 @@ export class SmsIrProvider implements SmsProvider {
       );
     }
 
-    let payload: { status?: number; message?: string } = {};
+    const rawText = await res.text();
+    let payload: {
+      status?: number;
+      message?: string;
+      data?: { messageId?: number; cost?: number };
+    } = {};
+    let jsonParsed = false;
     try {
-      payload = (await res.json()) as { status?: number; message?: string };
+      if (rawText.trim()) {
+        payload = JSON.parse(rawText) as typeof payload;
+        jsonParsed = true;
+      }
     } catch {
       /* non-JSON body */
     }
 
-    // SMS.ir success is typically status === 1
-    const ok = res.ok && (payload.status === undefined || payload.status === 1);
-    if (!ok) {
+    // Official contract (sms.ir/rest-api): success requires status === 1.
+    // Do NOT treat missing status / empty body as success (avoids false positives).
+    const statusOk = jsonParsed && payload.status === 1;
+    const httpOk = res.ok;
+    if (!httpOk || !statusOk) {
+      const msgSnippet = safeSnippet(
+        payload.message || (jsonParsed ? '' : rawText) || res.statusText,
+      );
       this.logger.error(
-        `SMS.ir ${kind} failed http=${res.status} status=${payload.status} msg=${payload.message || res.statusText}`,
+        `SMS.ir ${kind} failed http=${res.status} json=${jsonParsed} status=${String(payload.status)} msg=${msgSnippet}`,
       );
       throw new ServiceUnavailableException(
         'ارسال پیامک ناموفق بود. لطفاً دوباره تلاش کنید.',
@@ -123,4 +144,9 @@ export function normalizeIranMobile(phone: string): string {
 function maskPhone(phone: string): string {
   if (phone.length < 7) return '***';
   return `${phone.slice(0, 4)}***${phone.slice(-2)}`;
+}
+
+/** Truncate and strip control chars for safe error logs (no secrets/OTP). */
+function safeSnippet(value: string, max = 120): string {
+  return value.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, max);
 }
