@@ -119,9 +119,8 @@ export function Footer() {
               referrerPolicy="origin"
               src="https://trustseal.enamad.ir/logo.aspx?id=7847181&Code=oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G"
               alt="نماد اعتماد الکترونیکی"
-              style={{ cursor: 'pointer', width: '125px', height: 'auto' }}
-              // @ts-expect-error official Enamad attribute required by the seal
-              code="oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G"
+              style={{ cursor: 'pointer', width: 125, height: 'auto' }}
+              {...({ code: 'oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G' } as React.ImgHTMLAttributes<HTMLImageElement>)}
             />
           </a>
         </div>
