@@ -14,6 +14,9 @@ export type PlatformSettingsV1 = {
   professionals: {
     requireManualReview: boolean;
     minServicesToPublish: number;
+    /** Price (toman) to unlock portfolio beyond free limit (#65.11) */
+    portfolioUnlockToman: number;
+    portfolioFreeLimit: number;
   };
   reviews: {
     autoPublish: boolean;
@@ -52,6 +55,8 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsV1 = {
   professionals: {
     requireManualReview: true,
     minServicesToPublish: 1,
+    portfolioUnlockToman: 3_000_000,
+    portfolioFreeLimit: 100,
   },
   reviews: {
     autoPublish: true,
