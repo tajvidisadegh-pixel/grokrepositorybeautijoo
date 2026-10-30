@@ -64,4 +64,29 @@ export class AdminSettingsController {
   defaults() {
     return DEFAULT_PLATFORM_SETTINGS;
   }
+
+  @RequirePermissions('admin.settings.read')
+  @Get('events')
+  @ApiOperation({ summary: 'List marketing/site events (#65.10)' })
+  async getEvents() {
+    const row = await this.prisma.platformSetting.findUnique({
+      where: { key: 'marketing_events_v1' },
+    });
+    const value = row?.value as { items?: unknown[] } | null;
+    return { items: Array.isArray(value?.items) ? value!.items : [] };
+  }
+
+  @RequirePermissions('admin.settings.write')
+  @Put('events')
+  @ApiOperation({ summary: 'Replace marketing/site events list (#65.10)' })
+  async putEvents(@Body() body: { items?: Array<Record<string, unknown>> }) {
+    const items = Array.isArray(body?.items) ? body.items.slice(0, 100) : [];
+    const value = { items };
+    await this.prisma.platformSetting.upsert({
+      where: { key: 'marketing_events_v1' },
+      create: { key: 'marketing_events_v1', value: value as object },
+      update: { value: value as object },
+    });
+    return { items };
+  }
 }
