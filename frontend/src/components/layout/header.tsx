@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/brand/logo';
 import { NotificationBell } from '@/components/layout/notification-bell';
-import { ThemeToggle } from '@/components/theme/theme-toggle';
 
 export function Header() {
   const { user, loading, logout, isAuthenticated, hasRole } = useAuth();
@@ -70,8 +69,6 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <ThemeToggle className="hidden sm:inline-flex" />
-
           <Link
             href="/search"
             className="flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
@@ -166,10 +163,6 @@ export function Header() {
           aria-label="منوی موبایل"
         >
           <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3 text-sm font-medium">
-            <div className="mb-1 flex items-center justify-between px-3 py-2">
-              <span className="text-xs text-gray">ظاهر</span>
-              <ThemeToggle />
-            </div>
             <Link
               href="/professionals"
               onClick={() => setOpen(false)}
