@@ -52,6 +52,9 @@ export function isVideoMime(mime?: string | null): boolean {
 }
 
 export function assertUploadSize(sizeBytes: number, mime?: string | null): void {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    throw new BadRequestException('فایل خالی یا نامعتبر است');
+  }
   const video = isVideoMime(mime);
   const max = video ? uploadMaxVideoBytes() : uploadMaxImageBytes();
   if (sizeBytes > max) {
@@ -76,6 +79,10 @@ export function findSuspiciousReason(buf: Buffer): string | null {
 
   if (/<\s*(html|script|iframe|embed|object|link|meta)\b/.test(ascii)) {
     return 'html_or_script';
+  }
+  // SVG can carry scripts / external refs
+  if (ascii.includes('<svg') || /<\?xml[^>]*svg/i.test(ascii)) {
+    return 'svg';
   }
   if (ascii.includes('<?php') || ascii.includes('<%=') || ascii.includes('<jsp:')) {
     return 'server_script';
