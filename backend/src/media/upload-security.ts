@@ -61,20 +61,57 @@ export function assertUploadSize(sizeBytes: number, mime?: string | null): void 
   }
 }
 
-/** Reject common executable / script polyglots by magic bytes. */
-export function assertNotExecutableMagic(buf: Buffer): void {
-  if (!buf || buf.length < 4) return;
-  // MZ (Windows PE)
-  if (buf[0] === 0x4d && buf[1] === 0x5a) {
-    throw new BadRequestException('نوع فایل مجاز نیست');
+function headerMatches(buf: Buffer, sig: number[]): boolean {
+  if (buf.length < sig.length) return false;
+  for (let i = 0; i < sig.length; i++) {
+    if (buf[i] !== sig[i]) return false;
   }
+  return true;
+}
+
+/** Detect suspicious non-media payloads. */
+export function findSuspiciousReason(buf: Buffer): string | null {
+  if (!buf || buf.length < 4) return null;
+  const ascii = buf.slice(0, Math.min(buf.length, 512)).toString('latin1').toLowerCase();
+
+  if (/<\s*(html|script|iframe|embed|object|link|meta)\b/.test(ascii)) {
+    return 'html_or_script';
+  }
+  if (ascii.includes('<?php') || ascii.includes('<%=') || ascii.includes('<jsp:')) {
+    return 'server_script';
+  }
+
+  // Windows PE
+  if (headerMatches(buf, [0x4d, 0x5a])) return 'pe_executable';
   // ELF
-  if (buf[0] === 0x7f && buf[1] === 0x45 && buf[2] === 0x4c && buf[3] === 0x46) {
-    throw new BadRequestException('نوع فایل مجاز نیست');
+  if (headerMatches(buf, [0x7f, 0x45, 0x4c, 0x46])) return 'elf_executable';
+  // Mach-O
+  if (
+    headerMatches(buf, [0xfe, 0xed, 0xfa, 0xce]) ||
+    headerMatches(buf, [0xfe, 0xed, 0xfa, 0xcf]) ||
+    headerMatches(buf, [0xcf, 0xfa, 0xed, 0xfe]) ||
+    headerMatches(buf, [0xce, 0xfa, 0xed, 0xfe])
+  ) {
+    return 'macho_executable';
   }
-  // Shebang scripts
-  if (buf[0] === 0x23 && buf[1] === 0x21) {
-    throw new BadRequestException('نوع فایل مجاز نیست');
+  // ZIP / JAR / APK / DOCX (often used to smuggle)
+  if (headerMatches(buf, [0x50, 0x4b, 0x03, 0x04]) || headerMatches(buf, [0x50, 0x4b, 0x05, 0x06])) {
+    return 'zip_archive';
+  }
+  // PDF
+  if (headerMatches(buf, [0x25, 0x50, 0x44, 0x46])) return 'pdf';
+
+  return null;
+}
+
+export function assertNotSuspicious(buf: Buffer, mime?: string | null): void {
+  // Skip polyglot checks for known video containers (mp4/webm/mov)
+  if (isVideoMime(mime)) return;
+  const reason = findSuspiciousReason(buf);
+  if (reason) {
+    throw new BadRequestException(
+      'فایل مشکوک شناسایی شد و رد شد (فرمت یا محتوای غیرمجاز)',
+    );
   }
 }
 
