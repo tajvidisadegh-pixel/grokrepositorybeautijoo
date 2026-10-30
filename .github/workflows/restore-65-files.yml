@@ -1,0 +1,67 @@
+name: restore-65-truncated
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore from e9c62cb
+        run: |
+          git checkout e9c62cb -- frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx || true
+          # apply multi-open patch via python
+          python3 << 'PY'
+from pathlib import Path
+p = Path('frontend/src/app/zibagar/services/page.tsx')
+text = p.read_text(encoding='utf-8')
+text = text.replace(
+  '  const [openFamily, setOpenFamily] = useState<string | null>(null);',
+  '  const [openFamilies, setOpenFamilies] = useState<Set<string>>(new Set());',
+  1,
+)
+text = text.replace('setOpenFamily(null)', 'setOpenFamilies(new Set())')
+text = text.replace('const open = openFamily === fam.name;', 'const open = openFamilies.has(fam.name);', 1)
+old = "onClick={() => setOpenFamily(open ? null : fam.name)}"
+new = """onClick={() => {
+                        setOpenFamilies((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(fam.name)) next.delete(fam.name);
+                          else next.add(fam.name);
+                          return next;
+                        });
+                      }}"""
+text = text.replace(old, new, 1)
+p.write_text(text, encoding='utf-8')
+print('services patched')
+PY
+          # locations privacy copy
+          python3 << 'PY'
+from pathlib import Path
+p = Path('frontend/src/app/zibagar/locations/page.tsx')
+text = p.read_text(encoding='utf-8')
+old = """        <p className=\"mt-1 text-sm text-gray\">
+          هر زیباگر فقط یک مکان پایه دارد. نقشه و مسیریابی مشتری با «نشان» انجام می‌شود.
+          می‌توانید آدرس دقیق یا محدوده تقریبی را برای حفظ حریم خصوصی انتخاب کنید.
+        </p>"""
+new = """        <p className=\"mt-1 text-sm text-gray\">
+          هر زیباگر فقط یک مکان پایه دارد. آدرس دقیق را ثبت کنید (برای رزرو و مسیریابی بعد از پرداخت).
+          نمایش عمومی آدرس دقیق فقط در صورت انتخاب «آدرس دقیق» انجام می‌شود؛ در غیر این صورت فقط شهر/محله به عموم نشان داده می‌شود و آدرس کامل پس از رزرو برای مشتری نمایش داده خواهد شد.
+        </p>"""
+if old in text:
+  text = text.replace(old, new, 1)
+  p.write_text(text, encoding='utf-8')
+  print('locations updated')
+else:
+  print('locations pattern skip')
+PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
+          git commit -m "fix(#65): restore locations/notifications/services from e9c62cb + multi-open + privacy copy" || echo "nothing"
+          git push
