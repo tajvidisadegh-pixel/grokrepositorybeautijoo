@@ -1,6 +1,11 @@
 name: restore-65-truncated
+
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-65-files.yml'
+
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -10,10 +15,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore from e9c62cb
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore from e9c62cb and patch
         run: |
-          git checkout e9c62cb -- frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx || true
-          # apply multi-open patch via python
+          set -e
+          git checkout e9c62cb -- frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
           python3 << 'PY'
 from pathlib import Path
 p = Path('frontend/src/app/zibagar/services/page.tsx')
@@ -36,9 +42,8 @@ new = """onClick={() => {
                       }}"""
 text = text.replace(old, new, 1)
 p.write_text(text, encoding='utf-8')
-print('services patched')
+print('services patched', 'openFamilies' in text)
 PY
-          # locations privacy copy
           python3 << 'PY'
 from pathlib import Path
 p = Path('frontend/src/app/zibagar/locations/page.tsx')
@@ -58,10 +63,15 @@ if old in text:
 else:
   print('locations pattern skip')
 PY
-      - name: Commit
+          wc -l frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
-          git commit -m "fix(#65): restore locations/notifications/services from e9c62cb + multi-open + privacy copy" || echo "nothing"
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "fix(#65): restore locations/notifications/services from e9c62cb + multi-open + privacy copy"
+            git push
+          fi
