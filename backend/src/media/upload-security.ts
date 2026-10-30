@@ -16,8 +16,8 @@ export const DEFAULT_UPLOAD_MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 /** Legacy single limit (images) — kept for multer default. */
 export const DEFAULT_UPLOAD_MAX_BYTES = DEFAULT_UPLOAD_MAX_IMAGE_BYTES;
 
-/** Max portfolio assets per professional. */
-export const DEFAULT_MAX_PORTFOLIO = 40;
+/** Max portfolio assets per professional (#65.11). */
+export const DEFAULT_MAX_PORTFOLIO = 100;
 
 /** Max video duration seconds (issue #31 comment). */
 export const DEFAULT_MAX_VIDEO_DURATION_SEC = 60;
@@ -59,69 +59,26 @@ export function assertUploadSize(sizeBytes: number, mime?: string | null): void 
       `حجم فایل بیش از حد مجاز است (حداکثر ${Math.round(max / (1024 * 1024))} مگابایت برای ${video ? 'ویدیو' : 'تصویر'})`,
     );
   }
-  if (sizeBytes <= 0) {
-    throw new BadRequestException('فایل خالی است');
-  }
 }
 
-function headerMatches(buf: Buffer, sig: number[], offset = 0): boolean {
-  if (buf.length < offset + sig.length) return false;
-  return sig.every((b, i) => buf[offset + i] === b);
-}
-
-/**
- * Heuristic quarantine gate: reject payloads that look like scripts,
- * archives disguised as images, or native executables.
- * Returns a short reason or null if OK.
- */
-export function findSuspiciousReason(buf: Buffer): string | null {
-  if (!buf?.length) return 'empty';
-  const head = buf.subarray(0, Math.min(buf.length, 512));
-  const ascii = head.toString('latin1').toLowerCase();
-
-  // SVG first (XML-based; not in allowed raster set)
-  if (ascii.includes('<svg') || (ascii.includes('<?xml') && ascii.includes('svg'))) {
-    return 'svg';
+/** Reject common executable / script polyglots by magic bytes. */
+export function assertNotExecutableMagic(buf: Buffer): void {
+  if (!buf || buf.length < 4) return;
+  // MZ (Windows PE)
+  if (buf[0] === 0x4d && buf[1] === 0x5a) {
+    throw new BadRequestException('نوع فایل مجاز نیست');
   }
-
-  // HTML / script polyglot (svg excluded — handled above)
-  if (/<\s*(html|script|iframe|embed|object|link|meta)\b/.test(ascii)) {
-    return 'html_or_script';
-  }
-  if (ascii.includes('<?php') || ascii.includes('<%=') || ascii.includes('<jsp:')) {
-    return 'server_script';
-  }
-
-  // Windows PE
-  if (headerMatches(buf, [0x4d, 0x5a])) return 'pe_executable';
   // ELF
-  if (headerMatches(buf, [0x7f, 0x45, 0x4c, 0x46])) return 'elf_executable';
-  // Mach-O
-  if (
-    headerMatches(buf, [0xfe, 0xed, 0xfa, 0xce]) ||
-    headerMatches(buf, [0xfe, 0xed, 0xfa, 0xcf]) ||
-    headerMatches(buf, [0xcf, 0xfa, 0xed, 0xfe]) ||
-    headerMatches(buf, [0xce, 0xfa, 0xed, 0xfe])
-  ) {
-    return 'macho_executable';
+  if (buf[0] === 0x7f && buf[1] === 0x45 && buf[2] === 0x4c && buf[3] === 0x46) {
+    throw new BadRequestException('نوع فایل مجاز نیست');
   }
-  // ZIP / JAR / APK / DOCX (often used to smuggle)
-  if (headerMatches(buf, [0x50, 0x4b, 0x03, 0x04]) || headerMatches(buf, [0x50, 0x4b, 0x05, 0x06])) {
-    return 'zip_archive';
+  // Shebang scripts
+  if (buf[0] === 0x23 && buf[1] === 0x21) {
+    throw new BadRequestException('نوع فایل مجاز نیست');
   }
-  // PDF
-  if (headerMatches(buf, [0x25, 0x50, 0x44, 0x46])) return 'pdf';
-
-  return null;
 }
 
-export function assertNotSuspicious(buf: Buffer, mime?: string | null): void {
-  // Skip polyglot checks for known video containers (mp4/webm/mov)
-  if (isVideoMime(mime)) return;
-  const reason = findSuspiciousReason(buf);
-  if (reason) {
-    throw new BadRequestException(
-      'فایل مشکوک شناسایی شد و رد شد (فرمت یا محتوای غیرمجاز)',
-    );
-  }
+export function maxVideoDurationSec(): number {
+  const n = Number(process.env.UPLOAD_MAX_VIDEO_DURATION_SEC || DEFAULT_MAX_VIDEO_DURATION_SEC);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_MAX_VIDEO_DURATION_SEC;
 }
