@@ -107,7 +107,7 @@ export default function ZibagarServicesPage() {
   const [mine, setMine] = useState<ProfessionalServiceItem[]>([]);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
-  const [openFamily, setOpenFamily] = useState<string | null>(null);
+  const [openFamilies, setOpenFamilies] = useState<Set<string>>(new Set());
   const [familySearch, setFamilySearch] = useState('');
   const [activeVariant, setActiveVariant] = useState<CatalogVariant | null>(null);
   const [activeFamily, setActiveFamily] = useState<CatalogFamily | null>(null);
@@ -197,7 +197,7 @@ export default function ZibagarServicesPage() {
   function openWizard() {
     setMode('wizard');
     setStep(1);
-    setOpenFamily(null);
+    setOpenFamilies(new Set());
     setFamilySearch('');
     setActiveVariant(null);
     setActiveFamily(null);
@@ -659,7 +659,7 @@ export default function ZibagarServicesPage() {
             disabled={!selectedSlugs.length || busy}
             onClick={() => {
               setActiveSlug(selectedSlugs[0]);
-              setOpenFamily(null);
+              setOpenFamilies(new Set());
               setStep(2);
               setMsg(null);
               setError(null);
@@ -692,7 +692,7 @@ export default function ZibagarServicesPage() {
                     type="button"
                     onClick={() => {
                       setActiveSlug(slug);
-                      setOpenFamily(null);
+                      setOpenFamilies(new Set());
                       setFamilySearch('');
                       setError(null);
                     }}
@@ -719,7 +719,7 @@ export default function ZibagarServicesPage() {
           ) : (
             <ul className="space-y-2">
               {filteredFamilies.map((fam) => {
-                const open = openFamily === fam.name;
+                const open = openFamilies.has(fam.name);
                 return (
                   <li key={fam.name} className="overflow-hidden rounded-xl border border-border">
                     <button
@@ -727,7 +727,14 @@ export default function ZibagarServicesPage() {
                       className={`flex w-full items-center justify-between px-3 py-3.5 text-right text-sm font-medium ${
                         open ? 'bg-[#FFE6E2] text-coral' : 'bg-white text-navy'
                       }`}
-                      onClick={() => setOpenFamily(open ? null : fam.name)}
+                      onClick={() => {
+                        setOpenFamilies((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(fam.name)) next.delete(fam.name);
+                          else next.add(fam.name);
+                          return next;
+                        });
+                      }}
                     >
                       <span>{fam.name}</span>
                       <span className="text-xs text-gray">

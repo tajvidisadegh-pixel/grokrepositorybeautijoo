@@ -217,12 +217,12 @@ export default async function HomePage() {
                       className="mt-6 flex w-full max-w-md flex-col gap-2.5 sm:flex-row"
                     >
                       <div className="relative flex-1">
-                        <Search className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-gray-muted" />
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-gray-muted" aria-hidden />
                         <input
                           name="q"
                           type="search"
                           placeholder={hero.searchPlaceholder || 'جستجوی خدمت یا زیباگر...'}
-                          className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
+                          className="h-12 w-full rounded-2xl border border-border bg-white pl-10 pr-4 text-sm shadow-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
                         />
                       </div>
                       <button
@@ -329,12 +329,12 @@ export default async function HomePage() {
                     }`}
                   >
                     <div className="relative flex-1">
-                      <Search className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-gray-muted" />
+                      <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-gray-muted" aria-hidden />
                       <input
                         name="q"
                         type="search"
                         placeholder={hero.searchPlaceholder || 'جستجوی خدمت یا زیباگر...'}
-                        className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
+                        className="h-12 w-full rounded-2xl border border-border bg-white pl-10 pr-4 text-sm shadow-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
                       />
                     </div>
                     <button
