@@ -19,9 +19,7 @@ type Props = {
   params: Promise<{ slug: string }>;
 };
 
-
 /** Relative Persian label for last activity (#40 item 32) */
-
 function formatProfileUpdated(iso?: string | null): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -85,7 +83,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-/** Iranian week order: شنبه → جمعه */
 const DAY_ORDER = [
   'saturday',
   'sunday',
@@ -121,7 +118,6 @@ function dayLabel(d: string): string {
   return DAY_FA[d] || DAY_FA[dayKey(d)] || d;
 }
 
-/** Strip seconds if present: "08:00:00" → "8:00" */
 function fmtTime(t: string): string {
   const parts = String(t || '').split(':');
   if (parts.length < 2) return t;
@@ -130,11 +126,6 @@ function fmtTime(t: string): string {
   return `${h}:${m}`;
 }
 
-/**
- * Compact one-line summary, e.g.
- * «از شنبه تا پنجشنبه از ساعت 8:00 تا 20:00»
- * Issue #28 — no card / grid of days.
- */
 function summarizeWorkingHours(hours: WorkingHour[]): string | null {
   const active = (hours || []).filter((h) => h.isActive !== false);
   if (!active.length) return null;
@@ -143,7 +134,6 @@ function summarizeWorkingHours(hours: WorkingHour[]): string | null {
   for (const h of active) {
     const k = dayKey(h.dayOfWeek);
     const prev = byDay.get(k);
-    // Prefer earliest start / latest end if multiple slots same day
     if (!prev) {
       byDay.set(k, { start: h.startTime, end: h.endTime });
     } else {
@@ -202,6 +192,23 @@ export default async function ProfessionalProfilePage({ params }: Props) {
     pro.ratingAvg != null ? Number(pro.ratingAvg).toFixed(1) : null;
   const jsonLd = professionalJsonLd(pro);
   const hoursLine = summarizeWorkingHours(pro.workingHours || []);
+  const memberSince = (pro as { createdAt?: string }).createdAt
+    ? new Intl.DateTimeFormat('fa-IR', {
+        year: 'numeric',
+        month: 'long',
+        timeZone: 'Asia/Tehran',
+      }).format(new Date((pro as { createdAt?: string }).createdAt!))
+    : null;
+  const lastAct = formatLastActivity(
+    (pro as { user?: { lastLoginAt?: string | null } }).user?.lastLoginAt,
+  );
+  const profileUpd = formatProfileUpdated(
+    (pro as { updatedAt?: string | null }).updatedAt,
+  );
+
+  const salonMedia = (pro.mediaAssets || []).filter(
+    (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 pb-24 md:pb-10">
@@ -231,13 +238,6 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                   name.charAt(0)
                 )}
               </div>
-
-                {(pro as { createdAt?: string }).createdAt && (
-                  <span className="text-xs text-gray">
-                    عضو از{' '}
-                    {new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long', timeZone: 'Asia/Tehran' }).format(new Date((pro as { createdAt?: string }).createdAt!))}
-                  </span>
-                )}
               <div className="min-w-0 flex-1">
                 <h1 className="text-xl font-bold text-blue sm:text-2xl">{name}</h1>
                 {pro.title && pro.title !== name && (
@@ -247,33 +247,32 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                   {rating && (pro.ratingCount ?? 0) > 0 && (
                     <span className="text-amber-500">
                       ★ {rating}{' '}
-                      <span className="text-gray">({pro.ratingCount} نظر)
-                      {(pro as { completedBookingsCount?: number }).completedBookingsCount != null &&
-                        Number((pro as { completedBookingsCount?: number }).completedBookingsCount) > 0 && (
-                        <span className="ms-2 text-xs text-gray">
-                          بیش از {Number((pro as { completedBookingsCount?: number }).completedBookingsCount).toLocaleString("fa-IR")} نوبت موفق
-                        </span>
-                      )}</span>
+                      <span className="text-gray">
+                        ({pro.ratingCount} نظر)
+                        {(pro as { completedBookingsCount?: number }).completedBookingsCount != null &&
+                          Number((pro as { completedBookingsCount?: number }).completedBookingsCount) > 0 && (
+                          <span className="ms-2 text-xs text-gray">
+                            بیش از {Number((pro as { completedBookingsCount?: number }).completedBookingsCount).toLocaleString("fa-IR")} نوبت موفق
+                          </span>
+                        )}
+                      </span>
                     </span>
                   )}
                   {pro.locations?.[0]?.location?.city && (
                     <span>{pro.locations[0].location.city}</span>
                   )}
-                  {formatLastActivity((pro as { user?: { lastLoginAt?: string | null } }).user?.lastLoginAt) && (
-                    <span className="text-xs text-gray">
-                      {formatLastActivity((pro as { user?: { lastLoginAt?: string | null } }).user?.lastLoginAt)}
-                    </span>
-                  )}
-                  {formatProfileUpdated((pro as { updatedAt?: string | null }).updatedAt) && (
-                    <span className="text-xs text-gray">
-                      {formatProfileUpdated((pro as { updatedAt?: string | null }).updatedAt)}
-                    </span>
-                  )}
-
                 </div>
               </div>
             </div>
           </header>
+
+          {/* #65.6 — photos & portfolio before bio/about */}
+          {salonMedia.length > 0 && <SalonMediaGallery media={salonMedia} />}
+
+          <ServicePortfolioGallery
+            slug={pro.slug}
+            services={(pro.professionalServices || []) as ProfessionalServiceItem[]}
+          />
 
           {pro.bio && (
             <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
@@ -283,21 +282,6 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               </p>
             </section>
           )}
-
-          {(pro.mediaAssets || []).filter(
-  (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
-).length > 0 && (
-  <SalonMediaGallery
-    media={(pro.mediaAssets || []).filter(
-      (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
-    )}
-  />
-)}
-
-          <ServicePortfolioGallery
-            slug={pro.slug}
-            services={(pro.professionalServices || []) as ProfessionalServiceItem[]}
-          />
 
           <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-bold text-foreground">خدمات و قیمت{(pro.professionalServices?.length ?? 0) > 0 && (<span className="mr-2 text-sm font-normal text-gray"> ({(pro.professionalServices?.length ?? 0).toLocaleString("fa-IR")} خدمت)</span>)}</h2>
@@ -404,14 +388,20 @@ export default async function ProfessionalProfilePage({ params }: Props) {
         </aside>
       </div>
 
-      {/* Issue #28: one short line at bottom — no card/grid */}
       {hoursLine && (
         <p className="mt-8 border-t border-border/60 pt-4 text-center text-sm text-gray">
           <OpenStatusBadge hours={pro.workingHours || []} showRange size="md" />{hoursLine ? <span className="text-sm text-gray"> · {hoursLine}</span> : null}
         </p>
       )}
 
-      {/* Issue #36 */}
+      {/* #65.7 — member / last-updated tiny footer under hours */}
+      {(memberSince || lastAct || profileUpd) && (
+        <p className="mt-2 text-center text-[11px] leading-5 text-gray-muted">
+          {[memberSince ? `عضو از ${memberSince}` : null, lastAct, profileUpd]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
 
       <p className="mt-3 text-center text-xs text-gray-muted">شماره تماس زیباگر پس از تأیید رزرو در پنل شما نمایش داده می‌شود.</p>
       <p className="mt-2 text-center text-xs text-gray-muted">رزرو آنلاین مشمول حداقل زمان از قبل و ظرفیت روز زیباگر است؛ اسلات‌های پر قابل انتخاب نیستند.</p>
