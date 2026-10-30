@@ -93,6 +93,11 @@ function ConfirmationBody() {
     booking.professional?.user?.profile?.displayName ||
     booking.professional?.title ||
     'زیباگر';
+  const proSlug = booking.professional?.slug;
+  const proPhone = booking.professional?.user?.phone || null;
+  const proAddress =
+    booking.location?.address ||
+    (booking.location?.city ? booking.location.city : null);
   const canPay =
     !booking.payment ||
     booking.payment.status === 'pending' ||
@@ -101,6 +106,11 @@ function ConfirmationBody() {
   const payQ = (searchParams.get('pay') || '').toLowerCase();
   const payOk = payHint === '1' || payQ === 'paid' || payQ === 'success' || payQ === 'ok';
   const payFail = payQ === 'failed' || payQ === 'cancelled' || payQ === 'canceled' || payQ === 'error' || payQ === 'unpaid';
+  const paymentSucceeded =
+    booking.payment?.status === 'paid' ||
+    booking.payment?.status === 'success' ||
+    booking.status === 'confirmed' ||
+    payOk;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-10" dir="rtl">
@@ -131,7 +141,13 @@ function ConfirmationBody() {
       <Card className="mt-6 space-y-3 text-sm">
         <div className="flex justify-between gap-2">
           <span className="text-gray">زیباگر</span>
-          <span>{proName}</span>
+          {proSlug ? (
+            <Link href={`/professionals/${proSlug}`} className="font-medium text-coral hover:underline">
+              {proName}
+            </Link>
+          ) : (
+            <span>{proName}</span>
+          )}
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-gray">شروع</span>
@@ -163,9 +179,38 @@ function ConfirmationBody() {
         </div>
       </Card>
 
+      {/* #65.4 — contact after payment / confirmation */}
+      {paymentSucceeded && (proPhone || proAddress || proSlug) && (
+        <Card className="mt-4 space-y-2 border-coral/20 bg-coral/5 text-sm">
+          <p className="font-bold text-foreground">اطلاعات تماس زیباگر</p>
+          {proSlug && (
+            <p>
+              <span className="text-gray">نام: </span>
+              <Link href={`/professionals/${proSlug}`} className="font-medium text-coral hover:underline">
+                {proName}
+              </Link>
+            </p>
+          )}
+          {proPhone && (
+            <p>
+              <span className="text-gray">شماره: </span>
+              <a href={`tel:${proPhone}`} className="font-medium dir-ltr inline-block" dir="ltr">
+                {proPhone}
+              </a>
+            </p>
+          )}
+          {proAddress && (
+            <p>
+              <span className="text-gray">آدرس: </span>
+              <span>{proAddress}</span>
+            </p>
+          )}
+        </Card>
+      )}
+
       {(booking.status === 'confirmed' || booking.status === 'pending') && (
         <div className="mt-4">
-          <p className="mb-2 text-xs font-medium text-gray">افزودن به تقویم و کپی جزئیات</p>
+          <p className="mb-2 text-xs font-medium text-gray">کپی جزئیات نوبت</p>
           <AddToCalendarActions
             booking={{
               id: booking.id,
@@ -176,6 +221,7 @@ function ConfirmationBody() {
             }}
             proName={proName}
             serviceNames={(booking.items || []).map((it) => it.service?.name).filter(Boolean) as string[]}
+            locationLabel={proAddress || undefined}
           />
         </div>
       )}
