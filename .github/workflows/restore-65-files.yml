@@ -3,6 +3,7 @@ name: restore-65-truncated
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - '.github/workflows/restore-65-files.yml'
 
@@ -15,63 +16,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Restore from e9c62cb and patch
+      - name: Restore three files from e9c62cb
         run: |
-          set -e
-          git checkout e9c62cb -- frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
-          python3 << 'PY'
-from pathlib import Path
-p = Path('frontend/src/app/zibagar/services/page.tsx')
-text = p.read_text(encoding='utf-8')
-text = text.replace(
-  '  const [openFamily, setOpenFamily] = useState<string | null>(null);',
-  '  const [openFamilies, setOpenFamilies] = useState<Set<string>>(new Set());',
-  1,
-)
-text = text.replace('setOpenFamily(null)', 'setOpenFamilies(new Set())')
-text = text.replace('const open = openFamily === fam.name;', 'const open = openFamilies.has(fam.name);', 1)
-old = "onClick={() => setOpenFamily(open ? null : fam.name)}"
-new = """onClick={() => {
-                        setOpenFamilies((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(fam.name)) next.delete(fam.name);
-                          else next.add(fam.name);
-                          return next;
-                        });
-                      }}"""
-text = text.replace(old, new, 1)
-p.write_text(text, encoding='utf-8')
-print('services patched', 'openFamilies' in text)
-PY
-          python3 << 'PY'
-from pathlib import Path
-p = Path('frontend/src/app/zibagar/locations/page.tsx')
-text = p.read_text(encoding='utf-8')
-old = """        <p className=\"mt-1 text-sm text-gray\">
-          هر زیباگر فقط یک مکان پایه دارد. نقشه و مسیریابی مشتری با «نشان» انجام می‌شود.
-          می‌توانید آدرس دقیق یا محدوده تقریبی را برای حفظ حریم خصوصی انتخاب کنید.
-        </p>"""
-new = """        <p className=\"mt-1 text-sm text-gray\">
-          هر زیباگر فقط یک مکان پایه دارد. آدرس دقیق را ثبت کنید (برای رزرو و مسیریابی بعد از پرداخت).
-          نمایش عمومی آدرس دقیق فقط در صورت انتخاب «آدرس دقیق» انجام می‌شود؛ در غیر این صورت فقط شهر/محله به عموم نشان داده می‌شود و آدرس کامل پس از رزرو برای مشتری نمایش داده خواهد شد.
-        </p>"""
-if old in text:
-  text = text.replace(old, new, 1)
-  p.write_text(text, encoding='utf-8')
-  print('locations updated')
-else:
-  print('locations pattern skip')
-PY
+          set -eux
+          git checkout e9c62cb -- frontend/src/app/zibagar/locations/page.tsx
+          git checkout e9c62cb -- frontend/src/app/admin/notifications/page.tsx
+          git checkout e9c62cb -- frontend/src/app/zibagar/services/page.tsx
           wc -l frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
-      - name: Commit and push
+          head -3 frontend/src/app/zibagar/services/page.tsx
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
-          if git diff --staged --quiet; then
-            echo "No changes"
-          else
-            git commit -m "fix(#65): restore locations/notifications/services from e9c62cb + multi-open + privacy copy"
-            git push
-          fi
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "fix(#65): restore locations notifications services from e9c62cb" || exit 0
+          git push origin HEAD:main
