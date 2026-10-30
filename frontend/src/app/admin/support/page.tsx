@@ -24,10 +24,41 @@ type TicketDetail = {
   status: string;
   createdAt: string;
   user?: { id: string; phone?: string | null; accountType?: string; profile?: { displayName?: string | null } | null } | null;
-  messages: Array<{ id: string; body: string; isStaff: boolean; createdAt: string; sender?: { profile?: { displayName?: string | null } | null; phone?: string | null } | null }>;
+  messages: Array<{
+    id: string;
+    body: string;
+    isStaff: boolean;
+    createdAt: string;
+    sender?: { profile?: { displayName?: string | null } | null; phone?: string | null } | null;
+  }>;
 };
 
 const STATUS_LABEL: Record<string, string> = { open: 'باز', answered: 'پاسخ داده شده', closed: 'بسته' };
+
+function accountTypeFa(t?: string | null) {
+  if (t === 'professional') return 'زیباگر';
+  if (t === 'customer') return 'مشتری';
+  if (t === 'admin' || t === 'SUPER_ADMIN') return 'ادمین';
+  return t || 'کاربر';
+}
+
+function senderLabel(
+  m: { isStaff: boolean; sender?: { profile?: { displayName?: string | null } | null; phone?: string | null } | null },
+  ticketUser?: TicketDetail['user'],
+) {
+  if (m.isStaff) {
+    const name = m.sender?.profile?.displayName || m.sender?.phone;
+    return name ? `پشتیبانی · ${name}` : 'پشتیبانی';
+  }
+  const name =
+    m.sender?.profile?.displayName ||
+    ticketUser?.profile?.displayName ||
+    m.sender?.phone ||
+    ticketUser?.phone ||
+    'کاربر';
+  const role = accountTypeFa(ticketUser?.accountType);
+  return `${role} · ${name}`;
+}
 
 export default function AdminSupportPage() {
   const [items, setItems] = useState<TicketListItem[]>([]);
@@ -93,11 +124,15 @@ export default function AdminSupportPage() {
         </div>
         <Card className="space-y-3">
           <h1 className="text-lg font-bold">{detail.subject}</h1>
-          <p className="text-xs text-gray">کاربر: {userLabel} ({detail.user?.accountType || '—'}) · {STATUS_LABEL[detail.status] || detail.status} · {formatDate(detail.createdAt, { style: 'short', includeTime: true })}</p>
+          <p className="text-xs text-gray">
+            فرستنده: {userLabel} ({accountTypeFa(detail.user?.accountType)}) · {STATUS_LABEL[detail.status] || detail.status} · {formatDate(detail.createdAt, { style: 'short', includeTime: true })}
+          </p>
           <ul className="space-y-3">
             {detail.messages.map((m) => (
               <li key={m.id} className={`rounded-xl px-3 py-2 text-sm ${m.isStaff ? 'bg-coral/10 border border-coral/20' : 'bg-gray-light/60'}`}>
-                <p className="text-xs font-medium text-gray mb-1">{m.isStaff ? 'پشتیبانی' : 'کاربر'} · {formatDate(m.createdAt, { style: 'short', includeTime: true })}</p>
+                <p className="text-xs font-medium text-gray mb-1">
+                  {senderLabel(m, detail.user)} · {formatDate(m.createdAt, { style: 'short', includeTime: true })}
+                </p>
                 <p className="whitespace-pre-wrap">{m.body}</p>
               </li>
             ))}
@@ -139,7 +174,7 @@ export default function AdminSupportPage() {
                       <p className="font-semibold">{t.subject}</p>
                       <span className="text-xs text-gray">{STATUS_LABEL[t.status] || t.status}</span>
                     </div>
-                    <p className="text-sm text-gray">{name} · {t.user?.accountType || ''}</p>
+                    <p className="text-sm text-gray">{name} · {accountTypeFa(t.user?.accountType)}</p>
                     {t.lastPreview && <p className="text-sm text-gray line-clamp-1">{t.lastPreview}</p>}
                     <p className="text-xs text-gray">{formatDate(t.updatedAt, { style: 'short', includeTime: true })} · {t.messageCount} پیام</p>
                   </Card>
