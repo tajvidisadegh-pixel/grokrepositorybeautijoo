@@ -4,10 +4,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class SupportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async listMine(userId: string, page = 1, limit = 30) {
     const safePage = Math.max(1, page || 1);
@@ -151,6 +156,22 @@ export class SupportService {
         messages: true,
       },
     });
+
+    // Auto-ack to sender (#65.17) — in-app only, never fails the ticket create
+    try {
+      await this.notifications.notify({
+        userId,
+        type: NotificationType.system,
+        title: 'پیام شما دریافت شد',
+        body:
+          'پیام شما با موفقیت ارسال شد. تیم پشتیبانی در اسرع وقت پیگیری می‌کند و به شما پاسخ خواهد داد. از همراهی‌تان سپاسگزاریم.',
+        data: { ticketId: ticket.id, href: '/zibagar/support' },
+        sms: false,
+      });
+    } catch {
+      /* ignore */
+    }
+
     return ticket;
   }
 
