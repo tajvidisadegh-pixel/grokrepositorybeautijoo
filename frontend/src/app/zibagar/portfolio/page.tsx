@@ -19,7 +19,8 @@ import { useToast } from '@/components/ui/app-toast';
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 const MAX_VIDEO_SEC = 60;
-const MAX_PORTFOLIO = 40;
+/** Free portfolio limit (#65.11) — matches backend DEFAULT_MAX_PORTFOLIO */
+const MAX_PORTFOLIO = 100;
 
 type MediaItem = {
   id: string;
@@ -81,6 +82,8 @@ export default function ZibagarPortfolioPage() {
   const [editDuration, setEditDuration] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const atLimit = items.length >= MAX_PORTFOLIO;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -138,7 +141,9 @@ export default function ZibagarPortfolioPage() {
       }
     }
     if (items.length >= MAX_PORTFOLIO) {
-      setMsg(`سقف تعداد نمونه‌کار (${MAX_PORTFOLIO}) پر است. ابتدا موردی را حذف کنید.`);
+      setMsg(
+        'سقف رایگان نمونه‌کار پر است. برای آپلود بیشتر از ۱۰۰ مورد می‌توانید نسخه ویژه را تهیه کنید.',
+      );
       return;
     }
     setBusy(true);
@@ -245,9 +250,9 @@ export default function ZibagarPortfolioPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">پورتفولیو <span className="text-base font-normal text-gray">({items.length}/{MAX_PORTFOLIO})</span></h1>
+          <h1 className="text-2xl font-bold">پورتفولیو</h1>
           <p className="mt-1 text-sm text-gray">
-            تصویر تا ۱۰ مگ · ویدیو تا ۵۰۰ مگ (حداکثر ۱ دقیقه) · حداکثر ۴۰ مورد
+            تصویر تا ۱۰ مگ · ویدیو تا ۵۰۰ مگ (حداکثر ۱ دقیقه)
           </p>
         </div>
         <div>
@@ -261,11 +266,28 @@ export default function ZibagarPortfolioPage() {
               if (f) void onUpload(f);
             }}
           />
-          <Button size="sm" loading={busy} onClick={() => inputRef.current?.click()}>
+          <Button size="sm" loading={busy} disabled={atLimit} onClick={() => inputRef.current?.click()}>
             آپلود تصویر / ویدیو
           </Button>
         </div>
       </div>
+
+      {atLimit && (
+        <div className="rounded-2xl border border-coral/30 bg-coral/5 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">
+            سقف رایگان نمونه‌کار ({MAX_PORTFOLIO.toLocaleString('fa-IR')} مورد) پر است.
+          </p>
+          <p className="mt-1 text-gray">
+            برای آپلود بیشتر می‌توانید نسخه ویژه را با پرداخت ۳٬۰۰۰٬۰۰۰ تومان تهیه کنید تا این محدودیت برایتان باز شود.
+          </p>
+          <a
+            href="/zibagar/support"
+            className="mt-2 inline-block text-sm font-medium text-coral underline"
+          >
+            درخواست نسخه ویژه از پشتیبانی
+          </a>
+        </div>
+      )}
 
       {localPreview && (
         <div className="overflow-hidden rounded-xl border border-border bg-white p-2">
@@ -320,7 +342,6 @@ export default function ZibagarPortfolioPage() {
                       />
                     </button>
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <button
                       type="button"
                       className="block w-full"
