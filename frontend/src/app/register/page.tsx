@@ -160,6 +160,9 @@ function RegisterForm() {
                 className="text-left"
                 autoComplete="tel"
               />
+              <p className="mt-1.5 text-xs leading-5 text-gray">
+                کد تأیید با پیامک به همین شماره ارسال می‌شود. معمولاً کمتر از یک دقیقه طول می‌کشد.
+              </p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">
