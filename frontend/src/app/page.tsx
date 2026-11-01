@@ -317,6 +317,7 @@ export default async function HomePage() {
                   </p>
                 ) : null}
                 {features.showSearchInHero !== false && (
+                  <>
                   <form
                     action={hero.ctaLink || '/search'}
                     method="get"
@@ -350,7 +351,8 @@ export default async function HomePage() {
                       <Link href="/search?q=%D8%A7%D8%A8%D8%B1%D9%88" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">ابرو</Link>
                       <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">نزدیک من</Link>
                     </div>
-                )}
+                
+                  </>)}
               </div>
             </div>
           </section>
