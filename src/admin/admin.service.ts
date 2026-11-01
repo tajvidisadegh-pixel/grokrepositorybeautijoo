@@ -79,6 +79,31 @@ export class AdminService {
   }
 
   async dashboard() {
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const last1h = new Date(now.getTime() - 60 * 60 * 1000);
+    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const last7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const windowStats = async (since: Date) => {
+      const [newUsers, newProfessionals, newBookings, completedBookings, cancelledBookings] =
+        await Promise.all([
+          this.prisma.user.count({ where: { createdAt: { gte: since } } }),
+          this.prisma.professional.count({ where: { createdAt: { gte: since } } }),
+          this.prisma.booking.count({ where: { createdAt: { gte: since } } }),
+          this.prisma.booking.count({
+            where: { status: BookingStatus.completed, createdAt: { gte: since } },
+          }),
+          this.prisma.booking.count({
+            where: { status: BookingStatus.cancelled, createdAt: { gte: since } },
+          }),
+        ]);
+      return { newUsers, newProfessionals, newBookings, completedBookings, cancelledBookings };
+    };
+
     const [
       totalUsers,
       totalProfessionals,
@@ -90,6 +115,16 @@ export class AdminService {
       paidAgg,
       pendingPayments,
       failedPayments,
+      today,
+      last1Hour,
+      last24Hours,
+      last7Days,
+      last30Days,
+      thisMonth,
+      recentUsers,
+      recentProfessionals,
+      recentBookings,
+      recentReviews,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.professional.count(),
@@ -104,6 +139,46 @@ export class AdminService {
       }),
       this.prisma.payment.count({ where: { status: PaymentStatus.pending } }),
       this.prisma.payment.count({ where: { status: PaymentStatus.failed } }),
+      windowStats(startOfToday),
+      windowStats(last1h),
+      windowStats(last24h),
+      windowStats(last7),
+      windowStats(last30),
+      windowStats(startOfMonth),
+      this.prisma.user.findMany({
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          phone: true,
+          createdAt: true,
+          profile: { select: { displayName: true } },
+        },
+      }),
+      this.prisma.professional.findMany({
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, title: true, status: true },
+      }),
+      this.prisma.booking.findMany({
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          professional: { select: { title: true } },
+          customer: { select: { profile: { select: { displayName: true } } } },
+        },
+      }),
+      this.prisma.review.findMany({
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          rating: true,
+          professional: { select: { title: true } },
+        },
+      }),
     ]);
     const grossRevenue = Number(paidAgg._sum.amount || 0);
     return {
@@ -117,10 +192,49 @@ export class AdminService {
         totalReviews,
         revenue: { available: true, total: grossRevenue },
       },
+      timeStats: {
+        today,
+        last1Hour,
+        last24Hours,
+        last7Days,
+        last30Days,
+        thisMonth,
+      },
+      trends: {
+        userGrowth: [],
+        professionalGrowth: [],
+        bookingActivity: [],
+        revenue: null,
+      },
       pending: {
         professionalsAwaitingReview: pendingProfessionals,
         pendingPayments,
         failedPayments,
+      },
+      recentActivity: [],
+      recent: {
+        users: recentUsers.map((u) => ({
+          id: u.id,
+          phone: u.phone,
+          displayName: u.profile?.displayName ?? null,
+          createdAt: u.createdAt,
+        })),
+        professionals: recentProfessionals.map((p) => ({
+          id: p.id,
+          title: p.title,
+          status: p.status,
+        })),
+        bookings: recentBookings.map((b) => ({
+          id: b.id,
+          status: b.status,
+          professionalTitle: b.professional?.title ?? null,
+          customerName: b.customer?.profile?.displayName ?? null,
+        })),
+        reviews: recentReviews.map((r) => ({
+          id: r.id,
+          rating: r.rating,
+          professionalTitle: r.professional?.title ?? null,
+        })),
       },
     };
   }
