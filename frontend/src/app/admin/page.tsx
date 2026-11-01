@@ -59,9 +59,9 @@ function normalizeDashboard(raw: Partial<AdminDashboard> | null | undefined): Ad
       revenue: overview.revenue ?? { available: false },
     },
     timeStats: {
-      last1Hour: (timeStats as any).last1Hour ?? EMPTY_WINDOW,
+      last1Hour: timeStats.last1Hour ?? EMPTY_WINDOW,
       today: timeStats.today ?? EMPTY_WINDOW,
-      last24Hours: (timeStats as any).last24Hours ?? EMPTY_WINDOW,
+      last24Hours: timeStats.last24Hours ?? EMPTY_WINDOW,
       last7Days: timeStats.last7Days ?? EMPTY_WINDOW,
       last30Days: timeStats.last30Days ?? EMPTY_WINDOW,
       thisMonth: timeStats.thisMonth ?? EMPTY_WINDOW,
@@ -125,7 +125,7 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [windowKey, setWindowKey] = useState<WindowKey>('last7Days');
+  const [window, setWindowKey] = useState<WindowKey>('last7Days');
   const [reviewQueue, setReviewQueue] = useState({ professionals: 0, bookings: 0, reviews: 0, support: 0, media: 0 });
 
   useEffect(() => {
@@ -285,7 +285,7 @@ export default function AdminDashboardPage() {
               series={[
                 { key: 'completed', color: '#2D6CDF', name: 'انجام‌شده' },
                 { key: 'cancelled', color: '#FF6F61', name: 'لغوشده' },
-                { key: 'other', color: '#D1D5DB', name: 'سایر' },
+                { key: 'other', color: '#9CA3AF', name: 'سایر' },
               ]}
             />
           ) : (
@@ -294,140 +294,94 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      <Card className="space-y-3">
-        <h2 className="font-bold text-foreground">موارد نیازمند توجه</h2>
-        {pending.professionalsAwaitingReview === 0 && pending.pendingPayments === 0 && pending.failedPayments === 0 ? (
-          <p className="text-sm text-gray">در حال حاضر موردی نیاز به بررسی ندارد.</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-3">
-            {pending.professionalsAwaitingReview > 0 && (
-              <Link href="/admin/professionals" className="rounded-xl border border-coral/20 bg-coral-soft px-4 py-3">
-                <p className="text-lg font-bold text-coral">{fmt(pending.professionalsAwaitingReview)}</p>
-                <p className="mt-0.5 text-xs text-gray">زیباگر در انتظار بررسی</p>
-              </Link>
-            )}
-          </div>
-        )}
-      </Card>
-
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between">
+        <Card>
+          <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold text-foreground">زیباگرهای اخیر</h2>
-            <Link href="/admin/professionals" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
+            <Link href="/admin/professionals" className="text-xs text-coral hover:underline">همه</Link>
           </div>
-          {recent.professionals.length === 0 ? (
-            <p className="text-sm text-gray">هنوز زیباگری نیست.</p>
-          ) : (
+          {recent.professionals.length ? (
             <ul className="space-y-2">
-              {recent.professionals.map((p) => (
-                <li key={p.id} className="flex items-center justify-between text-sm">
-                  <span>{p.title || p.displayName || '—'}</span>
+              {recent.professionals.slice(0, 5).map((p) => (
+                <li key={p.id} className="flex items-center justify-between rounded-lg bg-gray-light/40 px-3 py-2 text-sm">
+                  <span className="truncate">{p.displayName || p.title || p.id}</span>
                   <span className="text-xs text-gray">{persianProfessionalStatus(p.status)}</span>
                 </li>
               ))}
             </ul>
+          ) : (
+            <p className="py-6 text-center text-sm text-gray">موردی نیست</p>
           )}
         </Card>
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between">
+        <Card>
+          <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold text-foreground">کاربران اخیر</h2>
-            <Link href="/admin/users" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
+            <Link href="/admin/users" className="text-xs text-coral hover:underline">همه</Link>
           </div>
-          {recent.users.length === 0 ? (
-            <p className="text-sm text-gray">هنوز کاربری نیست.</p>
-          ) : (
+          {recent.users.length ? (
             <ul className="space-y-2">
-              {recent.users.map((u) => (
-                <li key={u.id} className="flex items-center justify-between text-sm">
-                  <span>{u.displayName || u.phone || '—'}</span>
+              {recent.users.slice(0, 5).map((u) => (
+                <li key={u.id} className="flex items-center justify-between rounded-lg bg-gray-light/40 px-3 py-2 text-sm">
+                  <span className="truncate">{u.displayName || u.phone || u.id}</span>
                   <span className="text-xs text-gray">{formatDate(u.createdAt)}</span>
                 </li>
               ))}
             </ul>
+          ) : (
+            <p className="py-6 text-center text-sm text-gray">موردی نیست</p>
           )}
         </Card>
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between">
+        <Card>
+          <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold text-foreground">رزروهای اخیر</h2>
-            <Link href="/admin/bookings" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
+            <Link href="/admin/bookings" className="text-xs text-coral hover:underline">همه</Link>
           </div>
-          {recent.bookings.length === 0 ? (
-            <p className="text-sm text-gray">هنوز رزروی نیست.</p>
-          ) : (
+          {recent.bookings.length ? (
             <ul className="space-y-2">
-              {recent.bookings.map((b) => (
-                <li key={b.id} className="flex items-center justify-between text-sm">
-                  <span>{b.professionalTitle || '—'} / {b.customerName || '—'}</span>
+              {recent.bookings.slice(0, 5).map((b) => (
+                <li key={b.id} className="flex items-center justify-between rounded-lg bg-gray-light/40 px-3 py-2 text-sm">
+                  <span className="truncate">{b.professionalTitle || b.customerName || b.id}</span>
                   <span className="text-xs text-gray">{persianBookingStatus(b.status)}</span>
                 </li>
               ))}
             </ul>
+          ) : (
+            <p className="py-6 text-center text-sm text-gray">موردی نیست</p>
           )}
         </Card>
-        <Card className="space-y-3">
-          <h2 className="font-bold text-foreground">نظرات اخیر</h2>
-          {recent.reviews.length === 0 ? (
-            <p className="text-sm text-gray">هنوز نظری نیست.</p>
-          ) : (
+        <Card>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-bold text-foreground">نظرات اخیر</h2>
+            <Link href="/admin/reviews" className="text-xs text-coral hover:underline">همه</Link>
+          </div>
+          {recent.reviews.length ? (
             <ul className="space-y-2">
-              {recent.reviews.map((r) => (
-                <li key={r.id} className="flex items-center justify-between text-sm">
-                  <span>{r.professionalTitle || '—'}</span>
-                  <span className="text-xs text-gray">{fmt(r.rating)} ⭐</span>
+              {recent.reviews.slice(0, 5).map((r) => (
+                <li key={r.id} className="flex items-center justify-between rounded-lg bg-gray-light/40 px-3 py-2 text-sm">
+                  <span className="truncate">{r.professionalTitle || r.id}</span>
+                  <span className="text-xs text-gray">{r.rating} ⭐</span>
                 </li>
               ))}
             </ul>
+          ) : (
+            <p className="py-6 text-center text-sm text-gray">موردی نیست</p>
           )}
         </Card>
       </div>
 
       {recentActivity.length > 0 && (
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-foreground">فعالیت اخیر</h2>
-            <Link href="/admin/audit" className="text-xs font-medium text-blue hover:underline">مشاهده همه</Link>
-          </div>
-          <ul className="divide-y divide-border/70">
-            {recentActivity.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                <span>
-                  <span className="font-medium">{a.actor || 'سیستم'}</span> — {a.action} ({a.entityType})
-                </span>
+        <Card>
+          <h2 className="mb-3 font-bold text-foreground">فعالیت اخیر</h2>
+          <ul className="space-y-2">
+            {recentActivity.slice(0, 10).map((a) => (
+              <li key={a.id} className="flex items-center justify-between rounded-lg bg-gray-light/40 px-3 py-2 text-sm">
+                <span className="truncate">{a.actor ? `${a.actor}: ` : ''}{a.action} ({a.entityType})</span>
                 <span className="text-xs text-gray">{formatDate(a.createdAt)}</span>
               </li>
             ))}
           </ul>
         </Card>
       )}
-
-      
-      <Card className="space-y-2 p-4">
-        <h2 className="font-semibold">شاخص‌های رشد / کیفیت</h2>
-        <p className="text-sm text-gray">
-          رزرو لغوشده: {fmt(overview.cancelledBookings)} · تکمیل‌شده از داده‌های داشبورد · برای مانیتورینگ فنی به{' '}
-          <a href="/status" className="text-coral underline">/status</a> و متریک API مراجعه کنید.
-        </p>
-        <p className="text-xs text-gray">
-          نرخ کنسلی تقریبی:{" "}
-          {overview.totalBookings > 0
-            ? `${Math.round((100 * (overview.cancelledBookings || 0)) / overview.totalBookings).toLocaleString('fa-IR')}٪`
-            : '—'}
-        </p>
-      </Card>
-
-      <Card className="space-y-2 p-4">
-        <h2 className="font-semibold">هشدار تقلب / نرخ غیرعادی</h2>
-        <p className="text-xs text-gray">
-          رزروهای لغوشده پرتکرار و OTP مشکوک را از لاگ audit بررسی کنید.
-        </p>
-        <div className="flex flex-wrap gap-2 text-sm">
-          <a href="/admin/audit" className="text-coral underline">لاگ audit</a>
-          <a href="/admin/bookings" className="text-coral underline">رزروها</a>
-          <a href="/admin/users" className="text-coral underline">کاربران</a>
-        </div>
-      </Card>
-
     </div>
   );
 }
