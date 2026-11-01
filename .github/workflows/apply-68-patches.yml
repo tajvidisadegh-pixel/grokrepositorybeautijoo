@@ -1,0 +1,24 @@
+name: apply-68-patches
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-68-patches.yml'
+      - 'scripts/patch68.py'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply #68 patches
+        run: python3 scripts/patch68.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(#68): popular icon DTO, dashboard timeStats, panel title hide, popular toggle"
+          git push
