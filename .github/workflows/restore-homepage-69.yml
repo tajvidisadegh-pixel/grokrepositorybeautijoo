@@ -11,31 +11,67 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Insert search chips if missing
+      - name: Wrap form+chips in single parent div
         run: |
-          python3 scripts/patch_homepage_69.py || true
           python3 << 'PY'
           from pathlib import Path
           p = Path('frontend/src/app/page.tsx')
           t = p.read_text()
-          if 'search?q=%DA%A9%D9%88%D8%AA%D8%A7%D9%87%DB%8C' in t:
-              print('chips already present')
-          else:
-              chips = (
-                  chr(10) + '                    <div className="mt-3 flex flex-wrap justify-center gap-2">'
-                  + chr(10) + '                      <Link href="/search?q=%DA%A9%D9%88%D8%AA%D8%A7%D9%87%DB%8C+%D9%85%D9%88" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">' + 'کوتاهی مو' + '</Link>'
-                  + chr(10) + '                      <Link href="/search?q=%D9%86%D8%A7%D8%AE%D9%86" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">' + 'ناخن' + '</Link>'
-                  + chr(10) + '                      <Link href="/search?q=%D8%A7%D8%A8%D8%B1%D9%88" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">' + 'ابرو' + '</Link>'
-                  + chr(10) + '                      <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">' + 'نزدیک من' + '</Link>'
-                  + chr(10) + '                    </div>'
-              )
-              pos = t.find("case 'near-me-strip'")
-              idx2 = t.rfind('</form>', 0, pos if pos > 0 else len(t))
-              if idx2 < 0:
-                  raise SystemExit('form not found')
-              t = t[: idx2 + 7] + chips + t[idx2 + 7 :]
-              p.write_text(t)
-              print('chips inserted', p.stat().st_size)
+
+          old_open = """                {features.showSearchInHero !== false && (
+                  <form
+                    action={hero.ctaLink || '/search'}
+                    method="get"
+                    className={`mt-6 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3 ${
+                      hero.searchAlign === 'right'
+                        ? 'mr-0 ml-auto max-w-xl'
+                        : hero.searchAlign === 'left'
+                          ? 'ml-0 mr-auto max-w-xl'
+                          : 'mx-auto max-w-xl'
+                    }`}
+                  >"""
+
+          new_open = """                {features.showSearchInHero !== false && (
+                  <div
+                    className={`mt-6 w-full sm:mt-8 ${
+                      hero.searchAlign === 'right'
+                        ? 'mr-0 ml-auto max-w-xl'
+                        : hero.searchAlign === 'left'
+                          ? 'ml-0 mr-auto max-w-xl'
+                          : 'mx-auto max-w-xl'
+                    }`}
+                  >
+                    <form
+                      action={hero.ctaLink || '/search'}
+                      method="get"
+                      className="flex w-full flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"
+                    >"""
+
+          if old_open not in t:
+              if 'search?q=%DA%A9' in t and '</form>\n                    <div className="mt-3 flex flex-wrap' not in t:
+                  print('already fixed')
+                  raise SystemExit(0)
+              print('open pattern missing')
+              raise SystemExit(1)
+
+          t = t.replace(old_open, new_open, 1)
+
+          old_close = """                      <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">نزدیک من</Link>
+                    </div>
+                )}"""
+
+          new_close = """                      <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">نزدیک من</Link>
+                    </div>
+                  </div>
+                )}"""
+
+          if old_close not in t:
+              print('close pattern missing')
+              raise SystemExit(1)
+
+          t = t.replace(old_close, new_close, 1)
+          p.write_text(t)
+          print('fixed', p.stat().st_size)
           PY
       - name: Commit
         run: |
@@ -43,5 +79,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend/src/app/page.tsx
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
-          git commit -m "feat(#69): add search shortcut chips under homepage hero"
+          git commit -m "fix(#69): wrap hero search+chips in single parent (JSX typecheck)"
           git push
