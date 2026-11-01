@@ -12,6 +12,7 @@ type Category = {
   isActive: boolean;
   sortOrder?: number;
   description?: string | null;
+  icon?: string | null;
   _count?: { services: number; children: number };
   parent?: { id: string; name: string } | null;
 };
@@ -174,6 +175,23 @@ export default function AdminServiceCategoriesPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'خطا');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function togglePopular(cat: Category) {
+    setBusy(true);
+    setError(null);
+    try {
+      const popular = cat.icon === 'popular';
+      await apiClient.patch(`/admin/service-categories/${cat.id}`, {
+        icon: popular ? null : 'popular',
+      });
+      setMessage(popular ? 'علامت محبوب برداشته شد' : 'به‌عنوان محبوب علامت خورد');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطا در علامت محبوب');
     } finally {
       setBusy(false);
     }
@@ -351,6 +369,12 @@ export default function AdminServiceCategoriesPage() {
                     <div className="min-w-0 flex-1" style={{ paddingRight: depth * 18 }}>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium text-sm">{cat.name}</span>
+                        {depth === 0 && (
+                          <button type="button" disabled={busy} onClick={() => void togglePopular(cat)}
+                            className={`rounded-full border px-2 py-0.5 text-[11px] ${cat.icon === 'popular' ? 'border-[#FF6F61] bg-[#FF6F61] text-white' : 'border-gray-300 bg-white text-gray-600'}`}>
+                            {cat.icon === 'popular' ? 'محبوب ✓' : 'محبوب'}
+                          </button>
+                        )}
                         {!cat.isActive && <span className="text-xs text-red-500">(غیرفعال)</span>}
                         {children.length > 0 && <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">{children.length} زیرمجموعه</span>}
                       </div>

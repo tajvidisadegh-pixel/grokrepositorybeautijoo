@@ -10,9 +10,11 @@ import { apiClient } from '@/lib/api';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { persianBookingStatus, persianProfessionalStatus } from '@/lib/persian-status';
 
-type WindowKey = 'today' | 'last7Days' | 'last30Days' | 'thisMonth';
+type WindowKey = 'last1Hour' | 'today' | 'last24Hours' | 'last7Days' | 'last30Days' | 'thisMonth';
 const WINDOW_TABS: { key: WindowKey; label: string }[] = [
+  { key: 'last1Hour', label: '۱ ساعت اخیر' },
   { key: 'today', label: 'امروز' },
+  { key: 'last24Hours', label: '۲۴ ساعت اخیر' },
   { key: 'last7Days', label: '۷ روز اخیر' },
   { key: 'last30Days', label: '۳۰ روز اخیر' },
   { key: 'thisMonth', label: 'این ماه' },
@@ -38,7 +40,9 @@ function normalizeDashboard(raw: Partial<AdminDashboard> | null | undefined): Ad
     revenue: { available: false },
   };
   const timeStats = raw?.timeStats ?? {
+    last1Hour: EMPTY_WINDOW,
     today: EMPTY_WINDOW,
+    last24Hours: EMPTY_WINDOW,
     last7Days: EMPTY_WINDOW,
     last30Days: EMPTY_WINDOW,
     thisMonth: EMPTY_WINDOW,
@@ -55,7 +59,9 @@ function normalizeDashboard(raw: Partial<AdminDashboard> | null | undefined): Ad
       revenue: overview.revenue ?? { available: false },
     },
     timeStats: {
+      last1Hour: (timeStats as any).last1Hour ?? EMPTY_WINDOW,
       today: timeStats.today ?? EMPTY_WINDOW,
+      last24Hours: (timeStats as any).last24Hours ?? EMPTY_WINDOW,
       last7Days: timeStats.last7Days ?? EMPTY_WINDOW,
       last30Days: timeStats.last30Days ?? EMPTY_WINDOW,
       thisMonth: timeStats.thisMonth ?? EMPTY_WINDOW,
