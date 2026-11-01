@@ -28,8 +28,7 @@ const BASE_ITEMS: NavDef[] = [
   { href: '/admin/notifications', label: '\u0627\u0639\u0644\u0627\u0646\u200c\u0647\u0627', badgeKey: 'notifications', anyOf: ['admin.notifications.send'] },
   { href: '/admin/events', label: '\u0631\u0648\u06cc\u062f\u0627\u062f\u0647\u0627', anyOf: ['admin.settings.read', 'admin.settings.write'] },
   { href: '/admin/professionals', label: '\u0632\u06cc\u0628\u0627\u06af\u0631\u0647\u0627', badgeKey: 'professionals', anyOf: ['admin.professionals.read', 'admin.professionals.write'] },
-  { href: '/admin/catalog-template', label: 'کاتالوگ قالب', anyOf: ['admin.catalog.manage'] },
-  { href: '/admin/service-categories', label: '\u062a\u062e\u0635\u0635\u200c\u0647\u0627 \u0648 \u062f\u0633\u062a\u0647\u200c\u0628\u0646\u062f\u06cc\u200c\u0647\u0627', anyOf: ['admin.catalog.manage'] },
+  { href: '/admin/service-categories', label: '\u062f\u0633\u062a\u0647\u200c\u0647\u0627 \u0648 \u062a\u062e\u0635\u0635\u200c\u0647\u0627', anyOf: ['admin.catalog.manage'] },
   { href: '/admin/bookings', label: '\u0631\u0632\u0631\u0648\u0647\u0627', badgeKey: 'bookings', anyOf: ['admin.bookings.read', 'admin.bookings.write'] },
   { href: '/admin/reviews', label: '\u0646\u0638\u0631\u0627\u062a \u0648 \u0627\u0645\u062a\u06cc\u0627\u0632\u0647\u0627', badgeKey: 'reviews', anyOf: ['admin.reviews.moderate'] },
   { href: '/admin/media', label: '\u0631\u0633\u0627\u0646\u0647\u200c\u0647\u0627', badgeKey: 'media', anyOf: ['admin.media.moderate'] },
@@ -106,7 +105,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <PanelShell title="\u067e\u0646\u0644 \u0627\u062f\u0645\u06cc\u0646" items={items} roles={['admin', 'SUPER_ADMIN', ...CHANNEL_ROLES]}>
+    <PanelShell title="" items={items} roles={['admin', 'SUPER_ADMIN', ...CHANNEL_ROLES]}>
       {children}
     </PanelShell>
   );
