@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - '.github/payloads/page69/**'
       - '.github/workflows/restore-homepage-69.yml'
-      - 'scripts/patch_homepage_69.py'
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -12,18 +12,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore base page and patch
+      - name: Write page from b64 parts
         run: |
           set -e
-          git show 93717e3472e0ddaa30a1cc10cbf20d2ff62e7475:frontend/src/app/page.tsx > frontend/src/app/page.tsx
-          python3 scripts/patch_homepage_69.py
+          cat .github/payloads/page69/*.b64 | tr -d '\n' > /tmp/all.b64
+          python3 -c "import base64,pathlib; pathlib.Path('frontend/src/app/page.tsx').write_bytes(base64.b64decode(open('/tmp/all.b64').read())); print(pathlib.Path('frontend/src/app/page.tsx').stat().st_size)"
+          grep -q 'search?q=%DA%A9' frontend/src/app/page.tsx
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/page.tsx frontend/src/app/register/page.tsx scripts/patch_homepage_69.py
+          git add frontend/src/app/page.tsx
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
-          git commit -m "feat(#69,#70): homepage UX polish + register role labels (no top role cards)"
+          git commit -m "feat(#69,#70): homepage with search chips + trust + warm copy (no role cards)"
           git push
