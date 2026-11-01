@@ -3,7 +3,6 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '.github/payloads/homepage-69/**'
       - '.github/workflows/restore-homepage-69.yml'
 jobs:
   restore:
@@ -12,16 +11,87 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Assemble and write page.tsx
+        with:
+          fetch-depth: 0
+      - name: Restore + polish homepage and register
         run: |
           set -e
-          cat .github/payloads/homepage-69/part_*.b64 | tr -d '\n' > /tmp/page.b64
-          python3 -c "import base64,pathlib; pathlib.Path('frontend/src/app/page.tsx').write_bytes(base64.b64decode(open('/tmp/page.b64').read())); print(pathlib.Path('frontend/src/app/page.tsx').stat().st_size)"
-      - name: Commit if changed
+          git show 93717e3472e0ddaa30a1cc10cbf20d2ff62e7475:frontend/src/app/page.tsx > frontend/src/app/page.tsx
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/page.tsx')
+          t = p.read_text()
+          reps = [
+            ("title: 'بیوتی‌جو، رزرو آنلاین نوبت'", "title: 'نوبت زیبایی، راحت‌تر از همیشه'"),
+            ("subtitle: 'آسان و سریع'", "subtitle: 'زیباگر خوب نزدیک خودت را پیدا کن'"),
+            ("description: 'زیباگر مناسب خود را پیدا کنید — آرایش، ناخن، پوست و بیشتر، نزدیک شما'", "description: 'جستجو کن، زمان آزاد ببین و آنلاین رزرو کن — بدون تماس و رفت‌وآمد اضافه.'"),
+            ("searchPlaceholder: 'جستجوی خدمت یا زیباگر...'", "searchPlaceholder: 'کوتاهی مو، ناخن، رنگ، نام زیباگر…'"),
+            ("categoriesTitle: 'دسته‌بندی‌های محبوب'", "categoriesTitle: 'چه خدمتی می‌خوای؟'"),
+            ("featuredTitle: 'زیباگرهای برتر هفته'", "featuredTitle: 'زیباگرهایی که الان می‌تونی ببینی'"),
+            ("ctaTitle: 'آماده رزرو هستید؟'", "ctaTitle: 'اگر آماده‌ای، از اینجا شروع کن'"),
+            ("ctaDescription: 'زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.'", "ctaDescription: 'جستجو کن، زیباگر را انتخاب کن و نوبت بگیر.'"),
+            ("['hero', 'near-me-strip', 'categories', 'featured', 'cta']", "['hero', 'near-me-strip', 'categories', 'featured', 'trust', 'cta']"),
+            ("const ordered = sections.filter((s) => s.enabled !== false).map((s) => s.id);", "const ordered = sections.filter((s) => s.enabled !== false && s.id !== 'dual-path').map((s) => s.id);"),
+          ]
+          for a,b in reps:
+              t = t.replace(a,b)
+          t = t.replace(
+              'در حال حاضر امکان بارگذاری لیست زیباگران نیست. بعداً تلاش کنید.',
+              'الان لیست را نیاوردیم. از جستجو ادامه بده.',
+          )
+          t = t.replace(
+              'هنوز زیباگر تأییدشده‌ای ثبت نشده است.',
+              'هنوز کسی اینجا نیست — از جستجو شروع کن.',
+          )
+          trust = '''
+      case 'trust':
+        return (
+          <section key="trust" className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-border/70 bg-white px-4 py-4">
+                <p className="text-sm font-bold text-foreground">رزرو آنلاین سریع</p>
+                <p className="mt-0.5 text-xs text-gray">زمان آزاد را ببین و همان‌جا نوبت بگیر</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-white px-4 py-4">
+                <p className="text-sm font-bold text-foreground">زیباگرهای واقعی</p>
+                <p className="mt-0.5 text-xs text-gray">پروفایل و نظرات قابل مشاهده</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-white px-4 py-4">
+                <p className="text-sm font-bold text-foreground">پشتیبانی وقتی لازم شد</p>
+                <p className="mt-0.5 text-xs text-gray">اگر مشکلی پیش آمد، کنار شماییم</p>
+              </div>
+            </div>
+          </section>
+        );
+'''
+          if "case 'trust':" not in t:
+              t = t.replace("case 'cta':", trust + "\n      case 'cta':", 1)
+          chips = '''
+                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                      <Link href="/search?q=%DA%A9%D9%88%D8%AA%D8%A7%D9%87%DB%8C+%D9%85%D9%88" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">کوتاهی مو</Link>
+                      <Link href="/search?q=%D9%86%D8%A7%D8%AE%D9%86" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">ناخن</Link>
+                      <Link href="/search?q=%D8%A7%D8%A8%D8%B1%D9%88" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">ابرو</Link>
+                      <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">نزدیک من</Link>
+                    </div>'''
+          if 'کوتاهی مو' not in t:
+              idx2 = t.rfind('</form>', 0, t.find("case 'near-me-strip'"))
+              if idx2 > 0:
+                  t = t[:idx2+7] + chips + t[idx2+7:]
+          p.write_text(t)
+          print('page ok', len(t))
+          r = Path('frontend/src/app/register/page.tsx')
+          rt = r.read_text()
+          if 'می‌خواهم نوبت بگیرم' not in rt:
+              rt = rt.replace('\n                  مشتری\n', '\n                  می‌خواهم نوبت بگیرم\n')
+              rt = rt.replace('\n                  زیباگر\n', '\n                  زیباگر هستم و نوبت می‌دهم\n')
+              r.write_text(rt)
+              print('register ok')
+          PY
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/page.tsx
+          git add frontend/src/app/page.tsx frontend/src/app/register/page.tsx
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
-          git commit -m "feat(#69,#70): full homepage UX — warm hero, chips, trust, soft empty/error, no role cards"
+          git commit -m "feat(#69,#70): homepage UX polish + register role labels (no top role cards)"
           git push
