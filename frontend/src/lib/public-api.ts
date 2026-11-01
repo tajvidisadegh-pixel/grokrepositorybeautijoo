@@ -74,6 +74,8 @@ export type SearchParams = {
   maxDuration?: number;
   sort?: string;
   availableDate?: string;
+  availableToday?: boolean;
+  availableTomorrow?: boolean;
   lat?: number | string;
   lng?: number | string;
   radiusKm?: number | string;
@@ -95,6 +97,8 @@ export function searchProfessionals(params: SearchParams = {}) {
   if (params.maxDuration != null) sp.set('maxDuration', String(params.maxDuration));
   if (params.sort) sp.set('sort', params.sort);
   if (params.availableDate) sp.set('availableDate', params.availableDate);
+  if (params.availableToday) sp.set('availableToday', '1');
+  if (params.availableTomorrow) sp.set('availableTomorrow', '1');
   if (params.lat != null && params.lat !== '') sp.set('lat', String(params.lat));
   if (params.lng != null && params.lng !== '') sp.set('lng', String(params.lng));
   if (params.radiusKm != null && params.radiusKm !== '') sp.set('radiusKm', String(params.radiusKm));
