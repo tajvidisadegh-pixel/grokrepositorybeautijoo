@@ -3,7 +3,6 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '.github/payloads/page69/**'
       - '.github/workflows/restore-homepage-69.yml'
 jobs:
   restore:
@@ -12,17 +11,37 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Write page from b64 parts
+      - name: Insert search chips if missing
         run: |
-          set -e
-          cat .github/payloads/page69/*.b64 | tr -d '\n' > /tmp/all.b64
-          python3 -c "import base64,pathlib; pathlib.Path('frontend/src/app/page.tsx').write_bytes(base64.b64decode(open('/tmp/all.b64').read())); print(pathlib.Path('frontend/src/app/page.tsx').stat().st_size)"
-          grep -q 'search?q=%DA%A9' frontend/src/app/page.tsx
+          python3 scripts/patch_homepage_69.py || true
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/page.tsx')
+          t = p.read_text()
+          if 'search?q=%DA%A9%D9%88%D8%AA%D8%A7%D9%87%DB%8C' in t:
+              print('chips already present')
+          else:
+              chips = (
+                  chr(10) + '                    <div className="mt-3 flex flex-wrap justify-center gap-2">'
+                  + chr(10) + '                      <Link href="/search?q=%DA%A9%D9%88%D8%AA%D8%A7%D9%87%DB%8C+%D9%85%D9%88" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">' + 'کوتاهی مو' + '</Link>'
+                  + chr(10) + '                      <Link href="/search?q=%D9%86%D8%A7%D8%AE%D9%86" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">' + 'ناخن' + '</Link>'
+                  + chr(10) + '                      <Link href="/search?q=%D8%A7%D8%A8%D8%B1%D9%88" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:border-coral/40 hover:bg-coral-soft/60">' + 'ابرو' + '</Link>'
+                  + chr(10) + '                      <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">' + 'نزدیک من' + '</Link>'
+                  + chr(10) + '                    </div>'
+              )
+              pos = t.find("case 'near-me-strip'")
+              idx2 = t.rfind('</form>', 0, pos if pos > 0 else len(t))
+              if idx2 < 0:
+                  raise SystemExit('form not found')
+              t = t[: idx2 + 7] + chips + t[idx2 + 7 :]
+              p.write_text(t)
+              print('chips inserted', p.stat().st_size)
+          PY
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend/src/app/page.tsx
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
-          git commit -m "feat(#69,#70): homepage with search chips + trust + warm copy (no role cards)"
+          git commit -m "feat(#69): add search shortcut chips under homepage hero"
           git push
