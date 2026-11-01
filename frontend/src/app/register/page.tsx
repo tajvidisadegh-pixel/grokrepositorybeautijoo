@@ -132,7 +132,7 @@ function RegisterForm() {
                       : 'border-border text-gray hover:bg-gray-light'
                   }`}
                 >
-                  مشتری
+                  می‌خواهم نوبت بگیرم
                 </button>
                 <button
                   type="button"
@@ -143,7 +143,7 @@ function RegisterForm() {
                       : 'border-border text-gray hover:bg-gray-light'
                   }`}
                 >
-                  زیباگر
+                  زیباگر هستم و نوبت می‌دهم
                 </button>
               </div>
             </div>
