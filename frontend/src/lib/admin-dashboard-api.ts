@@ -21,7 +21,9 @@ export type AdminDashboard = {
     revenue: { available: boolean; total?: number };
   };
   timeStats: {
+    last1Hour?: AdminWindowStats;
     today: AdminWindowStats;
+    last24Hours?: AdminWindowStats;
     last7Days: AdminWindowStats;
     last30Days: AdminWindowStats;
     thisMonth: AdminWindowStats;
