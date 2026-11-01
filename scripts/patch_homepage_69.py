@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Apply #69/#70 homepage UX polish on top of a dual-path-free page.tsx."""
+"""Apply #69/#70 homepage UX polish on top of a dual-path-free page.tsx.
+
+Note: chips under hero must be wrapped in a single parent (fragment/div)
+with the search form to satisfy JSX typecheck.
+"""
 from pathlib import Path
 
 PAGE = Path("frontend/src/app/page.tsx")
@@ -43,28 +47,27 @@ def main():
         t = t.replace(a, b)
 
     if "case 'trust':" not in t:
-        trust = """
-      case 'trust':
-        return (
-          <section key=\"trust\" className=\"mx-auto max-w-6xl px-4 py-10 sm:py-12\">
-            <div className=\"grid grid-cols-1 gap-3 sm:grid-cols-3\">
-              <div className=\"rounded-2xl border border-border/70 bg-white px-4 py-4\">
-                <p className=\"text-sm font-bold text-foreground\">رزرو آنلاین سریع</p>
-                <p className=\"mt-0.5 text-xs text-gray\">زمان آزاد را ببین و همان‌جا نوبت بگیر</p>
-              </div>
-              <div className=\"rounded-2xl border border-border/70 bg-white px-4 py-4\">
-                <p className=\"text-sm font-bold text-foreground\">زیباگرهای واقعی</p>
-                <p className=\"mt-0.5 text-xs text-gray\">پروفایل و نظرات قابل مشاهده</p>
-              </div>
-              <div className=\"rounded-2xl border border-border/70 bg-white px-4 py-4\">
-                <p className=\"text-sm font-bold text-foreground\">پشتیبانی وقتی لازم شد</p>
-                <p className=\"mt-0.5 text-xs text-gray\">اگر مشکلی پیش آمد، کنار شماییم</p>
-              </div>
-            </div>
-          </section>
-        );
-"""
-        # Fix: use normal quotes in output via chr
+        trust = (
+            "\n      case 'trust':\n"
+            "        return (\n"
+            "          <section key=\"trust\" className=\"mx-auto max-w-6xl px-4 py-10 sm:py-12\">\n"
+            "            <div className=\"grid grid-cols-1 gap-3 sm:grid-cols-3\">\n"
+            "              <div className=\"rounded-2xl border border-border/70 bg-white px-4 py-4\">\n"
+            "                <p className=\"text-sm font-bold text-foreground\">رزرو آنلاین سریع</p>\n"
+            "                <p className=\"mt-0.5 text-xs text-gray\">زمان آزاد را ببین و همان‌جا نوبت بگیر</p>\n"
+            "              </div>\n"
+            "              <div className=\"rounded-2xl border border-border/70 bg-white px-4 py-4\">\n"
+            "                <p className=\"text-sm font-bold text-foreground\">زیباگرهای واقعی</p>\n"
+            "                <p className=\"mt-0.5 text-xs text-gray\">پروفایل و نظرات قابل مشاهده</p>\n"
+            "              </div>\n"
+            "              <div className=\"rounded-2xl border border-border/70 bg-white px-4 py-4\">\n"
+            "                <p className=\"text-sm font-bold text-foreground\">پشتیبانی وقتی لازم شد</p>\n"
+            "                <p className=\"mt-0.5 text-xs text-gray\">اگر مشکلی پیش آمد، کنار شماییم</p>\n"
+            "              </div>\n"
+            "            </div>\n"
+            "          </section>\n"
+            "        );\n"
+        )
         trust = trust.replace('\\"', '"')
         t = t.replace("case 'cta':", trust + "\n      case 'cta':", 1)
 
