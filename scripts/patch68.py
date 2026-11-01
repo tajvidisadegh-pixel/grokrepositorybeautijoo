@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Minimal safe patches for issue #68."""
 from pathlib import Path
+import base64, zlib
 
 # 1) admin-catalog: allow icon field
 p = Path('backend/src/admin/admin-catalog.controller.ts')
@@ -34,20 +35,28 @@ t = t.replace(
 p.write_text(t)
 print('panel-shell', '{title ?' in t)
 
-# 3) dashboard method — inject timeStats if missing
+# 3) dashboard method from chunks
 p = Path('backend/src/admin/admin.service.ts')
 t = p.read_text()
 if 'last1Hour' not in t and 'async dashboard()' in t:
-    start = t.index('  async dashboard() {')
-    end = t.index('\n  async getFinancialSummary', start)
-    new_dash = Path('scripts/dashboard_method_snippet.txt').read_text() if Path('scripts/dashboard_method_snippet.txt').exists() else None
-    if new_dash:
+    parts = []
+    i = 0
+    while True:
+        cp = Path(f'scripts/dash68_chunks/c{i}.b64')
+        if not cp.exists():
+            break
+        parts.append(cp.read_text().strip())
+        i += 1
+    if parts:
+        new_dash = zlib.decompress(base64.b64decode(''.join(parts))).decode()
+        start = t.index('  async dashboard() {')
+        end = t.index('\n  async getFinancialSummary', start)
         t = t[:start] + new_dash + t[end:]
         p.write_text(t)
-        print('dashboard replaced')
+        print('dashboard replaced', 'last1Hour' in t)
     else:
-        print('dashboard snippet missing — skip')
+        print('no dash chunks')
 else:
-    print('dashboard already has last1Hour or missing method')
+    print('dashboard skip', 'last1Hour' in t)
 
 print('done')
