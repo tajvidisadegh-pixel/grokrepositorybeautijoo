@@ -125,7 +125,7 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [window, setWindowKey] = useState<WindowKey>('last7Days');
+  const [windowKey, setWindowKey] = useState<WindowKey>('last7Days');
   const [reviewQueue, setReviewQueue] = useState({ professionals: 0, bookings: 0, reviews: 0, support: 0, media: 0 });
 
   useEffect(() => {
