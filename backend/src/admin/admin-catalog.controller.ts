@@ -42,6 +42,8 @@ class UpdateCategoryDto {
   @IsOptional() @IsString() description?: string;
   /** Accepted so frontend sortOrder patch is not rejected by forbidNonWhitelisted (#26). */
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+  /** Popular mark uses icon === 'popular' (#68). */
+  @IsOptional() @IsString() icon?: string | null;
 }
 
 class CreateCatalogServiceDto {
@@ -143,6 +145,7 @@ export class AdminCatalogController {
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.description !== undefined ? { description: dto.description.trim() || null } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.icon !== undefined ? { icon: dto.icon ? String(dto.icon).trim() || null : null } : {}),
       },
       include: {
         parent: { select: { id: true, name: true } },
