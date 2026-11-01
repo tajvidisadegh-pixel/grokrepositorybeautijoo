@@ -11,67 +11,115 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Wrap form+chips in single parent div
+      - name: Fix JSX parent structurally
         run: |
           python3 << 'PY'
           from pathlib import Path
           p = Path('frontend/src/app/page.tsx')
           t = p.read_text()
 
-          old_open = """                {features.showSearchInHero !== false && (
-                  <form
-                    action={hero.ctaLink || '/search'}
-                    method="get"
-                    className={`mt-6 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3 ${
-                      hero.searchAlign === 'right'
-                        ? 'mr-0 ml-auto max-w-xl'
-                        : hero.searchAlign === 'left'
-                          ? 'ml-0 mr-auto max-w-xl'
-                          : 'mx-auto max-w-xl'
-                    }`}
-                  >"""
+          # If already wrapped, skip
+          if 'mt-6 w-full sm:mt-8' in t and 'search?q=%DA%A9' in t:
+              print('already fixed')
+              raise SystemExit(0)
 
-          new_open = """                {features.showSearchInHero !== false && (
-                  <div
-                    className={`mt-6 w-full sm:mt-8 ${
-                      hero.searchAlign === 'right'
-                        ? 'mr-0 ml-auto max-w-xl'
-                        : hero.searchAlign === 'left'
-                          ? 'ml-0 mr-auto max-w-xl'
-                          : 'mx-auto max-w-xl'
-                    }`}
-                  >
-                    <form
-                      action={hero.ctaLink || '/search'}
-                      method="get"
-                      className="flex w-full flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"
-                    >"""
-
-          if old_open not in t:
-              if 'search?q=%DA%A9' in t and '</form>\n                    <div className="mt-3 flex flex-wrap' not in t:
-                  print('already fixed')
-                  raise SystemExit(0)
-              print('open pattern missing')
+          chips_marker = 'search?q=%DA%A9%D9%88%D8%AA%D8%A7%D9%87%DB%8C'
+          if chips_marker not in t:
+              print('no chips found')
               raise SystemExit(1)
 
-          t = t.replace(old_open, new_open, 1)
+          chips_idx = t.find(chips_marker)
+          # Broken: </form> then chips div as sibling inside && (
+          form_close = t.rfind('</form>', 0, chips_idx)
+          if form_close < 0:
+              raise SystemExit('form close not found')
 
-          old_close = """                      <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">نزدیک من</Link>
-                    </div>
-                )}"""
+          # Find the opening <form for this block
+          form_open = t.rfind('<form', 0, form_close)
+          if form_open < 0:
+              raise SystemExit('form open not found')
 
-          new_close = """                      <Link href="/search?sort=distance" className="rounded-full border border-coral/40 bg-coral-soft/50 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral-soft">نزدیک من</Link>
-                    </div>
-                  </div>
-                )}"""
+          # Find start of the && ( condition just before form
+          cond = t.rfind('{features.showSearchInHero !== false && (', 0, form_open)
+          if cond < 0:
+              raise SystemExit('condition not found')
 
-          if old_close not in t:
-              print('close pattern missing')
-              raise SystemExit(1)
+          # Find end of chips div after chips_idx
+          # chips block ends with </div> then )}
+          after_chips = t.find('</div>', chips_idx)
+          if after_chips < 0:
+              raise SystemExit('chips div end not found')
+          # that </div> closes the chips container; next should be )}
+          close_paren = t.find(')}', after_chips)
+          if close_paren < 0:
+              raise SystemExit('close paren not found')
 
-          t = t.replace(old_close, new_close, 1)
+          # Extract pieces
+          before = t[:cond]
+          # From after "&& (" to form_open - should be whitespace/newline
+          # We'll rebuild the condition body as a single <div> wrapping form + chips
+
+          # Get form element text including its attributes/className with mt-6
+          form_end = form_close + len('</form>')
+          form_html = t[form_open:form_end]
+
+          # Extract alignment classes from form className template for wrapper
+          # Move mt-6/sm:mt-8/max-w/align to wrapper; form keeps flex classes only
+          chips_html = t[form_end:after_chips + len('</div>')].lstrip('\n')
+
+          # Simplify form className to flex-only
+          import re
+          form_html2 = re.sub(
+              r'className=\{`mt-6 flex w-full flex-col gap-2\.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3 \$\{[^}]+\}`\}',
+              'className="flex w-full flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"',
+              form_html,
+              count=1,
+          )
+
+          wrapper = (
+              "{features.showSearchInHero !== false && (\n"
+              "                  <div\n"
+              "                    className={`mt-6 w-full sm:mt-8 ${\n"
+              "                      hero.searchAlign === 'right'\n"
+              "                        ? 'mr-0 ml-auto max-w-xl'\n"
+              "                        : hero.searchAlign === 'left'\n"
+              "                          ? 'ml-0 mr-auto max-w-xl'\n"
+              "                          : 'mx-auto max-w-xl'\n"
+              "                    }`}\n"
+              "                  >\n"
+              "                    " + form_html2.replace('\n', '\n                    ', 0) + "\n"
+              "                    " + chips_html.strip() + "\n"
+              "                  </div>\n"
+              "                )}"
+          )
+
+          # Actually keep form indentation simple - insert wrapper around existing form+chips
+          # Minimal surgical approach:
+          # 1) After "&& (" insert "<>\n"  NO - use div with class from form
+
+          # Simplest reliable fix: wrap siblings with React.Fragment via <> </>
+          # Insert <> right after "&& (\n" and </> right before ")}"
+
+          # Reset to original t for simplest path
+          t = p.read_text()
+          chips_idx = t.find(chips_marker)
+          form_close = t.rfind('</form>', 0, chips_idx)
+          cond = t.rfind('{features.showSearchInHero !== false && (', 0, form_close)
+          after_chips = t.find('</div>', chips_idx)
+          close_paren = t.find(')}', after_chips)
+
+          # Insert fragment open after "&& ("
+          insert_at = cond + len('{features.showSearchInHero !== false && (')
+          t = t[:insert_at] + '\n                  <>' + t[insert_at:]
+          # close_paren shifted by len of insert
+          shift = len('\n                  <>')
+          close_paren += shift
+          t = t[:close_paren] + '\n                  </>' + t[close_paren:]
+
           p.write_text(t)
-          print('fixed', p.stat().st_size)
+          print('wrapped with fragment', p.stat().st_size)
+          # sanity: still one chips marker
+          assert t.count(chips_marker) == 1
           PY
       - name: Commit
         run: |
@@ -79,5 +127,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend/src/app/page.tsx
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
-          git commit -m "fix(#69): wrap hero search+chips in single parent (JSX typecheck)"
+          git commit -m "fix(#69): wrap hero search chips siblings in fragment (JSX typecheck)"
           git push
