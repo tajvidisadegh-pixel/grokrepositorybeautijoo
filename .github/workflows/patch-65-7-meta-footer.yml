@@ -1,0 +1,88 @@
+name: patch-65-7-meta-footer
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-65-7-meta-footer.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nest meta under hours, smaller
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          t = p.read_text()
+
+          old = '''      {hoursLine && (
+        <p className="mt-8 border-t border-border/60 pt-4 text-center text-sm text-gray">
+          <OpenStatusBadge hours={pro.workingHours || []} showRange size="md" />{hoursLine ? <span className="text-sm text-gray"> · {hoursLine}</span> : null}
+        </p>
+      )}
+
+      {/* #65.7 — member / last-updated tiny footer under hours */}
+      {(memberSince || lastAct || profileUpd) && (
+        <p className="mt-2 text-center text-[11px] leading-5 text-gray-muted">
+          {[memberSince ? `عضو از ${memberSince}` : null, lastAct, profileUpd]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}'''
+
+          new = '''      {/* #65.7 — hours first; member/update only as tiny line under hours */}
+      {(hoursLine || memberSince || profileUpd) && (
+        <footer className="mt-8 border-t border-border/60 pt-4 text-center">
+          {hoursLine ? (
+            <p className="text-sm text-gray">
+              <OpenStatusBadge hours={pro.workingHours || []} showRange size="md" />
+              <span className="text-sm text-gray"> · {hoursLine}</span>
+            </p>
+          ) : null}
+          {(memberSince || profileUpd) ? (
+            <p className="mt-1.5 text-[10px] leading-4 text-gray-muted/80 opacity-70">
+              {[memberSince ? `عضو از ${memberSince}` : null, profileUpd]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
+        </footer>
+      )}'''
+
+          if old not in t:
+              if 'text-[10px]' in t and 'عضو از' in t:
+                  print('already tiny')
+              else:
+                  raise SystemExit('footer block not found')
+          else:
+              t = t.replace(old, new, 1)
+              # drop unused lastAct computation noise? keep vars unused may lint — remove lastAct usage only; can leave const
+              p.write_text(t)
+              print('footer patched', p.stat().st_size)
+
+          # remove lastAct variable if unused to avoid lint
+          t = p.read_text()
+          if 'lastAct' in t and 'lastAct,' not in t and 'lastAct)' not in t.split('formatLastActivity')[-1][:20]:
+              # still assigned — remove assignment if not referenced elsewhere
+              if t.count('lastAct') == 1 or (t.count('lastAct') == 2 and 'const lastAct' in t):
+                  import re
+                  t2 = re.sub(
+                      r"\n  const lastAct = formatLastActivity\(\n    \(pro as \{ user\?: \{ lastLoginAt\?: string \| null \} \}\)\.user\?\.lastLoginAt,\n  \);",
+                      "",
+                      t,
+                  )
+                  if t2 != t:
+                      p.write_text(t2)
+                      print('removed unused lastAct')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/professionals/[slug]/page.tsx
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "feat(#65.7): member/update only tiny under working hours"
+          git push
