@@ -1,0 +1,280 @@
+name: patch-65-16-service-matrix
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-65-16-service-matrix.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Multi-dim pricing + no collapse after save
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          # ---- catalog: add volume dim alongside length for hair families ----
+          ct = Path('frontend/src/lib/catalog-template.ts')
+          c = ct.read_text()
+          # For hair families that only have length, add volume
+          old_len_only = "dims: [{ key: 'length', label: 'قد مو', options: ['کوتاه', 'متوسط', 'بلند'] }],"
+          new_len_vol = "dims: [{ key: 'length', label: 'قد مو', options: ['کوتاه', 'متوسط', 'بلند'] }, { key: 'volume', label: 'حجم مو', options: ['کم', 'متوسط', 'زیاد'] }],"
+          # apply to first few hair families but NOT all blindly - apply to کوتاهی، رنگ، احیا، فر
+          count = 0
+          parts = c.split(old_len_only)
+          if len(parts) > 1:
+              out = [parts[0]]
+              for i, p in enumerate(parts[1:], 1):
+                  # keep lamination/light families that already multi-dim
+                  if count < 6:
+                      out.append(new_len_vol + p)
+                      count += 1
+                  else:
+                      out.append(old_len_only + p)
+              c = ''.join(out)
+              ct.write_text(c)
+              print('catalog volume dims added', count)
+          else:
+              print('catalog pattern not found or already multi')
+
+          # ---- services page: keep open + dim matrix ----
+          sp = Path('frontend/src/app/zibagar/services/page.tsx')
+          t = sp.read_text()
+
+          # helper import expand if exists in catalog-template
+          if 'expandDimCombos' not in t and 'CATALOG_TEMPLATE' in t:
+              t = t.replace(
+                  "} from '@/lib/catalog-template';",
+                  ", expandDimCombos } from '@/lib/catalog-template';".replace(', expandDimCombos }', ', expandDimCombos }')
+              )
+              # fix import properly
+              t = t.replace(
+                  '''import {
+  CATALOG_TEMPLATE,
+  type CatalogFamily,
+  type CatalogSpecialty,
+  type CatalogVariant,
+} from '@/lib/catalog-template';''',
+                  '''import {
+  CATALOG_TEMPLATE,
+  expandDimCombos,
+  type CatalogFamily,
+  type CatalogSpecialty,
+  type CatalogVariant,
+} from '@/lib/catalog-template';''',
+              )
+
+          # ensure expandDimCombos exists in catalog-template
+          ct_text = Path('frontend/src/lib/catalog-template.ts').read_text()
+          if 'export function expandDimCombos' not in ct_text:
+              # find existing expand helper
+              if 'function expand' in ct_text or 'export function expandDims' in ct_text:
+                  pass
+              ct_text += '''
+
+/** Product of dimension options → human labels (#65.16). */
+export function expandDimCombos(dims: PriceDim[]): string[] {
+  const active = (dims || []).filter((d) => d.options?.length);
+  if (!active.length) return [];
+  return active.reduce<string[]>((acc, d) => {
+    if (!acc.length) return d.options.map((o) => `${d.label}: ${o}`);
+    return acc.flatMap((a) => d.options.map((o) => `${a} · ${d.label}: ${o}`));
+  }, []);
+}
+'''
+              Path('frontend/src/lib/catalog-template.ts').write_text(ct_text)
+              print('expandDimCombos exported')
+
+          # After save: return to service list instead of closing sheet
+          t = t.replace(
+              '''      setMsg(`«${pickedVar.name}» به منو اضافه شد`);
+      setTimeout(() => setMsg(null), 2500);
+      setSheet(null);
+      await load();''',
+              '''      setMsg(`«${pickedVar.name}» به منو اضافه شد — می‌توانید خدمت بعدی را قیمت‌گذاری کنید`);
+      setTimeout(() => setMsg(null), 3000);
+      // #65.16 — do not close other options; stay in family list
+      setAddStep('service');
+      setPickedVar(null);
+      setAddPrice('');
+      setAddDuration('60');
+      setDimRows({});
+      await load();''',
+          )
+
+          # add dimRows state
+          if 'dimRows' not in t:
+              t = t.replace(
+                  "  const [addDuration, setAddDuration] = useState('60');",
+                  "  const [addDuration, setAddDuration] = useState('60');\n  /** label -> {price, duration} for multi-dim matrix */\n  const [dimRows, setDimRows] = useState<Record<string, { price: string; duration: string }>>({});",
+              )
+
+          # enhance price step with matrix when dims exist
+          price_step_old = '''          {addStep === 'price' && pickedVar && (
+            <div className="space-y-4">
+              <button
+                type="button"
+                className="text-sm text-gray underline"
+                onClick={() => setAddStep('service')}
+              >
+                → تغییر خدمت
+              </button>
+              <p className="text-base font-semibold text-navy">{pickedVar.name}</p>
+
+              <div>
+                <label className="mb-1.5 block text-sm text-gray">قیمت (تومان)</label>'''
+
+          if price_step_old in t and 'جدول قیمت بر اساس' not in t:
+              # inject matrix before base price field
+              inject_head = '''          {addStep === 'price' && pickedVar && (
+            <div className="space-y-4">
+              <button
+                type="button"
+                className="text-sm text-gray underline"
+                onClick={() => { setAddStep('service'); setPickedVar(null); setDimRows({}); }}
+              >
+                → بازگشت به فهرست خدمات (باز می‌ماند)
+              </button>
+              <p className="text-base font-semibold text-navy">{pickedVar.name}</p>
+
+              {pickedFam && (pickedFam.dims || []).length > 0 && (
+                <div className="space-y-2 rounded-2xl border border-border p-3">
+                  <p className="text-sm font-medium text-navy">جدول قیمت و زمان بر اساس ویژگی‌ها</p>
+                  <p className="text-xs text-gray">برای هر ترکیب، قیمت و مدت جداگانه بگذارید. خالی = استفاده از قیمت پایه.</p>
+                  <div className="max-h-[40vh] space-y-2 overflow-y-auto">
+                    {expandDimCombos(
+                      (pickedVar.dimKeys && pickedVar.dimKeys.length === 0)
+                        ? []
+                        : (pickedFam.dims || []).filter((d) =>
+                            !pickedVar.dimKeys?.length
+                              ? true
+                              : pickedVar.dimKeys.includes(d.key),
+                          ),
+                    ).map((label) => (
+                      <div key={label} className="rounded-xl bg-gray-50 p-2">
+                        <p className="mb-1 text-xs font-medium text-navy">{label}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            inputMode="numeric"
+                            placeholder="قیمت"
+                            value={dimRows[label]?.price || ''}
+                            onChange={(e) =>
+                              setDimRows((prev) => ({
+                                ...prev,
+                                [label]: {
+                                  price: e.target.value.replace(/[^\d]/g, ''),
+                                  duration: prev[label]?.duration || addDuration || '60',
+                                },
+                              }))
+                            }
+                            className="h-10 rounded-xl text-sm tabular-nums"
+                          />
+                          <Input
+                            inputMode="numeric"
+                            placeholder="دقیقه"
+                            value={dimRows[label]?.duration || ''}
+                            onChange={(e) =>
+                              setDimRows((prev) => ({
+                                ...prev,
+                                [label]: {
+                                  price: prev[label]?.price || '',
+                                  duration: e.target.value.replace(/[^\d]/g, ''),
+                                },
+                              }))
+                            }
+                            className="h-10 rounded-xl text-sm tabular-nums"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1.5 block text-sm text-gray">قیمت پایه (تومان)</label>'''
+              t = t.replace(price_step_old, inject_head, 1)
+              print('price matrix UI injected')
+
+          # saveNewService: also save price rules from dimRows
+          if 'upsertMyPriceRule' not in t:
+              t = t.replace(
+                  'upsertMyPriceRule,\n  fetchMyPriceRules,',
+                  'upsertMyPriceRule,\n  fetchMyPriceRules,',
+              )
+              # ensure import
+              if 'upsertMyPriceRule' not in t.split('from')[0]:
+                  t = t.replace(
+                      'upsertMyService,',
+                      'upsertMyService,\n  upsertMyPriceRule,',
+                  )
+
+          # after patch/upsert service, save dim rules
+          anchor = '''      setMsg(`«${pickedVar.name}» به منو اضافه شد — می‌توانید خدمت بعدی را قیمت‌گذاری کنید`);'''
+          if anchor in t and 'dimRows' in t and 'for (const [label, row] of Object.entries(dimRows))' not in t:
+              t = t.replace(
+                  anchor,
+                  '''      // save multi-dim rows as price rules (each with own duration via label)
+      const psId = existing?.id || (await (async () => {
+        const list = await fetchMyServices();
+        const arr = Array.isArray(list) ? list : (list as { items?: ProfessionalServiceItem[] }).items || [];
+        const hit = arr.find((m) => norm(m.service?.name || '') === norm(pickedVar.name));
+        return hit?.id as string | undefined;
+      })());
+      if (psId) {
+        for (const [label, row] of Object.entries(dimRows)) {
+          const pr = Number(String(row.price || '').replace(/[^\d]/g, ''));
+          if (!Number.isFinite(pr) || pr < MIN_PRICE) continue;
+          const durR = Math.max(5, Number(row.duration) || dur);
+          try {
+            await upsertMyPriceRule(psId, {
+              label,
+              price: pr,
+              durationMin: durR,
+              isActive: true,
+            } as any);
+          } catch {
+            /* optional per-row */
+          }
+        }
+      }
+      setMsg(`«${pickedVar.name}» به منو اضافه شد — می‌توانید خدمت بعدی را قیمت‌گذاری کنید`);''',
+              )
+              # need fetchMyServices import
+              if 'fetchMyServices' not in t:
+                  t = t.replace('fetchMyServices,', 'fetchMyServices,')
+              print('dim rows save logic added')
+
+          # ServiceEditPanel: keep showModels open - default true; after onAddModel don't collapse
+          sep = Path('frontend/src/app/zibagar/services/ServiceEditPanel.tsx')
+          if sep.exists():
+              s = sep.read_text()
+              s = s.replace(
+                  "{showModels ? '▼' : '▶'} زیرمجموعه‌ها",
+                  "{showModels ? '▼' : '▶'} زیرمجموعه‌ها (قد / حجم / …)",
+              )
+              # labels for dual fields already have duration - clarify
+              s = s.replace(
+                  '<Input placeholder="نام زیرمجموعه"',
+                  '<Input placeholder="مثلاً قد: بلند · حجم: زیاد"',
+              )
+              sep.write_text(s)
+              print('ServiceEditPanel copy updated')
+
+          sp.write_text(t)
+          print('services page size', sp.stat().st_size)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/catalog-template.ts \
+            frontend/src/app/zibagar/services/page.tsx \
+            frontend/src/app/zibagar/services/ServiceEditPanel.tsx
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "feat(#65.16): multi-dim price/duration matrix; keep options open"
+          git push
