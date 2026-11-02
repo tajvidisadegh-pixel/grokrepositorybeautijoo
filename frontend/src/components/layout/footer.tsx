@@ -61,7 +61,7 @@ export function Footer() {
             </li>
             <li>
               <Link href="/panel" className="transition-colors hover:text-coral-light">
-                پنل مشتری
+                پنل کاربر
               </Link>
             </li>
           </ul>
