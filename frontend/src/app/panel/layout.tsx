@@ -1,23 +1,27 @@
 'use client';
-import type { ReactNode } from 'react';
+
 import { PanelShell } from '@/components/panel/panel-shell';
 
-const ITEMS = [
-  { href: '/panel', label: 'داشبورد', mobile: true },
-  { href: '/panel/bookings', label: 'رزروها', mobile: true },
+const links = [
+  { href: '/panel', label: 'داشبورد' },
+  { href: '/panel/bookings', label: 'رزروها' },
   { href: '/panel/favorites', label: 'علاقه‌مندی‌ها' },
-  { href: '/panel/reviews', label: 'نظرات' },
-  { href: '/panel/notifications', label: 'اعلان‌ها', mobile: true },
-  { href: '/panel/profile', label: 'پروفایل', mobile: true },
+  { href: '/panel/notifications', label: 'اعلان‌ها' },
+  { href: '/panel/profile', label: 'پروفایل' },
   { href: '/panel/settings', label: 'تنظیمات' },
+  { href: '/panel/support', label: 'پشتیبانی' },
 ];
 
-export default function PanelLayout({ children }: { children: ReactNode }) {
+export default function PanelLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <PanelShell
-      title="پنل مشتری"
-      items={ITEMS}
-      roles={['customer', 'admin', 'SUPER_ADMIN']}
+      title="پنل کاربر"
+      requiredAccountType="customer"
+      links={links}
     >
       {children}
     </PanelShell>
