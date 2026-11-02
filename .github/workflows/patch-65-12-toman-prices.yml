@@ -1,0 +1,194 @@
+name: patch-65-12-toman-prices
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-65-12-toman-prices.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Harden price format + payment integers
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # ---- frontend utils ----
+          u = Path('frontend/src/lib/utils.ts')
+          t = u.read_text()
+
+          old_fmt = '''/** Format number with Persian digits and thousand separators + تومان. */
+export function formatPrice(amount: number): string {
+  const n = Math.floor(Number(amount) || 0);
+  return new Intl.NumberFormat('fa-IR').format(n) + ' تومان';
+}'''
+
+          new_fmt = '''/** Normalize any amount to non-negative integer تومان. */
+export function toTomanInt(amount: unknown): number {
+  const n = Math.floor(Number(amount));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+}
+
+/** Format number with Persian digits, thousand separators + تومان (#65.12). */
+export function formatPrice(amount: number): string {
+  const n = toTomanInt(amount);
+  return `${new Intl.NumberFormat('fa-IR').format(n)} تومان`;
+}
+
+/** Optional second line: amount in Persian words + تومان. */
+export function formatPriceWordsLine(amount: number): string {
+  const n = toTomanInt(amount);
+  try {
+    // priceToWords is defined below in this module
+    return `${priceToWords(n)} تومان`;
+  } catch {
+    return formatPrice(n);
+  }
+}'''
+
+          if 'toTomanInt' not in t:
+              if old_fmt not in t:
+                  raise SystemExit('formatPrice block missing')
+              t = t.replace(old_fmt, new_fmt, 1)
+              # update formatPriceDigits to use toTomanInt
+              t = t.replace(
+                  '''export function formatPriceDigits(amount: number): string {
+  const n = Math.floor(Number(amount) || 0);
+  return new Intl.NumberFormat('fa-IR').format(n);
+}''',
+                  '''export function formatPriceDigits(amount: number): string {
+  return new Intl.NumberFormat('fa-IR').format(toTomanInt(amount));
+}''',
+              )
+              u.write_text(t)
+              print('utils updated')
+          else:
+              print('utils already has toTomanInt')
+
+          # ---- PriceText component ----
+          pt = Path('frontend/src/components/ui/price-text.tsx')
+          pt.write_text('''import { formatPrice, formatPriceWordsLine, toTomanInt } from '@/lib/utils';
+
+/** Consistent تومان display (#65.12). */
+export function PriceText({
+  amount,
+  className = '',
+  showWords = false,
+  wordsClassName = 'mt-0.5 text-xs text-gray',
+}: {
+  amount: number | null | undefined;
+  className?: string;
+  /** Show Persian words under the number */
+  showWords?: boolean;
+  wordsClassName?: string;
+}) {
+  if (amount == null || !Number.isFinite(Number(amount))) return null;
+  const n = toTomanInt(amount);
+  return (
+    <span className={className}>
+      <span className="tabular-nums">{formatPrice(n)}</span>
+      {showWords ? <span className={`block ${wordsClassName}`}>{formatPriceWordsLine(n)}</span> : null}
+    </span>
+  );
+}
+''')
+          print('PriceText written')
+
+          # ---- payments.service: integer amount ----
+          ps = Path('backend/src/payments/payments.service.ts')
+          pt_ = ps.read_text()
+          if 'toTomanInt' not in pt_ and 'Math.floor(Number(booking.totalPrice)' not in pt_:
+              # ensure amount is integer when creating payment
+              pt_ = pt_.replace(
+                  'amount: booking.totalPrice,',
+                  'amount: Math.max(0, Math.floor(Number(booking.totalPrice) || 0)),',
+              )
+              # initiate also
+              pt_ = pt_.replace(
+                  '''const result = await this.provider.initiate({
+        amount: booking.totalPrice,''',
+                  '''const amountToman = Math.max(0, Math.floor(Number(booking.totalPrice) || 0));
+      if (amountToman <= 0) {
+        throw new BadRequestException('مبلغ پرداخت نامعتبر است');
+      }
+      const result = await this.provider.initiate({
+        amount: amountToman,''',
+              )
+              # import BadRequestException if missing
+              if 'BadRequestException' not in pt_.split('from')[0] and "BadRequestException" not in pt_[:400]:
+                  pt_ = pt_.replace(
+                      'NotFoundException',
+                      'BadRequestException, NotFoundException',
+                      1,
+                  )
+              ps.write_text(pt_)
+              print('payments.service amounts floored')
+          else:
+              print('payments already hardened')
+
+          # ---- bookings.service totalPrice floor ----
+          bs = Path('backend/src/bookings/bookings.service.ts')
+          bt = bs.read_text()
+          if 'const totalPrice = lines.reduce((s, l) => s + l.price, 0);' in bt:
+              bt = bt.replace(
+                  'const totalPrice = lines.reduce((s, l) => s + l.price, 0);',
+                  'const totalPrice = Math.max(0, Math.floor(lines.reduce((s, l) => s + Number(l.price || 0), 0)));',
+                  1,
+              )
+              bs.write_text(bt)
+              print('bookings totalPrice floored')
+
+          # ---- zarinpal message in toman ----
+          zp = Path('backend/src/payments/zarinpal-payment.provider.ts')
+          zt = zp.read_text()
+          zt = zt.replace(
+              "throw new BadRequestException('حداقل مبلغ پرداخت ۱۰۰۰ ریال است');",
+              "throw new BadRequestException('حداقل مبلغ پرداخت نامعتبر است (کمتر از حد درگاه)');",
+          )
+          # toRials safety
+          if 'Math.max(0, Math.floor(Number(toman)' not in zt:
+              zt = zt.replace(
+                  '''  private toRials(toman: number): number {
+    return Math.round(toman * 10);
+  }''',
+                  '''  private toRials(toman: number): number {
+    const t = Math.max(0, Math.floor(Number(toman) || 0));
+    return t * 10; // DB تومان → ریال زرین‌پال
+  }''',
+              )
+          zp.write_text(zt)
+          print('zarinpal patched')
+
+          # ---- financial.util comment clarity ----
+          fu = Path('backend/src/payments/financial.util.ts')
+          if fu.exists():
+              ft = fu.read_text()
+              if 'toTomanInt' not in ft:
+                  ft = ft.replace(
+                      'const commissionAmount = Math.round((grossAmount * normalizedRate) / 100);',
+                      'const gross = Math.max(0, Math.floor(Number(grossAmount) || 0));\n  const commissionAmount = Math.round((gross * normalizedRate) / 100);',
+                  )
+                  ft = ft.replace(
+                      'const professionalNetAmount = grossAmount - commissionAmount;',
+                      'const professionalNetAmount = gross - commissionAmount;',
+                  )
+                  fu.write_text(ft)
+                  print('financial.util patched')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/utils.ts \
+            frontend/src/components/ui/price-text.tsx \
+            backend/src/payments/payments.service.ts \
+            backend/src/bookings/bookings.service.ts \
+            backend/src/payments/zarinpal-payment.provider.ts \
+            backend/src/payments/financial.util.ts
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "feat(#65.12): تومان display + integer payment amounts"
+          git push
