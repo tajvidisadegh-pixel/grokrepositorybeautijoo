@@ -1,0 +1,182 @@
+name: patch-65-4-post-pay-contact
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-65-4-post-pay-contact.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch backend list + customer bookings UI
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # 1) Backend: richer include for customer booking list
+          bs = Path('backend/src/bookings/bookings.service.ts')
+          t = bs.read_text()
+          old = """        include: {
+          professional: { select: { id: true, title: true, slug: true } },
+          items: true,
+          payment: true,
+        },"""
+          new = """        include: {
+          // #65.4 — phone + location after pay; slug for profile link
+          professional: {
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+              user: {
+                select: {
+                  phone: true,
+                  profile: { select: { displayName: true } },
+                },
+              },
+            },
+          },
+          location: {
+            select: { address: true, city: true, province: true, name: true },
+          },
+          items: true,
+          payment: true,
+        },"""
+          if old not in t:
+              if 'user: {' in t and 'listMineAsCustomer' in t:
+                  print('backend list already expanded')
+              else:
+                  # try alternate spacing
+                  raise SystemExit('listMineAsCustomer include not found')
+          else:
+              t = t.replace(old, new, 1)
+              bs.write_text(t)
+              print('backend listMineAsCustomer ok')
+
+          # 2) Frontend: customer bookings card — link name, show phone+address after pay
+          p = Path('frontend/src/app/panel/bookings/page.tsx')
+          t = p.read_text()
+
+          # Replace plain proName with linked name + contact block
+          old_block = """            const proName =
+              b.professional?.user?.profile?.displayName ||
+              b.professional?.title ||
+              'زیباگر';
+            const alreadyReviewed =
+              reviewedIds.has(b.id) || !!b.review || !!b.hasReview;
+            const payStatus = b.payment?.status;
+            const showCancel = canCustomerCancel(b);
+            return (
+              <li key={b.id}>
+                <Card className="space-y-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{proName}</p>"""
+
+          new_block = """            const proName =
+              b.professional?.user?.profile?.displayName ||
+              b.professional?.title ||
+              'زیباگر';
+            const proSlug = (b.professional as { slug?: string } | undefined)?.slug;
+            const proPhone =
+              (b.professional as { user?: { phone?: string | null } } | undefined)?.user?.phone ||
+              null;
+            const loc = b.location as
+              | { address?: string | null; city?: string | null; province?: string | null; name?: string | null }
+              | undefined;
+            const proAddress =
+              loc?.address ||
+              [loc?.name, loc?.city, loc?.province].filter(Boolean).join('، ') ||
+              null;
+            const alreadyReviewed =
+              reviewedIds.has(b.id) || !!b.review || !!b.hasReview;
+            const payStatus = b.payment?.status;
+            const showCancel = canCustomerCancel(b);
+            const contactUnlocked =
+              payStatus === 'paid' ||
+              payStatus === 'success' ||
+              b.status === 'confirmed' ||
+              b.status === 'completed';
+            return (
+              <li key={b.id}>
+                <Card className="space-y-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      {proSlug ? (
+                        <Link
+                          href={`/professionals/${proSlug}`}
+                          className="font-semibold text-coral hover:underline"
+                        >
+                          {proName}
+                        </Link>
+                      ) : (
+                        <p className="font-semibold">{proName}</p>
+                      )}"""
+
+          if old_block not in t:
+              if 'contactUnlocked' in t:
+                  print('frontend already has contactUnlocked')
+              else:
+                  raise SystemExit('frontend proName block not found')
+          else:
+              t = t.replace(old_block, new_block, 1)
+
+          # Replace thin phone-only block with full contact card
+          old_phone = """                      {((b.status === 'confirmed' || b.status === 'completed') &&
+                        (b.professional as { user?: { phone?: string | null } } | undefined)?.user?.phone) ? (
+                        <a
+                          href={`tel:${(b.professional as { user?: { phone?: string | null } }).user!.phone}`}
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-coral hover:text-coral-dark"
+                          dir="ltr"
+                        >
+                          تماس با زیباگر: {(b.professional as { user?: { phone?: string | null } }).user!.phone}
+                        </a>
+                      ) : null}"""
+
+          new_phone = """                      {contactUnlocked && (proPhone || proAddress) ? (
+                        <div className="mt-2 w-full max-w-[260px] space-y-1 rounded-xl border border-coral/20 bg-coral/5 px-2.5 py-2 text-start text-xs">
+                          <p className="font-medium text-foreground">اطلاعات تماس زیباگر</p>
+                          {proPhone ? (
+                            <a
+                              href={`tel:${proPhone}`}
+                              className="inline-flex items-center gap-1 font-medium text-coral hover:text-coral-dark"
+                              dir="ltr"
+                            >
+                              {proPhone}
+                            </a>
+                          ) : null}
+                          {proAddress ? (
+                            <p className="text-gray">{proAddress}</p>
+                          ) : null}
+                        </div>
+                      ) : null}"""
+
+          if old_phone in t:
+              t = t.replace(old_phone, new_phone, 1)
+              print('phone block replaced')
+          elif 'اطلاعات تماس زیباگر' in t:
+              print('contact card already present')
+          else:
+              print('WARN phone block pattern missed')
+
+          p.write_text(t)
+          print('frontend size', p.stat().st_size)
+
+          # Ensure Link is imported
+          t = p.read_text()
+          if "from 'next/link'" not in t and 'from "next/link"' not in t:
+              t = "import Link from 'next/link';\n" + t
+              p.write_text(t)
+              print('added Link import')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts frontend/src/app/panel/bookings/page.tsx
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "feat(#65.4): show pro phone+address after pay; link name to profile"
+          git push
