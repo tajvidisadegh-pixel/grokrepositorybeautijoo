@@ -213,6 +213,10 @@ export default async function ProfessionalProfilePage({ params }: Props) {
   const salonMedia = (pro.mediaAssets || []).filter(
     (m) => m.kind === 'salon' && (m.publicUrl || (m as { url?: string }).url),
   );
+  // نمونه‌کارهای سطح پروفایل (آپلود از /zibagar/portfolio با kind=portfolio)
+  const portfolioMedia = (pro.mediaAssets || []).filter(
+    (m) => m.kind === 'portfolio' && (m.publicUrl || (m as { url?: string }).url),
+  );
   // fallback cover from first salon photo if no dedicated cover
   const bannerUrl =
     coverUrl ||
@@ -298,6 +302,15 @@ export default async function ProfessionalProfilePage({ params }: Props) {
 
           {/* #65.6 — photos & portfolio before bio/about */}
           {salonMedia.length > 0 && <SalonMediaGallery media={salonMedia} />}
+
+          {portfolioMedia.length > 0 && (
+            <SalonMediaGallery
+              media={portfolioMedia}
+              title="نمونه‌کار"
+              subtitle="تصاویر و ویدیوهای نمونه‌کار زیباگر"
+              altFallback="نمونه‌کار"
+            />
+          )}
 
           <ServicePortfolioGallery
             slug={pro.slug}
