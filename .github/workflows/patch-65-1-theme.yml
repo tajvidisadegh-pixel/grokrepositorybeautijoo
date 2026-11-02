@@ -1,0 +1,115 @@
+name: patch-65-1-theme
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-65-1-theme.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch settings + header guard
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # 1) panel settings: ThemeAppearance card
+          p = Path('frontend/src/app/panel/settings/page.tsx')
+          t = p.read_text()
+          t = t.replace(
+              "import { ThemeToggle } from '@/components/theme/theme-toggle';",
+              "import { ThemeAppearance } from '@/components/theme/theme-toggle';",
+          )
+          old = '''      <div>
+        <h1 className="text-2xl font-bold">تنظیمات</h1>
+        <p className="mt-1 text-sm text-gray">مدیریت حساب، نشست‌ها و اعلان‌ها</p>
+      <div className="flex items-center justify-between rounded-2xl border border-border bg-white px-4 py-3">
+        <div>
+          <p className="text-sm font-medium">حالت نمایش</p>
+          <p className="text-xs text-gray">روشن / تاریک</p>
+        </div>
+        <ThemeToggle />
+      </div>
+      </div>'''
+          new = '''      <div>
+        <h1 className="text-2xl font-bold">تنظیمات</h1>
+        <p className="mt-1 text-sm text-gray">مدیریت حساب، نشست‌ها و اعلان‌ها</p>
+      </div>
+
+      <Card className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">حالت نمایش</h2>
+          <p className="mt-0.5 text-xs text-gray">
+            روشن یا تاریک — این گزینه فقط از تنظیمات قابل تغییر است (نه از بالای سایت).
+          </p>
+        </div>
+        <ThemeAppearance />
+      </Card>'''
+          if old not in t:
+              # try if already partially updated
+              if 'ThemeAppearance' in t:
+                  print('settings already patched')
+              else:
+                  raise SystemExit('settings pattern not found')
+          else:
+              t = t.replace(old, new, 1)
+              p.write_text(t)
+              print('settings patched', p.stat().st_size)
+
+          # 2) header must not import ThemeToggle
+          h = Path('frontend/src/components/layout/header.tsx')
+          ht = h.read_text()
+          if 'ThemeToggle' in ht or 'theme-toggle' in ht:
+              # strip any theme toggle block
+              lines = ht.splitlines(True)
+              out = []
+              skip = False
+              for line in lines:
+                  if 'ThemeToggle' in line or 'theme-toggle' in line:
+                      continue
+                  out.append(line)
+              h.write_text(''.join(out))
+              print('header cleaned')
+          else:
+              print('header already clean')
+
+          # 3) admin settings: add appearance card at top if missing
+          ap = Path('frontend/src/app/admin/settings/page.tsx')
+          at = ap.read_text()
+          if 'ThemeAppearance' not in at:
+              if "import { Button }" in at and "ThemeAppearance" not in at:
+                  at = at.replace(
+                      "import { Button } from '@/components/ui/button';",
+                      "import { Button } from '@/components/ui/button';\nimport { ThemeAppearance } from '@/components/theme/theme-toggle';",
+                      1,
+                  )
+              insert = '''
+      <Card className="space-y-3 p-4">
+        <div>
+          <h2 className="text-base font-semibold">حالت نمایش</h2>
+          <p className="mt-0.5 text-xs text-gray">روشن یا تاریک برای همین دستگاه</p>
+        </div>
+        <ThemeAppearance />
+      </Card>
+'''
+              marker = '      <div className="rounded-3xl border border-border bg-white p-4 space-y-2">'
+              if marker in at:
+                  at = at.replace(marker, insert + '\n' + marker, 1)
+                  ap.write_text(at)
+                  print('admin settings patched')
+              else:
+                  print('admin marker missing, skip')
+          else:
+              print('admin already has theme')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/panel/settings/page.tsx frontend/src/components/layout/header.tsx frontend/src/app/admin/settings/page.tsx
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -m "feat(#65.1): theme only in settings (panel + admin), not header"
+          git push
