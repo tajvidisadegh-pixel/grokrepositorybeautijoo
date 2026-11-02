@@ -64,6 +64,9 @@ type HeroCfg = NonNullable<PublishedSiteConfig['content']['hero']> & {
   searchPlaceholder?: string;
   contentPosition?: 'top' | 'center' | 'bottom';
   searchAlign?: 'right' | 'center' | 'left';
+  /** #65.9 — icon inside search box */
+  searchIconPosition?: 'left' | 'right' | 'hidden';
+  searchIconSize?: 'sm' | 'md';
   backgroundColor?: string;
 };
 
@@ -214,7 +217,7 @@ export default async function HomePage() {
                     <form
                       action={hero.ctaLink || '/search'}
                       method="get"
-                      className="mt-6 flex w-full max-w-md flex-col gap-2.5 sm:flex-row"
+                      className="mt-6 flex w-full max-w-md flex-row items-center gap-2"
                     >
                       <div className="relative flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-gray-muted" aria-hidden />
@@ -321,7 +324,7 @@ export default async function HomePage() {
                   <form
                     action={hero.ctaLink || '/search'}
                     method="get"
-                    className={`mt-6 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3 ${
+                    className={`mt-6 flex w-full flex-row items-center gap-2 sm:mt-8 sm:gap-3 ${
                       hero.searchAlign === 'right'
                         ? 'mr-0 ml-auto max-w-xl'
                         : hero.searchAlign === 'left'

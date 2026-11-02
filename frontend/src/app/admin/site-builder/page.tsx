@@ -25,6 +25,8 @@ type Hero = {
   searchPlaceholder?: string;
   contentPosition?: 'top' | 'center' | 'bottom';
   searchAlign?: 'right' | 'center' | 'left';
+  searchIconPosition?: 'left' | 'right' | 'hidden';
+  searchIconSize?: 'sm' | 'md';
   backgroundColor?: string;
 };
 
@@ -618,6 +620,8 @@ export default function AdminSiteBuilderPage() {
                 <Select label="رنگ متن" value={hero.textColor || 'auto'} onChange={(v) => patchHero({ textColor: v as Hero['textColor'] })} options={[{ value: 'auto', label: 'خودکار (روشن روی تصویر)' }, { value: 'light', label: 'روشن (سفید)' }, { value: 'dark', label: 'تیره' }]} />
                 <Select label="جایگاه محتوای بنر" value={hero.contentPosition || 'center'} onChange={(v) => patchHero({ contentPosition: v as Hero['contentPosition'] })} options={[{ value: 'top', label: 'بالا' }, { value: 'center', label: 'وسط' }, { value: 'bottom', label: 'پایین' }]} />
                 <Select label="تراز جعبه جستجو" value={hero.searchAlign || 'center'} onChange={(v) => patchHero({ searchAlign: v as Hero['searchAlign'] })} options={[{ value: 'right', label: 'راست' }, { value: 'center', label: 'وسط' }, { value: 'left', label: 'چپ' }]} />
+      <Select label="موقعیت آیکون جستجو" value={hero.searchIconPosition || 'left'} onChange={(v) => patchHero({ searchIconPosition: v as Hero['searchIconPosition'] })} options={[{ value: 'left', label: 'چپ (داخل باکس)' }, { value: 'right', label: 'راست (داخل باکس)' }, { value: 'hidden', label: 'مخفی' }]} />
+      <Select label="اندازه آیکون جستجو" value={hero.searchIconSize || 'sm'} onChange={(v) => patchHero({ searchIconSize: v as Hero['searchIconSize'] })} options={[{ value: 'sm', label: 'خیلی کوچک' }, { value: 'md', label: 'متوسط' }]} />
                 <label className="block text-xs">
                   <span className="mb-1 block font-medium text-[#1d2327]">رنگ پس‌زمینه بدون تصویر</span>
                   <input type="color" value={hero.backgroundColor || '#F7F9FC'} onChange={(e) => patchHero({ backgroundColor: e.target.value })} className="h-9 w-full cursor-pointer rounded border border-[#8c8f94] bg-white p-1" />
