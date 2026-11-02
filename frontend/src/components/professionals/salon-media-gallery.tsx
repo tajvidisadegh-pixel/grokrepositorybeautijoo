@@ -15,7 +15,17 @@ function isVideo(mime?: string | null) {
   return (mime || '').startsWith('video/');
 }
 
-export function SalonMediaGallery({ media }: { media: Media[] }) {
+export function SalonMediaGallery({
+  media,
+  title = 'عکس‌های محل',
+  subtitle = 'نمونه کارها · پس از تأیید زیباگر',
+  altFallback = 'محل',
+}: {
+  media: Media[];
+  title?: string;
+  subtitle?: string;
+  altFallback?: string;
+}) {
   const items = useMemo(
     () =>
       (media || [])
@@ -35,8 +45,8 @@ export function SalonMediaGallery({ media }: { media: Media[] }) {
 
   return (
     <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-bold text-foreground">عکس‌های محل</h2>
-      <p className="text-xs text-gray">نمونه کارها · پس از تأیید زیباگر</p>
+      <h2 className="text-lg font-bold text-foreground">{title}</h2>
+      {subtitle ? <p className="text-xs text-gray">{subtitle}</p> : null}
       <p className="mt-1 text-xs text-gray">برای بزرگ‌نمایی روی عکس بزنید</p>
       <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
         {items.map((m, i) => (
@@ -50,7 +60,7 @@ export function SalonMediaGallery({ media }: { media: Media[] }) {
               <video src={m.url} className="h-full w-full object-cover" muted playsInline />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.url} alt={m.caption || 'محل'} className="h-full w-full object-cover" />
+              <img src={m.url} alt={m.caption || altFallback} className="h-full w-full object-cover" />
             )}
           </button>
         ))}

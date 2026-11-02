@@ -32,9 +32,11 @@ export function ServicePortfolioGallery({
     const out: MediaItem[] = [];
     for (const ps of services || []) {
       for (const m of ps.mediaAssets || []) {
+        const url = (m.publicUrl || (m as { url?: string | null }).url || '').trim();
+        if (!url) continue;
         out.push({
           id: m.id,
-          publicUrl: m.publicUrl,
+          publicUrl: url,
           mimeType: m.mimeType,
           title: m.title,
           serviceName: ps.service?.name || 'خدمت',
