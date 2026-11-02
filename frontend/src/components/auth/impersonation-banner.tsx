@@ -18,7 +18,7 @@ export function ImpersonationBanner() {
     user?.profile?.displayName ||
     meta?.customerPhone ||
     user?.phone ||
-    'مشتری';
+    'کاربر';
 
   async function onExit() {
     setBusy(true);
