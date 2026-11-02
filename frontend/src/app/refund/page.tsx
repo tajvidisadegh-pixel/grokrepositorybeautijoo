@@ -5,7 +5,7 @@ import { pageMetadata } from '@/lib/seo';
 export const metadata: Metadata = pageMetadata({
   title: 'سیاست بازپرداخت و لغو',
   description:
-    'شرایط لغو رزرو و بازپرداخت در بیوتی‌جو برای مشتری و زیباگر؛ هم‌راستا با وضعیت پرداخت در پنل.',
+    'شرایط لغو رزرو و بازپرداخت در بیوتی‌جو برای کاربر و زیباگر؛ هم‌راستا با وضعیت پرداخت در پنل.',
   path: '/refund',
 });
 
@@ -20,11 +20,11 @@ export default function RefundPage() {
       </p>
 
       <section className="space-y-3 text-sm leading-7 text-gray-800">
-        <h2 className="text-lg font-semibold text-[#0B2C4A]">۱. لغو توسط مشتری</h2>
+        <h2 className="text-lg font-semibold text-[#0B2C4A]">۱. لغو توسط کاربر</h2>
         <ul className="list-disc space-y-1 pr-5">
           <li>
             رزروهای در وضعیت در انتظار یا تأییدشده، تا سقف زمانی اعلام‌شده در سیستم (مثلاً
-            چند ساعت قبل از نوبت) از پنل مشتری قابل لغو هستند.
+            چند ساعت قبل از نوبت) از پنل کاربر قابل لغو هستند.
           </li>
           <li>
             اگر پرداخت موفق ثبت شده باشد، پس از لغو مجاز، درخواست استرداد از مسیر درگاه /
@@ -38,7 +38,7 @@ export default function RefundPage() {
 
         <h2 className="text-lg font-semibold text-[#0B2C4A]">۲. لغو توسط زیباگر</h2>
         <p>
-          در صورت لغو از سوی زیباگر، مشتری مطلع می‌شود و در صورت پرداخت موفق، مسیر بازپرداخت
+          در صورت لغو از سوی زیباگر، کاربر مطلع می‌شود و در صورت پرداخت موفق، مسیر بازپرداخت
           فعال می‌شود.
         </p>
 
