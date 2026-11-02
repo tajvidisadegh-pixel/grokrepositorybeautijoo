@@ -11,6 +11,9 @@ export const metadata: Metadata = pageMetadata({
 export default function ContactPage() {
   const supportEmail =
     process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || 'support@beautijoo.ir';
+  const supportPhone =
+    process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || '09153885879';
+  const phoneHref = `tel:${supportPhone.replace(/\s/g, '')}`;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10" dir="rtl">
@@ -20,6 +23,20 @@ export default function ContactPage() {
       </p>
 
       <section className="space-y-4 text-sm leading-7 text-gray-800">
+        <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+          <h2 className="mb-2 text-base font-semibold text-[#0B2C4A]">تلفن پشتیبانی</h2>
+          <a
+            href={phoneHref}
+            className="text-lg font-medium text-[#2D6CDF] underline"
+            dir="ltr"
+          >
+            {supportPhone}
+          </a>
+          <p className="mt-2 text-xs text-gray-500">
+            در ساعات کاری پاسخگو هستیم. اگر جواب ندادیم، پیامک بفرستید یا از ایمیل استفاده کنید.
+          </p>
+        </div>
+
         <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
           <h2 className="mb-2 text-base font-semibold text-[#0B2C4A]">ایمیل پشتیبانی</h2>
           <a
@@ -38,7 +55,7 @@ export default function ContactPage() {
           <h2 className="mb-2 text-base font-semibold text-[#0B2C4A]">از داخل پنل</h2>
           <ul className="list-disc space-y-1 pr-5">
             <li>
-              مشتری:{' '}
+              حساب کاربری:{' '}
               <Link href="/panel/notifications" className="text-[#2D6CDF] underline">
                 اعلان‌ها و رزروها
               </Link>

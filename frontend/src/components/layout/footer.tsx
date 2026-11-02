@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/logo';
 
+const SUPPORT_PHONE =
+  process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || '09153885879';
+
 export function Footer() {
   return (
     <footer className="mt-auto bg-blue text-white">
@@ -11,6 +14,16 @@ export function Footer() {
           </div>
           <p className="text-sm leading-7 text-white/75">
             پلتفرم رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای — آسان، سریع و مطمئن.
+          </p>
+          <p className="mt-3 text-sm text-white/75">
+            پشتیبانی:{' '}
+            <a
+              href={`tel:${SUPPORT_PHONE.replace(/\s/g, '')}`}
+              className="font-medium text-white transition-colors hover:text-coral-light"
+              dir="ltr"
+            >
+              {SUPPORT_PHONE}
+            </a>
           </p>
         </div>
         <div>
