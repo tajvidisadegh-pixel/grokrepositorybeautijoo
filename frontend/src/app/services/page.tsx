@@ -42,7 +42,7 @@ export default async function ServicesPage() {
         <section className="mt-8">
           <h2 className="mb-4 text-lg font-bold text-foreground">دسته‌بندی‌ها</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {categories.map((c) => (
+            {categories.filter((c) => c.slug).map((c) => (
               <Link
                 key={c.id}
                 href={`/categories/${c.slug}`}
@@ -62,14 +62,14 @@ export default async function ServicesPage() {
             <EmptyState title="خدمتی ثبت نشده" />
           ) : (
             <ul className="divide-y divide-border rounded-3xl border border-border/90 bg-white shadow-sm">
-              {services.map((s) => (
+              {services.filter((s) => s.category?.slug || s.slug).map((s) => (
                 <li
                   key={s.id}
                   className="flex flex-wrap items-center justify-between gap-2 px-5 py-4"
                 >
                   <div>
                     <p className="font-medium text-foreground">{s.name}</p>
-                    {s.category && (
+                    {s.category && s.category.slug && (
                       <Link
                         href={`/categories/${s.category.slug}`}
                         className="text-xs text-coral hover:text-coral-dark"
