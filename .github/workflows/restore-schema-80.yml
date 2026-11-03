@@ -1,0 +1,158 @@
+name: Restore schema #80
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-schema-80.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore schema from last good commit and patch #80 fields
+        run: |
+          set -euo pipefail
+          # Last known good schema (before accidental empty)
+          git show 154893e6d466fc5e80402a72dee9f1aaf7115e70:backend/prisma/schema.prisma > backend/prisma/schema.prisma
+          python3 << 'PY'
+          from pathlib import Path
+          t = Path('backend/prisma/schema.prisma').read_text()
+          old_svc = '''model Service {
+  id          String   @id @default(uuid()) @db.Uuid
+  categoryId  String   @map("category_id") @db.Uuid
+  name        String   @db.VarChar(150)
+  slug        String   @unique @db.VarChar(160)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  category             ServiceCategory      @relation(fields: [categoryId], references: [id])
+  professionalServices ProfessionalService[]
+  bookingItems         BookingItem[]
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("services")
+}'''
+          new_svc = '''model Service {
+  id          String   @id @default(uuid()) @db.Uuid
+  categoryId  String   @map("category_id") @db.Uuid
+  name        String   @db.VarChar(150)
+  slug        String   @unique @db.VarChar(160)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  allowFixed          Boolean @default(true)  @map("allow_fixed")
+  allowVariable       Boolean @default(false) @map("allow_variable")
+  allowDeposit        Boolean @default(false) @map("allow_deposit")
+  defaultPricingMode  String  @default("fixed") @map("default_pricing_mode") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  category             ServiceCategory      @relation(fields: [categoryId], references: [id])
+  professionalServices ProfessionalService[]
+  bookingItems         BookingItem[]
+  attributeGroups      ServiceAttributeGroup[]
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("services")
+}'''
+          assert old_svc in t, 'Service block missing'
+          t = t.replace(old_svc, new_svc)
+          old_ps = '''  description    String?  @db.Text
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  addOns       ServiceAddOn[]
+  priceRules   ServicePriceRule[]
+  durationRules ServiceDurationRule[]
+  mediaAssets  MediaAsset[]
+  bookingItems BookingItem[]
+  @@unique([professionalId, serviceId])'''
+          new_ps = '''  description    String?  @db.Text
+  isActive       Boolean  @default(true) @map("is_active")
+  pricingMode       String  @default("fixed") @map("pricing_mode") @db.VarChar(20)
+  depositAmount     Int?    @map("deposit_amount")
+  estimateMinPrice  Int?    @map("estimate_min_price")
+  estimateMaxPrice  Int?    @map("estimate_max_price")
+  optionDeltas      Json?   @map("option_deltas")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  addOns       ServiceAddOn[]
+  priceRules   ServicePriceRule[]
+  durationRules ServiceDurationRule[]
+  mediaAssets  MediaAsset[]
+  bookingItems BookingItem[]
+  @@unique([professionalId, serviceId])'''
+          assert old_ps in t, 'PS block missing'
+          t = t.replace(old_ps, new_ps)
+          old_bi = '''  addOnsSnapshot        Json?   @map("add_ons_snapshot")
+  priceRuleId           String? @map("price_rule_id") @db.Uuid
+  durationRuleId        String? @map("duration_rule_id") @db.Uuid
+  booking             Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)'''
+          new_bi = '''  addOnsSnapshot        Json?   @map("add_ons_snapshot")
+  priceRuleId           String? @map("price_rule_id") @db.Uuid
+  durationRuleId        String? @map("duration_rule_id") @db.Uuid
+  pricingMode           String?  @map("pricing_mode") @db.VarChar(20)
+  isDeposit             Boolean  @default(false) @map("is_deposit")
+  selectedOptions       Json?    @map("selected_options")
+  booking             Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)'''
+          assert old_bi in t, 'BI block missing'
+          t = t.replace(old_bi, new_bi)
+          attr = '''
+model ServiceAttributeGroup {
+  id         String   @id @default(uuid()) @db.Uuid
+  serviceId  String   @map("service_id") @db.Uuid
+  name       String   @db.VarChar(120)
+  required   Boolean  @default(true)
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  service Service                  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  options ServiceAttributeOption[]
+  @@index([serviceId])
+  @@map("service_attribute_groups")
+}
+
+model ServiceAttributeOption {
+  id                        String   @id @default(uuid()) @db.Uuid
+  groupId                   String   @map("group_id") @db.Uuid
+  label                     String   @db.VarChar(120)
+  suggestedPriceDelta       Int      @default(0) @map("suggested_price_delta")
+  suggestedDurationDeltaMin Int      @default(0) @map("suggested_duration_delta_min")
+  forcesDeposit             Boolean  @default(false) @map("forces_deposit")
+  sortOrder                 Int      @default(0) @map("sort_order")
+  isActive                  Boolean  @default(true) @map("is_active")
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  group ServiceAttributeGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  @@index([groupId])
+  @@map("service_attribute_options")
+}
+
+'''
+          if 'ServiceAttributeGroup' not in t:
+            t = t.replace('model ServicePriceRule {', attr + 'model ServicePriceRule {')
+          Path('backend/prisma/schema.prisma').write_text(t)
+          print('schema bytes', len(t))
+          PY
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/prisma/schema.prisma
+          git commit -m "fix(#80): restore schema.prisma with pricing mode fields" || echo 'no change'
+          git push origin HEAD:main
