@@ -1,6 +1,6 @@
 /**
  * #65.5 — Public professional URLs use Latin (English) slug only.
- * Never expose internal UUID in public path segments.
+ * Never expose internal UUID or phone numbers in public path segments.
  */
 
 const UUID_RE =
@@ -9,6 +9,21 @@ const UUID_RE =
 /** True if value looks like a UUID (must not be used as public URL segment). */
 export function isUuidLike(value: string): boolean {
   return UUID_RE.test(String(value || '').trim());
+}
+
+/**
+ * True if value is phone-like (digits / separators only, length typical of phone).
+ * Blocks accidental use of mobile numbers as public slug.
+ */
+export function isPhoneLike(value: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  // strip common phone separators
+  const digits = raw.replace(/[\s\-_.()+]/g, '');
+  // Iranian mobile / landline ranges roughly 8–13 digits; international up to 15
+  if (!/^\d{8,15}$/.test(digits)) return false;
+  // pure digit slug or digit-heavy with only separators
+  return /^[\d\s\-_.()+]+$/.test(raw);
 }
 
 /**
@@ -36,11 +51,12 @@ export function toPublicSlug(input: string): string {
   return s;
 }
 
-/** Valid public slug: 3–80 chars, Latin, not a pure number, not UUID. */
+/** Valid public slug: 3–80 chars, Latin, not pure number, not UUID, not phone-like. */
 export function isValidPublicSlug(slug: string): boolean {
   const s = String(slug || '').trim();
   if (s.length < 3 || s.length > 80) return false;
   if (isUuidLike(s)) return false;
   if (/^\d+$/.test(s)) return false;
+  if (isPhoneLike(s)) return false;
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
 }
