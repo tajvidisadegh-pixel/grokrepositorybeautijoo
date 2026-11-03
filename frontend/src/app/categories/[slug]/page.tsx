@@ -128,9 +128,9 @@ export default async function CategoryPage({ params }: Props) {
         )}
         {pros && pros.items.length > 0 && (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {pros.items.map((p) => (
-              <li key={p.id}>
-                <ProfessionalCard professional={p} />
+            {pros.items.map((pro) => (
+              <li key={pro.id}>
+                <ProfessionalCard pro={pro} />
               </li>
             ))}
           </ul>
