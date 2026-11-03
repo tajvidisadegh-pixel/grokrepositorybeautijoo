@@ -12,13 +12,17 @@ import { SupportService } from './support.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 
+function isStaffUser(roles?: string[]): boolean {
+  const r = Array.isArray(roles) ? roles : [];
+  return r.includes('SUPER_ADMIN') || r.includes('admin');
+}
+
 @ApiTags('support')
 @ApiBearerAuth()
 @Controller('support')
 export class SupportController {
   constructor(private readonly service: SupportService) {}
 
-  /** Zibagar / customer: my tickets */
   @Get('tickets')
   listMine(
     @CurrentUser('id') userId: string,
@@ -27,7 +31,6 @@ export class SupportController {
     return this.service.listMine(userId, page ? parseInt(page, 10) : 1);
   }
 
-  /** Admin: all tickets */
   @Get('tickets/all')
   @Roles('admin', 'SUPER_ADMIN')
   listAll(
@@ -47,21 +50,19 @@ export class SupportController {
     @CurrentUser('roles') roles: string[] | undefined,
     @Param('id') id: string,
   ) {
-    const isStaff = Array.isArray(roles) && (
-      roles.includes('admin') || roles.includes('SUPER_ADMIN')
-    );
-    return this.service.getOne(id, userId, !!isStaff);
+    return this.service.getOne(id, userId, isStaffUser(roles));
   }
 
   @Post('tickets')
   create(
     @CurrentUser('id') userId: string,
-    @Body() body: { subject?: string; body?: string },
+    @Body() body: { subject?: string; body?: string; source?: string },
   ) {
     return this.service.createTicket(
       userId,
       body?.subject ?? '',
       body?.body ?? '',
+      body?.source,
     );
   }
 
@@ -72,10 +73,12 @@ export class SupportController {
     @Param('id') id: string,
     @Body() body: { body?: string },
   ) {
-    const isStaff = Array.isArray(roles) && (
-      roles.includes('admin') || roles.includes('SUPER_ADMIN')
+    return this.service.addMessage(
+      id,
+      userId,
+      body?.body ?? '',
+      isStaffUser(roles),
     );
-    return this.service.addMessage(id, userId, body?.body ?? '', !!isStaff);
   }
 
   @Patch('tickets/:id/status')
