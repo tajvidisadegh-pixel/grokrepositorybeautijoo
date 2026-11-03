@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - '.github/workflows/restore-schema-80.yml'
+      - 'scripts/patch_schema_80.py'
 
 permissions:
   contents: write
@@ -17,84 +18,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore good schema
+      - name: Restore good schema from history
         run: |
           set -euo pipefail
           git show 154893e6d466fc5e80402a72dee9f1aaf7115e70:backend/prisma/schema.prisma > backend/prisma/schema.prisma
           test -s backend/prisma/schema.prisma
           wc -c backend/prisma/schema.prisma
 
-      - name: Patch Issue 80 fields
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          from pathlib import Path
-          path = Path('backend/prisma/schema.prisma')
-          t = path.read_text()
-          if 'allowVariable' in t and 'ServiceAttributeGroup' in t:
-              print('already patched')
-          else:
-              t = t.replace(
-                  '  sortOrder   Int      @default(0) @map("sort_order")\n  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz\n  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz\n  category             ServiceCategory      @relation(fields: [categoryId], references: [id])\n  professionalServices ProfessionalService[]\n  bookingItems         BookingItem[]\n  @@index([categoryId])',
-                  '  sortOrder   Int      @default(0) @map("sort_order")\n  allowFixed          Boolean @default(true)  @map("allow_fixed")\n  allowVariable       Boolean @default(false) @map("allow_variable")\n  allowDeposit        Boolean @default(false) @map("allow_deposit")\n  defaultPricingMode  String  @default("fixed") @map("default_pricing_mode") @db.VarChar(20)\n  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz\n  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz\n  category             ServiceCategory      @relation(fields: [categoryId], references: [id])\n  professionalServices ProfessionalService[]\n  bookingItems         BookingItem[]\n  attributeGroups      ServiceAttributeGroup[]\n  @@index([categoryId])',
-                  1,
-              )
-              t = t.replace(
-                  '  description    String?  @db.Text\n  isActive       Boolean  @default(true) @map("is_active")\n  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz\n  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz\n  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)\n  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)\n  addOns       ServiceAddOn[]',
-                  '  description    String?  @db.Text\n  isActive       Boolean  @default(true) @map("is_active")\n  pricingMode       String  @default("fixed") @map("pricing_mode") @db.VarChar(20)\n  depositAmount     Int?    @map("deposit_amount")\n  estimateMinPrice  Int?    @map("estimate_min_price")\n  estimateMaxPrice  Int?    @map("estimate_max_price")\n  optionDeltas      Json?   @map("option_deltas")\n  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz\n  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz\n  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)\n  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)\n  addOns       ServiceAddOn[]',
-                  1,
-              )
-              t = t.replace(
-                  '  priceRuleId           String? @map("price_rule_id") @db.Uuid\n  durationRuleId        String? @map("duration_rule_id") @db.Uuid\n  booking             Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)',
-                  '  priceRuleId           String? @map("price_rule_id") @db.Uuid\n  durationRuleId        String? @map("duration_rule_id") @db.Uuid\n  pricingMode           String?  @map("pricing_mode") @db.VarChar(20)\n  isDeposit             Boolean  @default(false) @map("is_deposit")\n  selectedOptions       Json?    @map("selected_options")\n  booking             Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)',
-                  1,
-              )
-              attr = '''
-model ServiceAttributeGroup {
-  id         String   @id @default(uuid()) @db.Uuid
-  serviceId  String   @map("service_id") @db.Uuid
-  name       String   @db.VarChar(120)
-  required   Boolean  @default(true)
-  sortOrder  Int      @default(0) @map("sort_order")
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
-  service Service                  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  options ServiceAttributeOption[]
-  @@index([serviceId])
-  @@map("service_attribute_groups")
-}
+      - name: Apply Issue 80 fields
+        run: python3 scripts/patch_schema_80.py
 
-model ServiceAttributeOption {
-  id                        String   @id @default(uuid()) @db.Uuid
-  groupId                   String   @map("group_id") @db.Uuid
-  label                     String   @db.VarChar(120)
-  suggestedPriceDelta       Int      @default(0) @map("suggested_price_delta")
-  suggestedDurationDeltaMin Int      @default(0) @map("suggested_duration_delta_min")
-  forcesDeposit             Boolean  @default(false) @map("forces_deposit")
-  sortOrder                 Int      @default(0) @map("sort_order")
-  isActive                  Boolean  @default(true) @map("is_active")
-  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt                 DateTime @updatedAt @map("updated_at") @db.Timestamptz
-  group ServiceAttributeGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  @@index([groupId])
-  @@map("service_attribute_options")
-}
-
-'''
-              if 'ServiceAttributeGroup' not in t:
-                  t = t.replace('model ServicePriceRule {', attr + 'model ServicePriceRule {')
-              path.write_text(t)
-              print('patched', len(t))
-          assert 'allowVariable' in path.read_text()
-          assert path.stat().st_size > 20000
-          PY
-
-      - name: Commit
+      - name: Commit restored schema
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/prisma/schema.prisma
-          if git diff --cached --quiet; then echo no change; exit 0; fi
+          if git diff --cached --quiet; then
+            echo "no schema change"
+            exit 0
+          fi
           git commit -m "fix(#80): restore schema.prisma with three-layer pricing fields"
           git push origin HEAD:main
