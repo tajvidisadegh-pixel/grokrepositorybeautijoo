@@ -39,8 +39,8 @@ const TARGETS: { key: TargetKey; label: string; help: string }[] = [
   { key: 'customers', label: 'مشتریان', help: 'کاربران با نقش مشتری' },
   { key: 'professionals', label: 'زیباگرها', help: 'کاربران با نقش زیباگر' },
   { key: 'has_paid', label: 'دارای پرداخت', help: 'حداقل یک پرداخت موفق' },
-  { key: 'never_notified', label: 'بدون اعلان قبلی', help: 'هنوز اعلان نگرفته‌اند' },
-  { key: 'all', label: 'همه کاربران', help: 'تا سقف ۵۰۰ نفر' },
+  { key: 'never_notified', label: 'بدون اعلان قبلی', help: 'هنوز اعلان درون‌برنامه‌ای نگرفته‌اند' },
+  { key: 'all', label: 'همه کاربران', help: 'تا سقف ۵۰۰ نفر از کاربران فعال' },
 ];
 
 const TEMPLATES = [
@@ -53,6 +53,16 @@ const TEMPLATES = [
     label: 'به‌روزرسانی',
     title: 'به‌روزرسانی سامانه',
     body: 'بخش‌هایی از سامانه به‌روزرسانی شده است. در صورت نیاز جزئیات را در پنل خود ببینید.',
+  },
+  {
+    label: 'تخفیف / پیشنهاد',
+    title: 'پیشنهاد ویژه بیوتی‌جو',
+    body: 'یک پیشنهاد ویژه برای شما آماده است. همین حالا در اپ یا سایت بیوتی‌جو جزئیات را ببینید.',
+  },
+  {
+    label: 'یادآوری رزرو',
+    title: 'یادآوری نوبت',
+    body: 'یادآوری: نوبت‌های نزدیک خود را در پنل بررسی کنید تا به‌موقع حاضر شوید.',
   },
   {
     label: 'پشتیبانی',
@@ -86,12 +96,20 @@ function accountTypeFa(t?: string | null) {
   return 'کاربر';
 }
 
+function successRate(c: AdminNotificationCampaign) {
+  const total = Number(c.total) || 0;
+  const sent = Number(c.sent) || 0;
+  if (total <= 0) return null;
+  return Math.round((sent / total) * 100);
+}
+
 export default function AdminNotificationsPage() {
   const [tab, setTab] = useState<TabKey>('sent');
 
   const [items, setItems] = useState<AdminNotificationCampaign[]>([]);
   const [meta, setMeta] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [campaignFilter, setCampaignFilter] = useState<CampaignFilter>('all');
   const [loading, setLoading] = useState(true);
@@ -103,6 +121,7 @@ export default function AdminNotificationsPage() {
   const [target, setTarget] = useState<TargetKey>('customers');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [sendSms, setSendSms] = useState(false);
 
   const [active, setActive] = useState<AdminNotificationCampaign | null>(null);
   const [recipients, setRecipients] = useState<AdminCampaignRecipient[]>([]);
@@ -115,11 +134,19 @@ export default function AdminNotificationsPage() {
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxStatus, setInboxStatus] = useState<'all' | 'open' | 'answered' | 'closed'>('open');
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchAdminNotificationCampaigns(page, 20, search.trim() || undefined);
+      const res = await fetchAdminNotificationCampaigns(page, 20, search || undefined);
       setItems(res.items);
       setMeta(res.meta);
     } catch (e) {
@@ -181,6 +208,7 @@ export default function AdminNotificationsPage() {
     setTitle('');
     setBody('');
     setTarget('customers');
+    setSendSms(false);
     setComposeOpen(true);
     setToast(null);
   };
@@ -200,9 +228,10 @@ export default function AdminNotificationsPage() {
       return;
     }
     const audience = TARGETS.find((t) => t.key === target)?.label ?? 'گیرندگان';
+    const smsHint = sendSms ? '\n(همراه با پیامک)' : '';
     if (
       typeof window !== 'undefined' &&
-      !window.confirm(`اعلان برای «${audience}» ارسال شود؟\n\nعنوان: ${title.trim()}`)
+      !window.confirm(`اعلان برای «${audience}» ارسال شود؟${smsHint}\n\nعنوان: ${title.trim()}`)
     ) {
       return;
     }
@@ -214,16 +243,18 @@ export default function AdminNotificationsPage() {
         body: body.trim(),
         limit: 500,
         filters: buildFilters(),
+        sms: sendSms || undefined,
       });
-      setToast({
-        type: 'ok',
-        text:
-          `ارسال انجام شد: ${Number(res.notified || 0).toLocaleString('fa-IR')} نفر` +
-          (res.failed ? ` · ناموفق: ${Number(res.failed).toLocaleString('fa-IR')}` : ''),
-      });
+      const parts = [
+        `ارسال انجام شد: ${Number(res.notified || 0).toLocaleString('fa-IR')} نفر`,
+      ];
+      if (res.failed) parts.push(`ناموفق: ${Number(res.failed).toLocaleString('fa-IR')}`);
+      if (res.smsSent) parts.push(`پیامک: ${Number(res.smsSent).toLocaleString('fa-IR')}`);
+      setToast({ type: 'ok', text: parts.join(' · ') });
       setComposeOpen(false);
       setTitle('');
       setBody('');
+      setSendSms(false);
       setTab('sent');
       await loadCampaigns();
     } catch (e) {
@@ -258,7 +289,7 @@ export default function AdminNotificationsPage() {
       const res = await adminRetryFailedCampaign(campaignId);
       setToast({
         type: 'ok',
-        text: `تلاش مجدد: ${res.retried} از ${res.totalFailed ?? res.retried}`,
+        text: `تلاش مجدد: ${Number(res.retried).toLocaleString('fa-IR')} از ${Number(res.totalFailed ?? res.retried).toLocaleString('fa-IR')}`,
       });
       await loadCampaigns();
       if (active?.campaignId === campaignId) await openCampaign(active, recFilter);
@@ -279,7 +310,7 @@ export default function AdminNotificationsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">اعلان‌ها و پیام‌ها</h1>
           <p className="mt-1 text-sm text-gray-500">
-            ارسال‌شده‌ها به‌صورت کمپین · دریافتی‌ها از پشتیبانی
+            ارسال گروهی به‌صورت کمپین · پیام‌های پشتیبانی در تب دریافتی
           </p>
         </div>
         {tab === 'sent' && (
@@ -289,8 +320,7 @@ export default function AdminNotificationsPage() {
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-border pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-2">
         <button
           type="button"
           onClick={() => {
@@ -316,19 +346,23 @@ export default function AdminNotificationsPage() {
         >
           دریافتی‌ها (پشتیبانی)
         </button>
-        <Link
-          href="/admin/support"
-          className="mr-auto rounded-full border border-border px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
-        >
-          صفحه کامل پشتیبانی
+        <Link href="/admin/support" className="mr-auto text-xs text-coral hover:underline">
+          صفحه پشتیبانی کامل ←
         </Link>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="rounded-xl border border-amber-100 bg-amber-50/70 px-4 py-3 text-xs leading-relaxed text-amber-950">
+        <strong className="font-semibold">راهنما:</strong>{' '}
+        تب «ارسال‌شده‌ها» برای کمپین‌های گروهی است (هر کمپین یک کارت). جزئیات گیرندگان فقط با باز کردن
+        همان کمپین دیده می‌شود. تب «دریافتی‌ها» تیکت‌های پشتیبانی است؛ برای پاسخ به صفحه پشتیبانی بروید.
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="p-3">
-          <p className="text-[11px] text-gray-500">کمپین‌ها</p>
-          <p className="text-xl font-bold">{Number(summary.campaigns).toLocaleString('fa-IR')}</p>
+          <p className="text-[11px] text-gray-500">کمپین (کل)</p>
+          <p className="text-xl font-bold text-gray-900">
+            {Number(summary.campaigns).toLocaleString('fa-IR')}
+          </p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-gray-500">ارسال (این صفحه)</p>
@@ -343,7 +377,7 @@ export default function AdminNotificationsPage() {
           </p>
         </Card>
         <Card className="p-3">
-          <p className="text-[11px] text-gray-500">تیکت باز (بارگذاری‌شده)</p>
+          <p className="text-[11px] text-gray-500">تیکت باز</p>
           <p className="text-xl font-bold text-amber-700">
             {Number(summary.inboxOpen).toLocaleString('fa-IR')}
           </p>
@@ -365,7 +399,6 @@ export default function AdminNotificationsPage() {
         </div>
       )}
 
-      {/* Compose */}
       {tab === 'sent' && composeOpen && (
         <Card className="space-y-4 border-coral/30 p-5">
           <h2 className="font-bold">ارسال اعلان جدید</h2>
@@ -407,23 +440,52 @@ export default function AdminNotificationsPage() {
               </button>
             ))}
           </div>
-          <input
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-coral"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="عنوان"
-            maxLength={120}
-          />
-          <textarea
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-coral"
-            rows={3}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="متن اعلان…"
-            maxLength={1000}
-          />
+          <div>
+            <input
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-coral"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="عنوان"
+              maxLength={120}
+            />
+            <p className="mt-1 text-left text-[10px] text-gray-400" dir="ltr">
+              {title.length}/120
+            </p>
+          </div>
+          <div>
+            <textarea
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-coral"
+              rows={3}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="متن اعلان…"
+              maxLength={1000}
+            />
+            <p className="mt-1 text-left text-[10px] text-gray-400" dir="ltr">
+              {body.length}/1000
+            </p>
+          </div>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={sendSms}
+              onChange={(e) => setSendSms(e.target.checked)}
+            />
+            <span>
+              ارسال هم‌زمان پیامک
+              <span className="mt-0.5 block text-[11px] text-gray-500">
+                در صورت فعال بودن درگاه SMS، برای گیرندگان پیامک هم فرستاده می‌شود (هزینه‌بر).
+              </span>
+            </span>
+          </label>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" loading={busy} disabled={!title.trim() || !body.trim()} onClick={() => void send()}>
+            <Button
+              size="sm"
+              loading={busy}
+              disabled={!title.trim() || !body.trim()}
+              onClick={() => void send()}
+            >
               تأیید و ارسال
             </Button>
             <Button size="sm" variant="outline" disabled={busy} onClick={() => setComposeOpen(false)}>
@@ -433,7 +495,6 @@ export default function AdminNotificationsPage() {
         </Card>
       )}
 
-      {/* SENT TAB */}
       {tab === 'sent' && !active && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -460,73 +521,81 @@ export default function AdminNotificationsPage() {
             <div className="mr-auto flex gap-2">
               <input
                 className="w-40 rounded-xl border border-gray-200 px-3 py-1.5 text-sm sm:w-52"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setPage(1);
-                    void loadCampaigns();
-                  }
-                }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="جستجوی عنوان…"
               />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setPage(1);
-                  void loadCampaigns();
-                }}
-              >
-                جستجو
+              <Button size="sm" variant="outline" onClick={() => void loadCampaigns()}>
+                بروزرسانی
               </Button>
             </div>
           </div>
 
-          {filteredItems.length === 0 ? (
+          {loading ? (
+            <PanelLoading />
+          ) : filteredItems.length === 0 ? (
             <PanelEmpty
               title="کمپینی نیست"
-              description="با «اعلان جدید» اولین ارسال را انجام دهید."
-              action={
-                <Button size="sm" onClick={openCompose}>
-                  اعلان جدید
-                </Button>
-              }
+              description="با «اعلان جدید» اولین کمپین را بفرستید یا فیلتر را عوض کنید."
             />
           ) : (
-            <ul className="space-y-2">
-              {filteredItems.map((c) => (
-                <li key={c.campaignId}>
-                  <button type="button" className="w-full text-right" onClick={() => void openCampaign(c)}>
-                    <Card className="space-y-2 p-4 transition hover:border-coral/40">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold">{c.title}</p>
-                          <p className="mt-0.5 line-clamp-1 text-sm text-gray-500">{c.body}</p>
-                          <p className="mt-1 text-xs text-gray-400">{formatDateTime(c.createdAt)}</p>
+            <ul className="space-y-3">
+              {filteredItems.map((c) => {
+                const rate = successRate(c);
+                return (
+                  <li key={c.campaignId}>
+                    <Card className="overflow-hidden p-0">
+                      <button
+                        type="button"
+                        className="w-full space-y-2 p-4 text-right transition hover:bg-gray-50/80"
+                        onClick={() => void openCampaign(c)}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="font-semibold text-gray-900">{c.title}</p>
+                          <span className="text-xs text-gray-400">{formatDateTime(c.createdAt)}</span>
                         </div>
-                        <div className="flex flex-wrap gap-1.5 text-[11px]">
+                        <p className="line-clamp-2 text-sm text-gray-600">{c.body}</p>
+                        <div className="flex flex-wrap gap-2 text-xs">
                           <span className="rounded-full bg-gray-100 px-2 py-0.5">
-                            {Number(c.total).toLocaleString('fa-IR')} نفر
+                            کل: {Number(c.total).toLocaleString('fa-IR')}
                           </span>
                           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800">
-                            ارسال {Number(c.sent).toLocaleString('fa-IR')}
-                          </span>
-                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-800">
-                            خوانده {Number(c.read).toLocaleString('fa-IR')}
+                            ارسال: {Number(c.sent).toLocaleString('fa-IR')}
                           </span>
                           {Number(c.failed) > 0 && (
                             <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-800">
-                              ناموفق {Number(c.failed).toLocaleString('fa-IR')}
+                              ناموفق: {Number(c.failed).toLocaleString('fa-IR')}
+                            </span>
+                          )}
+                          {Number(c.read) > 0 && (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-800">
+                              خوانده: {Number(c.read).toLocaleString('fa-IR')}
+                            </span>
+                          )}
+                          {rate != null && (
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5">
+                              موفقیت: {rate.toLocaleString('fa-IR')}٪
                             </span>
                           )}
                         </div>
-                      </div>
-                      <p className="text-[11px] text-coral">مشاهده گیرندگان ←</p>
+                        <p className="text-[11px] text-coral">مشاهده گیرندگان ←</p>
+                      </button>
+                      {Number(c.failed) > 0 && (
+                        <div className="border-t border-border px-4 py-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            loading={busy}
+                            onClick={() => void retryFailed(c.campaignId)}
+                          >
+                            تلاش مجدد ناموفق‌ها
+                          </Button>
+                        </div>
+                      )}
                     </Card>
-                  </button>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
@@ -540,8 +609,8 @@ export default function AdminNotificationsPage() {
               >
                 قبلی
               </Button>
-              <span className="text-xs text-gray">
-                {page.toLocaleString('fa-IR')} / {meta.totalPages.toLocaleString('fa-IR')}
+              <span className="text-xs text-gray-500">
+                صفحه {page.toLocaleString('fa-IR')} از {meta.totalPages.toLocaleString('fa-IR')}
               </span>
               <Button
                 size="sm"
@@ -556,41 +625,59 @@ export default function AdminNotificationsPage() {
         </section>
       )}
 
-      {/* Campaign detail */}
       {tab === 'sent' && active && (
         <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Button size="sm" variant="outline" onClick={() => setActive(null)}>
-              ← بازگشت به کمپین‌ها
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setActive(null);
+                setRecipients([]);
+              }}
+            >
+              ← بازگشت به لیست
             </Button>
             {Number(active.failed) > 0 && (
-              <Button size="sm" variant="outline" loading={busy} onClick={() => void retryFailed(active.campaignId)}>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={busy}
+                onClick={() => void retryFailed(active.campaignId)}
+              >
                 تلاش مجدد ناموفق‌ها
               </Button>
             )}
           </div>
           <Card className="space-y-2 p-4">
             <h2 className="text-lg font-bold">{active.title}</h2>
-            <p className="text-sm text-gray-600 whitespace-pre-wrap">{active.body}</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{active.body}</p>
             <p className="text-xs text-gray-400">{formatDateTime(active.createdAt)}</p>
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full bg-gray-100 px-2 py-1">
-                کل {Number(active.total).toLocaleString('fa-IR')}
+              <span className="rounded-full bg-gray-100 px-2 py-0.5">
+                کل: {Number(active.total).toLocaleString('fa-IR')}
               </span>
-              <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">
-                ارسال {Number(active.sent).toLocaleString('fa-IR')}
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800">
+                ارسال: {Number(active.sent).toLocaleString('fa-IR')}
               </span>
-              <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-800">
-                خوانده {Number(active.read).toLocaleString('fa-IR')}
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-800">
+                ناموفق: {Number(active.failed).toLocaleString('fa-IR')}
               </span>
-              <span className="rounded-full bg-red-50 px-2 py-1 text-red-800">
-                ناموفق {Number(active.failed).toLocaleString('fa-IR')}
+              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-800">
+                خوانده: {Number(active.read).toLocaleString('fa-IR')}
               </span>
             </div>
           </Card>
 
           <div className="flex flex-wrap gap-2">
-            {['', 'sent', 'read', 'failed'].map((s) => (
+            {(
+              [
+                ['', 'همه'],
+                ['sent', 'ارسال‌شده'],
+                ['failed', 'ناموفق'],
+                ['read', 'خوانده‌شده'],
+              ] as const
+            ).map(([s, label]) => (
               <button
                 key={s || 'all'}
                 type="button"
@@ -599,23 +686,27 @@ export default function AdminNotificationsPage() {
                   recFilter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'
                 }`}
               >
-                {s === '' ? 'همه گیرندگان' : statusLabel(s)}
+                {label}
               </button>
             ))}
+            <span className="self-center text-xs text-gray-400">
+              {Number(recMeta.total).toLocaleString('fa-IR')} گیرنده
+            </span>
           </div>
 
           {recLoading ? (
             <PanelLoading />
           ) : recipients.length === 0 ? (
-            <PanelEmpty title="گیرنده‌ای نیست" description="با این فیلتر موردی پیدا نشد." />
+            <PanelEmpty title="گیرنده‌ای نیست" description="با این فیلتر گیرنده‌ای یافت نشد." />
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-border">
-              <table className="w-full min-w-[480px] text-right text-sm">
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full min-w-[480px] text-sm">
                 <thead className="bg-gray-50 text-xs text-gray-500">
                   <tr>
-                    <th className="px-3 py-2 font-medium">نام</th>
-                    <th className="px-3 py-2 font-medium">تلفن</th>
-                    <th className="px-3 py-2 font-medium">وضعیت</th>
+                    <th className="px-3 py-2 text-right font-medium">کاربر</th>
+                    <th className="px-3 py-2 text-right font-medium">تلفن</th>
+                    <th className="px-3 py-2 text-right font-medium">وضعیت</th>
+                    <th className="px-3 py-2 text-right font-medium">خطا</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -626,28 +717,26 @@ export default function AdminNotificationsPage() {
                         {r.phone || '—'}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] ${statusClass(r.status)}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${statusClass(r.status)}`}>
                           {statusLabel(r.status)}
                         </span>
+                      </td>
+                      <td className="max-w-[160px] truncate px-3 py-2 text-xs text-red-600">
+                        {r.error || ''}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <p className="border-t border-border px-3 py-2 text-xs text-gray">
-                نمایش {recipients.length.toLocaleString('fa-IR')} از{' '}
-                {Number(recMeta.total).toLocaleString('fa-IR')}
-              </p>
             </div>
           )}
         </section>
       )}
 
-      {/* INBOX TAB */}
       {tab === 'inbox' && (
         <section className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            {(['all', 'open', 'answered', 'closed'] as const).map((s) => (
+            {(['open', 'answered', 'closed', 'all'] as const).map((s) => (
               <button
                 key={s}
                 type="button"
@@ -659,6 +748,9 @@ export default function AdminNotificationsPage() {
                 {s === 'all' ? 'همه' : ticketStatusFa(s)}
               </button>
             ))}
+            <Button size="sm" variant="outline" className="mr-auto" onClick={() => void loadInbox()}>
+              بروزرسانی
+            </Button>
           </div>
 
           {inboxLoading ? (
@@ -666,7 +758,10 @@ export default function AdminNotificationsPage() {
           ) : inboxError ? (
             <PanelError message={inboxError} onRetry={() => void loadInbox()} />
           ) : inbox.length === 0 ? (
-            <PanelEmpty title="پیام دریافتی نیست" description="تیکت پشتیبانی با این فیلتر وجود ندارد." />
+            <PanelEmpty
+              title="پیام دریافتی نیست"
+              description="تیکت پشتیبانی با این فیلتر وجود ندارد."
+            />
           ) : (
             <ul className="space-y-2">
               {inbox.map((t) => {
