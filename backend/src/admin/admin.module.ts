@@ -6,6 +6,7 @@ import { AdminProfessionalsExtraController } from './admin-professionals-extra.c
 import { AdminSiteCmsController } from './admin-site-cms.controller';
 import { PublicSiteController } from './public-site.controller';
 import { AdminCatalogController } from './admin-catalog.controller';
+import { AdminCatalogPricingController } from './admin-catalog-pricing.controller';
 import { AdminOpsController } from './admin-ops.controller';
 import { AdminSettingsController } from './admin-settings.controller';
 
@@ -17,6 +18,7 @@ import { AdminSettingsController } from './admin-settings.controller';
     AdminSiteCmsController,
     PublicSiteController,
     AdminCatalogController,
+    AdminCatalogPricingController,
     AdminOpsController,
     AdminSettingsController,
   ],
