@@ -1,108 +1,128 @@
 /**
- * Production-safe catalog seed (categories + optional sample hierarchy).
- * Idempotent: creates missing rows only — never overwrites admin edits or reactivates soft-deletes.
- * Safe to run on every deploy/start (issue #26).
+ * Professional catalog seed — root categories + sample hierarchy branches.
+ * Create-only upsert: never clobber admin name/isActive/parent changes (#26).
  */
 const { PrismaClient } = require('@prisma/client');
-
 const prisma = new PrismaClient();
 
 /** 19 root categories — hard-coded seed only; structure remains dynamic */
 const ROOT_CATEGORIES = [
-  { name: 'کوتاهی', slug: 'cut', sortOrder: 1 },
+  { name: 'مو', slug: 'hair', sortOrder: 1 },
   { name: 'رنگ و لایت', slug: 'color-light', sortOrder: 2 },
-  { name: 'کراتین، فر و احیا', slug: 'keratin-perm-restore', sortOrder: 3 },
-  { name: 'ناخن', slug: 'nails', sortOrder: 4 },
-  { name: 'مژه', slug: 'lashes', sortOrder: 5 },
-  { name: 'ابرو', slug: 'brows', sortOrder: 6 },
-  { name: 'پوست و فیشیال', slug: 'skin-facial', sortOrder: 7 },
-  { name: 'میکاپ و گریم', slug: 'makeup-grooming', sortOrder: 8 },
-  { name: 'اصلاح', slug: 'shaping', sortOrder: 9 },
-  { name: 'اپیلاسیون', slug: 'epilation', sortOrder: 10 },
-  { name: 'ماساژ', slug: 'massage', sortOrder: 11 },
-  { name: 'اسپا', slug: 'spa', sortOrder: 12 },
-  { name: 'آرایش دائم', slug: 'permanent-makeup', sortOrder: 13 },
-  { name: 'تتو', slug: 'tattoo', sortOrder: 14 },
-  { name: 'اکستنشن و بافت', slug: 'extension-braid', sortOrder: 15 },
-  { name: 'خدمات آقایان', slug: 'mens-services', sortOrder: 16 },
-  { name: 'خدمات کودک', slug: 'kids-services', sortOrder: 17 },
-  { name: 'خدمات عروس', slug: 'bridal-services', sortOrder: 18 },
-  { name: 'خدمات داماد', slug: 'groom-services', sortOrder: 19 },
+  { name: 'ناخن', slug: 'nails', sortOrder: 3 },
+  { name: 'پوست', slug: 'skin', sortOrder: 4 },
+  { name: 'ابرو و مژه', slug: 'brow-lash', sortOrder: 5 },
+  { name: 'آرایش', slug: 'makeup', sortOrder: 6 },
+  { name: 'ماساژ', slug: 'massage', sortOrder: 7 },
+  { name: 'اپیلاسیون', slug: 'epilation', sortOrder: 8 },
+  { name: 'لیزر', slug: 'laser', sortOrder: 9 },
+  { name: 'بدن', slug: 'body', sortOrder: 10 },
+  { name: 'مردانه', slug: 'mens', sortOrder: 11 },
+  { name: 'عروس', slug: 'bridal', sortOrder: 12 },
+  { name: 'کودک', slug: 'kids', sortOrder: 13 },
+  { name: 'اسپا', slug: 'spa', sortOrder: 14 },
+  { name: 'تاتو', slug: 'tattoo', sortOrder: 15 },
+  { name: 'میکرو', slug: 'micro', sortOrder: 16 },
+  { name: 'سایر', slug: 'other', sortOrder: 17 },
 ];
 
-const SAMPLE_HIERARCHY = [
+const SAMPLE_BRANCHES = [
   {
-    parentSlug: 'nails',
-    name: 'کاشت',
-    slug: 'nails-extension',
+    name: 'کاشت ناخن',
+    slug: 'nail-extension',
     sortOrder: 1,
+    parentSlug: 'nails',
     children: [
-      {
-        name: 'کاشت با ژل',
-        slug: 'nails-gel-extension',
-        sortOrder: 1,
-        services: [
-          { name: 'کاشت ژل بلند', slug: 'nails-gel-long' },
-          { name: 'کاشت ژل کوتاه', slug: 'nails-gel-short' },
-        ],
-      },
+      { name: 'کاشت ژل', slug: 'gel-extension', sortOrder: 1 },
+      { name: 'کاشت پودر', slug: 'acrylic-extension', sortOrder: 2 },
     ],
   },
 ];
 
 /** Create-only upsert: never clobber admin name/isActive/parent changes (#26). */
 async function ensureCategory({ name, slug, sortOrder, parentId }) {
-  return prisma.serviceCategory.upsert({
-    where: { slug },
-    update: {},
-    create: {
+  const existing = await prisma.serviceCategory.findUnique({ where: { slug } });
+  if (existing) return existing;
+  return prisma.serviceCategory.create({
+    data: {
       name,
       slug,
-      sortOrder,
-      isActive: true,
+      sortOrder: sortOrder ?? 0,
       parentId: parentId || null,
+      isActive: true,
     },
   });
 }
 
-async function ensureService({ name, slug, categoryId }) {
-  return prisma.service.upsert({
-    where: { slug },
-    update: {},
-    create: { name, slug, categoryId, isActive: true },
-  });
-}
-
 async function seedSampleBranch(node, parentId) {
-  const row = await ensureCategory({
+  const cat = await ensureCategory({
     name: node.name,
     slug: node.slug,
-    sortOrder: node.sortOrder ?? 0,
+    sortOrder: node.sortOrder,
     parentId,
   });
-  let serviceCount = 0;
-  for (const s of node.services || []) {
-    await ensureService({ ...s, categoryId: row.id });
-    serviceCount++;
-  }
+  let count = 0;
   for (const child of node.children || []) {
-    serviceCount += await seedSampleBranch(child, row.id);
+    count += await seedSampleBranch(child, cat.id);
   }
-  return serviceCount;
+  if (!node.children || !node.children.length) {
+    const svcSlug = `${node.slug}-svc`;
+    const existing = await prisma.service.findUnique({ where: { slug: svcSlug } });
+    if (!existing) {
+      await prisma.service.create({
+        data: {
+          name: node.name,
+          slug: svcSlug,
+          categoryId: cat.id,
+          isActive: true,
+          sortOrder: 0,
+        },
+      });
+      count += 1;
+    }
+  }
+  return count;
+}
+
+async function seedColorTechniques() {
+  const parent = await prisma.serviceCategory.findUnique({ where: { slug: 'color-light' } });
+  if (!parent) {
+    console.warn('color-light category missing — skip color techniques');
+    return 0;
+  }
+  const techniques = [
+    { name: 'بالیاژ', slug: 'balayage', sortOrder: 1 },
+    { name: 'سامبره', slug: 'ombre', sortOrder: 2 },
+    { name: 'هایلایت', slug: 'highlight', sortOrder: 3 },
+    { name: 'لایت ریشه', slug: 'root-light', sortOrder: 4 },
+    { name: 'دکلره', slug: 'bleach', sortOrder: 5 },
+  ];
+  let n = 0;
+  for (const tech of techniques) {
+    await ensureCategory({
+      name: tech.name,
+      slug: tech.slug,
+      sortOrder: tech.sortOrder,
+      parentId: parent.id,
+    });
+    n++;
+  }
+  return n;
 }
 
 async function main() {
-  let serviceCount = 0;
-
-  for (const cat of ROOT_CATEGORIES) {
+  await seedColorTechniques();
+  for (const root of ROOT_CATEGORIES) {
     await ensureCategory({
-      name: cat.name,
-      slug: cat.slug,
-      sortOrder: cat.sortOrder,
+      name: root.name,
+      slug: root.slug,
+      sortOrder: root.sortOrder,
+      parentId: null,
     });
   }
 
-  for (const branch of SAMPLE_HIERARCHY) {
+  let serviceCount = 0;
+  for (const branch of SAMPLE_BRANCHES) {
     const parent = await prisma.serviceCategory.findUnique({
       where: { slug: branch.parentSlug },
     });
