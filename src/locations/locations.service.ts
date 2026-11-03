@@ -21,9 +21,8 @@ export class LocationsService {
   ) {}
 
   private normalizeCoords(data: LocationInput) {
-    const precision =
-      data.precision ||
-      (data.latitude != null && data.longitude != null ? 'exact' : 'approximate');
+    // exact = show full address publicly; default approximate for public
+    const precision = data.precision === 'exact' ? 'exact' : 'approximate';
     let latitude = data.latitude != null ? Number(data.latitude) : null;
     let longitude = data.longitude != null ? Number(data.longitude) : null;
     if (latitude != null && (latitude < -90 || latitude > 90)) {
@@ -32,22 +31,16 @@ export class LocationsService {
     if (longitude != null && (longitude < -180 || longitude > 180)) {
       throw new BadRequestException('طول جغرافیایی نامعتبر است');
     }
-    if (precision === 'approximate') {
-      if (latitude != null) latitude = Math.round(latitude * 100) / 100;
-      if (longitude != null) longitude = Math.round(longitude * 100) / 100;
-    }
+    // store full coords; public API sanitizes
     return { precision, latitude, longitude };
   }
 
-  private buildAddress(data: LocationInput, precision: string) {
+  private buildAddress(data: LocationInput, _precision: string) {
     const base = (data.address?.trim() || '').trim();
-    if (precision === 'approximate' && !base) {
-      return `محدوده ${data.city}${data.province ? `، ${data.province}` : ''}`;
+    if (!base || base.length < 5) {
+      throw new BadRequestException('آدرس دقیق الزامی است (حداقل ۵ کاراکتر)');
     }
-    if (precision === 'approximate' && base && !base.includes('محدوده')) {
-      return `${base} (محدوده تقریبی)`;
-    }
-    return base || `${data.province || ''} ${data.city}`.trim();
+    return base.slice(0, 500);
   }
 
   private toClientRow(row: {
@@ -94,7 +87,6 @@ export class LocationsService {
     return rows.map((r) => this.toClientRow(r));
   }
 
-  /** Issue #21: create always upserts the single location for this professional. */
   async createLocation(userId: string, data: LocationInput) {
     return this.addOrUpdatePrimary(userId, { ...data, isPrimary: true });
   }
