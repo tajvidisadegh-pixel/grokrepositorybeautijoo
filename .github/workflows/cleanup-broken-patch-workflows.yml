@@ -1,0 +1,303 @@
+name: cleanup-broken-patch-workflows
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/cleanup-broken-patch-workflows.yml'
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove broken patch yml and reapply code
+        run: |
+          set -e
+          python3 << 'ENDSCRIPT'
+          from pathlib import Path
+          import re, os
+
+          root = Path('.')
+          # 1) Delete broken one-shot patch workflows (invalid YAML)
+          wf = root / '.github/workflows'
+          removed = []
+          for p in sorted(wf.glob('patch-65*.yml')):
+              removed.append(p.name)
+              p.unlink()
+          for p in sorted(wf.glob('fix-*.yml')):
+              # only remove known broken one-shots if tiny invalid - keep fix-otp etc if unsure
+              try:
+                  text = p.read_text(encoding='utf-8', errors='replace')
+                  if 'python3 <<' in text and text.count('run:') == 1:
+                      # likely our sed-style patchers
+                      if p.name.startswith('fix-') and ('patch' in text.lower() or 'SystemExit' in text):
+                          removed.append(p.name)
+                          p.unlink()
+              except Exception:
+                  pass
+          print('removed', removed)
+
+          # 2) locations.service — require exact address; default public approximate
+          ls = Path('backend/src/locations/locations.service.ts')
+          if ls.exists():
+              t = ls.read_text()
+              if 'آدرس دقیق الزامی است' not in t:
+                  t = t.replace(
+                      "const precision =\n      data.precision ||\n      (data.latitude != null && data.longitude != null ? 'exact' : 'approximate');",
+                      "const precision = data.precision === 'exact' ? 'exact' : 'approximate';",
+                  )
+                  old_ba = '''  private buildAddress(data: LocationInput, precision: string) {
+    const base = (data.address?.trim() || '').trim();
+    if (precision === 'approximate' && !base) {
+      return `محدوده ${data.city}${data.province ? `، ${data.province}` : ''}`;
+    }
+    if (precision === 'approximate' && base && !base.includes('محدوده')) {
+      return `${base} (محدوده تقریبی)`;
+    }
+    return base || `${data.province || ''} ${data.city}`.trim();
+  }'''
+                  new_ba = '''  private buildAddress(data: LocationInput, _precision: string) {
+    const base = (data.address?.trim() || '').trim();
+    if (!base || base.length < 5) {
+      throw new BadRequestException('آدرس دقیق الزامی است (حداقل ۵ کاراکتر)');
+    }
+    return base.slice(0, 500);
+  }'''
+                  if old_ba in t:
+                      t = t.replace(old_ba, new_ba)
+                      print('locations buildAddress ok')
+                  # stop rounding coords away on approximate
+                  t = t.replace(
+                      '''    if (precision === 'approximate') {
+      if (latitude != null) latitude = Math.round(latitude * 100) / 100;
+      if (longitude != null) longitude = Math.round(longitude * 100) / 100;
+    }
+    return { precision, latitude, longitude };''',
+                      '''    return { precision, latitude, longitude };''',
+                  )
+                  ls.write_text(t)
+                  print('locations.service updated')
+              else:
+                  print('locations already ok')
+
+          # 3) support.service createTicket source + BadRequest + staff reply notify
+          ss = Path('backend/src/support/support.service.ts')
+          if ss.exists():
+              t = ss.read_text()
+              if 'BadRequestException' not in t:
+                  t = t.replace(
+                      'ForbiddenException,\n  Injectable,',
+                      'BadRequestException,\n  ForbiddenException,\n  Injectable,',
+                  )
+              t = t.replace(
+                  "if (sub.length < 3) throw new ForbiddenException('موضوع حداقل ۳ کاراکتر باشد');",
+                  "if (sub.length < 3) throw new BadRequestException('موضوع حداقل ۳ کاراکتر باشد');",
+              )
+              t = t.replace(
+                  "if (msg.length < 2) throw new ForbiddenException('پیام حداقل ۲ کاراکتر باشد');",
+                  "if (msg.length < 1) throw new BadRequestException('متن پیام خالی است');",
+              )
+              t = t.replace(
+                  "if (msg.length < 1) throw new ForbiddenException('پیام خالی است');",
+                  "if (msg.length < 1) throw new BadRequestException('پیام خالی است');",
+              )
+              # add optional source param if missing
+              if 'source?: string' not in t and 'async createTicket' in t:
+                  t = t.replace(
+                      'async createTicket(userId: string, subject: string, body: string)',
+                      'async createTicket(userId: string, subject: string, body: string, source?: string)',
+                  )
+                  t = t.replace(
+                      "const sub = (subject || '').trim().slice(0, 200);",
+                      '''const src = (source || '').trim().toLowerCase();
+    const sourceLabel =
+      src === 'zibagar' ? 'پنل زیباگر' :
+      src === 'panel' ? 'پنل مشتری' :
+      src === 'contact' ? 'تماس با ما' : '';
+    let sub = (subject || '').trim().slice(0, 180);
+    if (sourceLabel && !sub.includes(sourceLabel)) {
+      sub = (`[${sourceLabel}] ${sub}`).slice(0, 200);
+    }''',
+                  )
+              # staff reply notify
+              if "title: 'پاسخ پشتیبانی'" not in t:
+                  needle = '''    await this.prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { status: newStatus, updatedAt: new Date() },
+    });
+    return message;'''
+                  insert = '''    await this.prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { status: newStatus, updatedAt: new Date() },
+    });
+    try {
+      if (isStaff && ticket.userId) {
+        const owner = await this.prisma.user.findUnique({
+          where: { id: ticket.userId },
+          select: { accountType: true },
+        });
+        const href = owner?.accountType === 'professional' ? '/zibagar/support' : '/panel';
+        await this.notifications.notify({
+          userId: ticket.userId,
+          type: NotificationType.system,
+          title: 'پاسخ پشتیبانی',
+          body: 'پشتیبانی به تیکت شما پاسخ داد. برای مشاهده وارد بخش پشتیبانی شوید.',
+          data: { ticketId, href },
+          sms: false,
+        });
+      }
+    } catch { /* ignore */ }
+    return message;'''
+                  if needle in t:
+                      t = t.replace(needle, insert, 1)
+                      print('staff reply notify ok')
+              ss.write_text(t)
+              print('support.service updated')
+
+          # 4) support.controller — broader staff check + source body
+          sc = Path('backend/src/support/support.controller.ts')
+          if sc.exists():
+              c = sc.read_text()
+              if 'isStaffUser' not in c:
+                  c = c.replace(
+                      "import { Roles } from '../common/decorators/roles.decorator';",
+                      "import { Roles } from '../common/decorators/roles.decorator';\n\nfunction isStaffUser(roles?: string[], permissions?: string[]): boolean {\n  const r = Array.isArray(roles) ? roles : [];\n  const p = Array.isArray(permissions) ? permissions : [];\n  return r.includes('SUPER_ADMIN') || r.includes('admin') || p.includes('admin.support.handle');\n}\n",
+                  )
+                  c = c.replace(
+                      '''    const isStaff = Array.isArray(roles) && (
+      roles.includes('admin') || roles.includes('SUPER_ADMIN')
+    );
+    return this.service.getOne(id, userId, !!isStaff);''',
+                      '''    return this.service.getOne(id, userId, isStaffUser(roles, undefined));''',
+                  )
+                  c = c.replace(
+                      '''    const isStaff = Array.isArray(roles) && (
+      roles.includes('admin') || roles.includes('SUPER_ADMIN')
+    );
+    return this.service.addMessage(id, userId, body?.body ?? '', !!isStaff);''',
+                      '''    return this.service.addMessage(id, userId, body?.body ?? '', isStaffUser(roles, undefined));''',
+                  )
+                  c = c.replace(
+                      '@Body() body: { subject?: string; body?: string },',
+                      '@Body() body: { subject?: string; body?: string; source?: string },',
+                  )
+                  c = c.replace(
+                      '''    return this.service.createTicket(
+      userId,
+      body?.subject ?? '',
+      body?.body ?? '',
+    );''',
+                      '''    return this.service.createTicket(
+      userId,
+      body?.subject ?? '',
+      body?.body ?? '',
+      body?.source,
+    );''',
+                  )
+                  sc.write_text(c)
+                  print('support.controller updated')
+              else:
+                  print('controller already has isStaffUser')
+
+          # 5) zibagar support — pass source
+          zp = Path('frontend/src/app/zibagar/support/page.tsx')
+          if zp.exists():
+              z = zp.read_text()
+              z2 = z.replace(
+                  "await apiClient.post('/support/tickets', { subject: s, body: b });",
+                  "await apiClient.post('/support/tickets', { subject: s, body: b, source: 'zibagar' });",
+              )
+              if z2 != z:
+                  zp.write_text(z2)
+                  print('zibagar support source tag')
+              else:
+                  print('zibagar support source skip')
+
+          # 6) catalog expandDimCombos + volume dim helper
+          ct = Path('frontend/src/lib/catalog-template.ts')
+          if ct.exists():
+              ctt = ct.read_text()
+              if 'export function expandDimCombos' not in ctt:
+                  ctt += '''
+
+/** Product of dimension options as human labels. */
+export function expandDimCombos(dims: PriceDim[]): string[] {
+  const active = (dims || []).filter((d) => d.options?.length);
+  if (!active.length) return [];
+  return active.reduce<string[]>((acc, d) => {
+    if (!acc.length) return d.options.map((o) => `${d.label}: ${o}`);
+    return acc.flatMap((a) => d.options.map((o) => `${a} · ${d.label}: ${o}`));
+  }, []);
+}
+'''
+                  ct.write_text(ctt)
+                  print('expandDimCombos added')
+              # add volume alongside single length dims (limited)
+              old = "dims: [{ key: 'length', label: 'قد مو', options: ['کوتاه', 'متوسط', 'بلند'] }],"
+              new = "dims: [{ key: 'length', label: 'قد مو', options: ['کوتاه', 'متوسط', 'بلند'] }, { key: 'volume', label: 'حجم مو', options: ['کم', 'متوسط', 'زیاد'] }],"
+              if old in ctt and 'حجم مو' not in ctt:
+                  ctt = ctt.replace(old, new)
+                  ct.write_text(ctt)
+                  print('volume dim added')
+
+          # 7) services page — stay open after save
+          sp = Path('frontend/src/app/zibagar/services/page.tsx')
+          if sp.exists():
+              st = sp.read_text()
+              st2 = st.replace(
+                  '''      setMsg(`«${pickedVar.name}» به منو اضافه شد`);
+      setTimeout(() => setMsg(null), 2500);
+      setSheet(null);
+      await load();''',
+                  '''      setMsg(`«${pickedVar.name}» به منو اضافه شد — خدمت بعدی را می‌توانید انتخاب کنید`);
+      setTimeout(() => setMsg(null), 3000);
+      setAddStep('service');
+      setPickedVar(null);
+      setAddPrice('');
+      setAddDuration('60');
+      await load();''',
+              )
+              if st2 != st:
+                  sp.write_text(st2)
+                  print('services stay-open ok')
+              else:
+                  print('services stay-open skip')
+
+          # 8) utils toTomanInt hardening
+          ut = Path('frontend/src/lib/utils.ts')
+          if ut.exists():
+              u = ut.read_text()
+              if 'toTomanInt' not in u:
+                  u = u.replace(
+                      '''/** Format number with Persian digits and thousand separators + تومان. */
+export function formatPrice(amount: number): string {
+  const n = Math.floor(Number(amount) || 0);
+  return new Intl.NumberFormat('fa-IR').format(n) + ' تومان';
+}''',
+                      '''/** Normalize to non-negative integer تومان. */
+export function toTomanInt(amount: unknown): number {
+  const n = Math.floor(Number(amount));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+}
+
+/** Format number with Persian digits and thousand separators + تومان. */
+export function formatPrice(amount: number): string {
+  const n = toTomanInt(amount);
+  return `${new Intl.NumberFormat('fa-IR').format(n)} تومان`;
+}''',
+                  )
+                  ut.write_text(u)
+                  print('utils toTomanInt ok')
+
+          print('done')
+          ENDSCRIPT
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "chore: remove broken patch workflows; reapply #65 code fixes"
+          git push
