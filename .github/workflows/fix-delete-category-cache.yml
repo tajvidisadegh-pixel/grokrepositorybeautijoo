@@ -1,19 +1,9 @@
 name: fix-delete-category-cache
+# Historical one-shot patch — disabled so it cannot fail main
 on:
-  push:
-    paths:
-      - scripts/fix_delete_category_cache.py
   workflow_dispatch:
 jobs:
-  patch:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/fix_delete_category_cache.py
-      - run: |
-          git config user.name beautijoo-bot
-          git config user.email bot@beautijoo.ir
-          git add -A
-          git diff --staged --quiet || (git commit -m "fix: restore await on category soft-delete" && git push)
+      - run: echo disabled

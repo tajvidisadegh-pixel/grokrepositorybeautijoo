@@ -1,24 +1,9 @@
 name: disable-legacy-one-shots
+# Historical one-shot patch — disabled so it cannot fail main
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/disable-legacy-one-shots.yml'
 jobs:
-  disable:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Rewrite legacy one-shot workflows to noop
-        run: |
-          python3 -c "import base64; exec(base64.b64decode('CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKU1RVQiA9ICIiIm5hbWU6IGRpc2FibGVkLWxlZ2FjeQpvbjoKICB3b3JrZmxvd19kaXNwYXRjaDoKam9iczoKICBub29wOgogICAgcnVucy1vbjogdWJ1bnR1LWxhdGVzdAogICAgc3RlcHM6CiAgICAgIC0gcnVuOiBlY2hvIGRpc2FibGVkCiIiIgoKS0VFUCA9IHsKICAnY2kueW1sJywKICAnY29kZXFsLnltbCcsCiAgJ2NyZWF0ZS1yZWxlYXNlLXRhZy55bWwnLAogICdjbGVhbnVwLWJyb2tlbi1wYXRjaC13b3JrZmxvd3MueW1sJywKICAnZGlzYWJsZS1sZWdhY3ktb25lLXNob3RzLnltbCcsCn0KCndmID0gUGF0aCgnLmdpdGh1Yi93b3JrZmxvd3MnKQpjaGFuZ2VkID0gW10KZm9yIHAgaW4gc29ydGVkKHdmLmdsb2IoJyoueW1sJykpOgogIGlmIHAubmFtZSBpbiBLRUVQOgogICAgY29udGludWUKICB0ZXh0ID0gcC5yZWFkX3RleHQoZW5jb2Rpbmc9J3V0Zi04JywgZXJyb3JzPSdyZXBsYWNlJykKICBpc19vbmVzaG90ID0gKAogICAgJ3B5dGhvbjMgPDwnIGluIHRleHQKICAgIG9yICdTeXN0ZW1FeGl0JyBpbiB0ZXh0CiAgICBvciAoImdpdCBwdXNoIiBpbiB0ZXh0IGFuZCAnYWN0aW9ucy9jaGVja291dCcgaW4gdGV4dCBhbmQgJ3Blcm1pc3Npb25zOicgaW4gdGV4dCBhbmQgJ2NvbnRlbnRzOiB3cml0ZScgaW4gdGV4dCkKICApCiAgaWYgaXNfb25lc2hvdCBvciBwLm5hbWUuc3RhcnRzd2l0aCgncGF0Y2gtJykgb3IgcC5uYW1lLnN0YXJ0c3dpdGgoJ2ZpeC0nKSBvciBwLm5hbWUuc3RhcnRzd2l0aCgnY29tcG9uZScpIG9yIHAubmFtZS5zdGFydHN3aXRoKCdpdGVtJykgb3IgcC5uYW1lLnN0YXJ0c3dpdGgoJ2FwcGx5LScpIG9yIHAubmFtZS5zdGFydHN3aXRoKCdyZXN0b3JlLScpIG9yIHAubmFtZS5zdGFydHN3aXRoKCdhZGQtY2FwYWNpdHknKSBvciBwLm5hbWUuc3RhcnRzd2l0aCgnaXRlbXMtJyk6CiAgICBpZiBwLm5hbWUgaW4gKCdjaS1maXgtbm9zaG93LnltbCcsICdhZGQtbGlmZWN5Y2xlLWNpLnltbCcpIGFuZCBub3QgaXNfb25lc2hvdDoKICAgICAgY29udGludWUKICAgIGlmIHRleHQuc3RyaXAoKSA9PSBTVFVCLnN0cmlwKCk6CiAgICAgIGNvbnRpbnVlCiAgICBwLndyaXRlX3RleHQoU1RVQikKICAgIGNoYW5nZWQuYXBwZW5kKHAubmFtZSkKCnByaW50KCdkaXNhYmxlZCcsIGxlbihjaGFuZ2VkKSkKZm9yIG4gaW4gY2hhbmdlZDoKICBwcmludChuKQo=').decode())"
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows
-          if git diff --cached --quiet; then echo nochange; exit 0; fi
-          git commit -m "chore(ci): disable legacy one-shot workflows"
-          git push
+      - run: echo disabled

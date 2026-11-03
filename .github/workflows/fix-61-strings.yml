@@ -1,4 +1,5 @@
-name: disabled-legacy
+name: fix-61-strings
+# Historical one-shot patch — disabled so it cannot fail main
 on:
   workflow_dispatch:
 jobs:
