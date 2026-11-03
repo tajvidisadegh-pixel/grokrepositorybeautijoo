@@ -163,16 +163,16 @@ export class ServicesService {
 
 
   private catalogFlags(service: {
-    allowFixed: boolean;
-    allowVariable: boolean;
-    allowDeposit: boolean;
-    defaultPricingMode: string;
+    allowFixed?: boolean;
+    allowVariable?: boolean;
+    allowDeposit?: boolean;
+    defaultPricingMode?: string;
   }): CatalogPricingFlags {
     return {
-      allowFixed: service.allowFixed,
-      allowVariable: service.allowVariable,
-      allowDeposit: service.allowDeposit,
-      defaultPricingMode: service.defaultPricingMode,
+      allowFixed: service.allowFixed !== false,
+      allowVariable: !!service.allowVariable,
+      allowDeposit: !!service.allowDeposit,
+      defaultPricingMode: service.defaultPricingMode || 'fixed',
     };
   }
 
@@ -241,7 +241,9 @@ export class ServicesService {
       depositAmount,
       estimateMinPrice,
       estimateMaxPrice,
-      optionDeltas: optionDeltas === null ? Prisma.JsonNull : optionDeltas,
+      optionDeltas: (optionDeltas === null
+        ? Prisma.JsonNull
+        : optionDeltas) as Prisma.InputJsonValue,
     };
   }
 
@@ -371,7 +373,15 @@ export class ServicesService {
       data.estimateMinPrice !== undefined ||
       data.estimateMaxPrice !== undefined ||
       data.optionDeltas !== undefined;
-    const pricing = wantsPricing ? this.resolvePricingFields(flags, data, ps) : null;
+    const pricing = wantsPricing
+      ? this.resolvePricingFields(flags, data, ps as {
+          pricingMode?: string | null;
+          depositAmount?: number | null;
+          estimateMinPrice?: number | null;
+          estimateMaxPrice?: number | null;
+          optionDeltas?: unknown;
+        })
+      : null;
 
     return this.prisma.professionalService.update({
       where: { id },
