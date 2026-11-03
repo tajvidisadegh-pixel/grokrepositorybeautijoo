@@ -1,67 +1,8 @@
-name: Restore #64.2 cleanup + booking-wizard
+name: disabled-legacy
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/restore-64-2.yml'
 jobs:
-  restore:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore known-good sources if broken
-        run: |
-          set -e
-          if ! grep -q expireUnpaidPendingBookings backend/src/cleanup/cleanup.service.ts 2>/dev/null; then
-            git show f8fc496:backend/src/cleanup/cleanup.service.ts > backend/src/cleanup/cleanup.service.ts
-          fi
-          if ! grep -q cancelMyBooking frontend/src/components/booking/booking-wizard.tsx 2>/dev/null; then
-            git show efdc39f:frontend/src/components/booking/booking-wizard.tsx > frontend/src/components/booking/booking-wizard.tsx
-          fi
-          # Append expire method before completePastBookings if missing
-          if ! grep -q expireUnpaidPendingBookings backend/src/cleanup/cleanup.service.ts; then
-            python3 -c "
-from pathlib import Path
-p=Path('backend/src/cleanup/cleanup.service.ts'); t=p.read_text()
-t=t.replace('bookingsCompleted: number;\\n  mediaOrphansDeleted: number;','bookingsCompleted: number;\\n  unpaidPendingExpired: number;\\n  mediaOrphansDeleted: number;')
-ins='''  async expireUnpaidPendingBookings(): Promise<number> {
-    const minutes = Math.max(5, parseInt(process.env.PENDING_PAYMENT_TTL_MINUTES || \"30\", 10) || 30);
-    const cutoff = new Date(Date.now() - minutes * 60_000);
-    const candidates = await this.prisma.booking.findMany({
-      where: { status: BookingStatus.pending, createdAt: { lt: cutoff }, OR: [{ payment: null }, { payment: { status: { in: [\"pending\", \"processing\", \"failed\", \"cancelled\"] } } }] },
-      select: { id: true }, take: 200,
-    });
-    if (!candidates.length) return 0;
-    const result = await this.prisma.booking.updateMany({
-      where: { id: { in: candidates.map((c) => c.id) }, status: BookingStatus.pending },
-      data: { status: BookingStatus.expired, cancelReason: \"unpaid_pending_ttl\", cancelledAt: new Date() },
-    });
-    return result.count;
-  }\n\n'''
-t=t.replace('  async completePastBookings(): Promise<number> {', ins + '  async completePastBookings(): Promise<number> {', 1)
-p.write_text(t)
-print('cleanup ok')
-"
-          fi
-          # Wizard: ensure import + softer cancel on pay fail
-          if ! grep -q cancelMyBooking frontend/src/components/booking/booking-wizard.tsx; then
-            sed -i 's/  initiatePayment,/  initiatePayment,\n  cancelMyBooking,/' frontend/src/components/booking/booking-wizard.tsx
-          fi
-          # Message text updates (idempotent)
-          sed -i 's/رزرو ذخیره شد اما هنوز نهایی نیست — لینک درگاه دریافت نشد./لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید./g' frontend/src/components/booking/booking-wizard.tsx || true
-          sed -i 's/رزرو ذخیره شد اما نهایی نیست. پرداخت آنلاین فعلاً در دسترس نیست یا نیاز به پیکربندی درگاه دارد./پرداخت آنلاین در دسترس نیست. رزرو قطعی ثبت نشد و زمان آزاد ماند./g' frontend/src/components/booking/booking-wizard.tsx || true
-          grep -q 'from' backend/src/cleanup/cleanup.service.ts
-          ! grep -q SEE_FILE backend/src/cleanup/cleanup.service.ts
-          ! grep -q SEE_FILE frontend/src/components/booking/booking-wizard.tsx
-          wc -l backend/src/cleanup/cleanup.service.ts frontend/src/components/booking/booking-wizard.tsx
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/cleanup/cleanup.service.ts frontend/src/components/booking/booking-wizard.tsx
-          git diff --staged --quiet || git commit -m "fix(#64.2): cleanup expire unpaid pending + wizard payment-fail messaging"
-          git push
+      - run: echo disabled
