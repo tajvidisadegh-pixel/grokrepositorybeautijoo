@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { apiClient } from '@/lib/api';
+import { ServicePricingPanel } from '@/components/admin/ServicePricingPanel';
 
 type Category = {
   id: string;
@@ -39,6 +40,7 @@ export default function AdminServiceCategoriesPage() {
   const [error, setError] = useState<string | null>(null);
   const [editCat, setEditCat] = useState<Category | null>(null);
   const [editSvc, setEditSvc] = useState<Service | null>(null);
+  const [pricingSvc, setPricingSvc] = useState<{ id: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [childParentId, setChildParentId] = useState<string | null>(null);
 
@@ -494,6 +496,13 @@ export default function AdminServiceCategoriesPage() {
                       </button>
                       <button
                         disabled={busy}
+                        onClick={() => setPricingSvc({ id: s.id, name: s.name })}
+                        className="text-xs text-[#0B2C4A]"
+                      >
+                        قیمت‌گذاری
+                      </button>
+                      <button
+                        disabled={busy}
                         onClick={() => void deleteService(s.id)}
                         className="text-xs text-[#FF6F61]"
                       >
@@ -507,6 +516,14 @@ export default function AdminServiceCategoriesPage() {
           )}
         </div>
       </section>
+      {pricingSvc && (
+        <ServicePricingPanel
+          serviceId={pricingSvc.id}
+          serviceName={pricingSvc.name}
+          onClose={() => setPricingSvc(null)}
+          onSaved={() => void load()}
+        />
+      )}
     </div>
   );
 }
