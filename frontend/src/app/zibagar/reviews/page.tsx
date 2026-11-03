@@ -32,7 +32,7 @@ export default function ZibagarReviewsPage() {
     setError(null);
     try {
       const res = await apiClient.get<{ items?: ReviewItem[] } | ReviewItem[]>(
-        '/professionals/me/reviews?page=1&limit=50',
+        '/reviews/professional?page=1&limit=50',
       );
       const list = Array.isArray(res) ? res : res.items || [];
       setItems(list);
