@@ -1,0 +1,91 @@
+name: Restore services service
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-svc-80.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore services.service.ts from last good commit
+        run: |
+          set -euo pipefail
+          # commit before empty push
+          git show 1240566a149af5beace42b3ad5f4a7f64b1f5c6d:backend/src/services/services.service.ts > backend/src/services/services.service.ts
+          test -s backend/src/services/services.service.ts
+          wc -c backend/src/services/services.service.ts
+
+      - name: Patch listServices include attributeGroups
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/services/services.service.ts')
+          t = p.read_text()
+          old = """  listServices(categorySlug?: string) {
+    return this.prisma.service.findMany({
+      where: {
+        isActive: true,
+        ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+      },
+      include: { category: true },
+      orderBy: { name: 'asc' },
+    });
+  }"""
+          new = """  listServices(categorySlug?: string) {
+    return this.prisma.service.findMany({
+      where: {
+        isActive: true,
+        ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+      },
+      include: {
+        category: true,
+        attributeGroups: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            options: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }"""
+          if old in t:
+            t = t.replace(old, new, 1)
+            p.write_text(t)
+            print('listServices patched')
+          elif 'attributeGroups' in t:
+            print('already has attributeGroups')
+          else:
+            print('WARN: listServices pattern not found')
+          # listMyServices include service.attributeGroups
+          old2 = "service: { include: { category: true } },"
+          new2 = "service: { include: { category: true, attributeGroups: { where: { isActive: true }, orderBy: { sortOrder: 'asc' }, include: { options: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } } } } } },"
+          if old2 in t and 'attributeGroups: { where: { isActive: true }' not in t.split('listMyServices')[1][:800]:
+            t = t.replace(old2, new2, 1)  # first occurrence in listMyServices area may vary
+            # safer: only replace inside listMyServices
+          p.write_text(t)
+          assert p.stat().st_size > 10000
+          PY
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/services/services.service.ts
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "fix(#80): restore services.service.ts and include attributeGroups"
+          git push origin HEAD:main
