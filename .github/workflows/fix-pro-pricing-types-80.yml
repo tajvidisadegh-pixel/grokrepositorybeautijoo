@@ -1,0 +1,26 @@
+name: Fix pro pricing types 80.3
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-pro-pricing-types-80.yml'
+      - 'scripts/fix_pro_pricing_types_80.py'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_pro_pricing_types_80.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/services/services.service.ts
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "fix(#80.3): InputJsonValue cast + optional catalog flags"
+          git push origin HEAD:main
