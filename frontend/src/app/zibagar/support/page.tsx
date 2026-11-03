@@ -96,8 +96,8 @@ export default function ZibagarSupportPage() {
     setBusy(true);
     setMsg(null);
     try {
-      await apiClient.post('/support/tickets', { subject: s, body: b });
-      setMsg('تیکت ثبت شد.');
+      await apiClient.post('/support/tickets', { subject: s, body: b, source: 'zibagar' });
+      setMsg('تیکت ثبت شد. پیام تأیید خودکار برایتان ارسال می‌شود.');
       setShowCreate(false);
       setSubject('');
       setBody('');
