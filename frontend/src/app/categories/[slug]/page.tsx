@@ -15,7 +15,8 @@ type Props = {
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  const slug = decodeURIComponent(rawSlug || '').trim();
   try {
     const cats = await listCategories();
     const cat = cats.find((c) => c.slug === slug);
@@ -37,7 +38,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function CategoryPage({ params }: Props) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  const slug = decodeURIComponent(rawSlug || '').trim();
 
   let cat;
   try {
@@ -125,11 +127,13 @@ export default async function CategoryPage({ params }: Props) {
           />
         )}
         {pros && pros.items.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {pros.items.map((pro) => (
-              <ProfessionalCard key={pro.id} pro={pro} />
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {pros.items.map((p) => (
+              <li key={p.id}>
+                <ProfessionalCard professional={p} />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
     </div>
