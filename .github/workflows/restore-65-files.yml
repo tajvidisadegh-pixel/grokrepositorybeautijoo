@@ -1,34 +1,9 @@
-name: restore-65-truncated
-
+name: restore-65-files
+# Historical one-shot patch — disabled so it cannot fail main
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/restore-65-files.yml'
-
 jobs:
-  restore:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore three files from e9c62cb
-        run: |
-          set -eux
-          git checkout e9c62cb -- frontend/src/app/zibagar/locations/page.tsx
-          git checkout e9c62cb -- frontend/src/app/admin/notifications/page.tsx
-          git checkout e9c62cb -- frontend/src/app/zibagar/services/page.tsx
-          wc -l frontend/src/app/zibagar/locations/page.tsx frontend/src/app/admin/notifications/page.tsx frontend/src/app/zibagar/services/page.tsx
-          head -3 frontend/src/app/zibagar/services/page.tsx
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git status
-          git commit -m "fix(#65): restore locations notifications services from e9c62cb" || exit 0
-          git push origin HEAD:main
+      - run: echo disabled

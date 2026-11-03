@@ -1,25 +1,9 @@
 name: restore-search-from-payload
+# Historical one-shot patch — disabled so it cannot fail main
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'scripts/search_page_payload.b64'
-      - '.github/workflows/restore-search-from-payload.yml'
 jobs:
-  restore:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Decode and restore
-        run: |
-          python3 -c "import base64,zlib,pathlib; p=pathlib.Path('scripts/search_page_payload.b64'); pathlib.Path('frontend/src/app/search/page.tsx').write_bytes(zlib.decompress(base64.b64decode(p.read_text()))); print('restored', pathlib.Path('frontend/src/app/search/page.tsx').stat().st_size)"
-      - name: Commit restore
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/search/page.tsx
-          git diff --cached --quiet && exit 0
-          git commit -m "fix(#67): restore search page NearMeFields string lat/lng (typecheck)"
-          git push
+      - run: echo disabled

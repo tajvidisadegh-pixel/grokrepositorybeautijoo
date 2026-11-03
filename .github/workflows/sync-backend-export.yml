@@ -1,35 +1,9 @@
 name: sync-backend-export
+# Historical one-shot patch — disabled so it cannot fail main
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/sync-backend-export.yml
 jobs:
-  sync:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout full history
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Sync backend folder from main onto beautijoo-backend-export
-        run: |
-          set -euo pipefail
-          git config user.name beautijoo-bot
-          git config user.email bot@beautijoo.ir
-          git fetch origin main beautijoo-backend-export
-          git checkout -B beautijoo-backend-export origin/beautijoo-backend-export
-          rm -rf backend
-          git checkout origin/main -- backend
-          git add -A backend
-          if git diff --staged --quiet; then
-            echo "No backend differences to commit."
-            exit 0
-          fi
-          MAIN_SHA=$(git rev-parse --short origin/main)
-          git commit -m "chore: sync backend/ from main@${MAIN_SHA}"
-          git push origin beautijoo-backend-export
+      - run: echo disabled

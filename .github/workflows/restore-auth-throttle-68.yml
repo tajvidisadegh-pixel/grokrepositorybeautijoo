@@ -1,38 +1,9 @@
 name: restore-auth-throttle-68
+# Historical one-shot patch — disabled so it cannot fail main
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'scripts/auth68_chunks/**'
-      - '.github/workflows/restore-auth-throttle-68.yml'
 jobs:
-  restore:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Decode and restore auth.controller
-        run: |
-          python3 << 'END'
-          import base64, zlib, pathlib
-          parts = []
-          i = 0
-          while True:
-            p = pathlib.Path(f"scripts/auth68_chunks/c{i}.b64")
-            if not p.exists():
-              break
-            parts.append(p.read_text().strip())
-            i += 1
-          data = zlib.decompress(base64.b64decode("".join(parts)))
-          pathlib.Path("backend/src/auth/auth.controller.ts").write_bytes(data)
-          print("restored", len(data))
-          END
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add backend/src/auth/auth.controller.ts
-          git diff --cached --quiet && exit 0
-          git commit -m "fix(#68.4): restore auth.controller with 100/10min throttle"
-          git push
+      - run: echo disabled
