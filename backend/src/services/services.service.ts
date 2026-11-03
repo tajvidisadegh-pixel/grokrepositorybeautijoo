@@ -6,6 +6,13 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProfessionalsService } from '../professionals/professionals.service';
+import {
+  assertModeAllowed,
+  normalizePricingMode,
+  pickDefaultMode,
+  type CatalogPricingFlags,
+  type PricingMode,
+} from './pricing-mode';
 import { AppCacheService } from '../cache/app-cache.service';
 
 function slugify(input: string): string {
@@ -154,6 +161,90 @@ export class ServicesService {
     });
   }
 
+
+  private catalogFlags(service: {
+    allowFixed: boolean;
+    allowVariable: boolean;
+    allowDeposit: boolean;
+    defaultPricingMode: string;
+  }): CatalogPricingFlags {
+    return {
+      allowFixed: service.allowFixed,
+      allowVariable: service.allowVariable,
+      allowDeposit: service.allowDeposit,
+      defaultPricingMode: service.defaultPricingMode,
+    };
+  }
+
+  private resolvePricingFields(
+    flags: CatalogPricingFlags,
+    data: {
+      pricingMode?: string;
+      depositAmount?: number | null;
+      estimateMinPrice?: number | null;
+      estimateMaxPrice?: number | null;
+      optionDeltas?: Record<string, unknown> | null;
+    },
+    current?: {
+      pricingMode?: string | null;
+      depositAmount?: number | null;
+      estimateMinPrice?: number | null;
+      estimateMaxPrice?: number | null;
+      optionDeltas?: unknown;
+    },
+  ) {
+    const mode: PricingMode = data.pricingMode
+      ? normalizePricingMode(data.pricingMode)
+      : current?.pricingMode
+        ? normalizePricingMode(current.pricingMode)
+        : pickDefaultMode(flags);
+
+    try {
+      assertModeAllowed(flags, mode);
+    } catch {
+      throw new BadRequestException(
+        `حالت قیمت‌گذاری «${mode}» برای این تخصص مجاز نیست`,
+      );
+    }
+
+    let depositAmount =
+      data.depositAmount !== undefined ? data.depositAmount : current?.depositAmount ?? null;
+    let estimateMinPrice =
+      data.estimateMinPrice !== undefined
+        ? data.estimateMinPrice
+        : current?.estimateMinPrice ?? null;
+    let estimateMaxPrice =
+      data.estimateMaxPrice !== undefined
+        ? data.estimateMaxPrice
+        : current?.estimateMaxPrice ?? null;
+    let optionDeltas =
+      data.optionDeltas !== undefined
+        ? data.optionDeltas
+        : ((current?.optionDeltas as Record<string, unknown> | null) ?? null);
+
+    if (mode === 'deposit') {
+      if (depositAmount == null || depositAmount < 0) {
+        throw new BadRequestException('مبلغ بیعانه الزامی و نامعتبر است');
+      }
+    }
+    if (
+      mode === 'variable' &&
+      estimateMinPrice != null &&
+      estimateMaxPrice != null &&
+      estimateMinPrice > estimateMaxPrice
+    ) {
+      throw new BadRequestException('بازه قیمت نامعتبر است');
+    }
+
+    return {
+      pricingMode: mode,
+      depositAmount,
+      estimateMinPrice,
+      estimateMaxPrice,
+      optionDeltas: optionDeltas === null ? Prisma.JsonNull : optionDeltas,
+    };
+  }
+
   async upsertProfessionalService(
     userId: string,
     data: {
@@ -163,6 +254,11 @@ export class ServicesService {
       bufferMin?: number;
       description?: string;
       isActive?: boolean;
+      pricingMode?: string;
+      depositAmount?: number;
+      estimateMinPrice?: number;
+      estimateMaxPrice?: number;
+      optionDeltas?: Record<string, unknown>;
     },
   ) {
     const pro = await this.professionals.requireOwnProfessional(userId);
@@ -179,6 +275,9 @@ export class ServicesService {
       throw new BadRequestException('قیمت نامعتبر است');
     }
 
+    const flags = this.catalogFlags(service);
+    const pricing = this.resolvePricingFields(flags, data);
+
     return this.prisma.professionalService.upsert({
       where: {
         professionalId_serviceId: {
@@ -192,6 +291,11 @@ export class ServicesService {
         bufferMin: data.bufferMin ?? 0,
         description: data.description,
         isActive: data.isActive ?? true,
+        pricingMode: pricing.pricingMode,
+        depositAmount: pricing.depositAmount,
+        estimateMinPrice: pricing.estimateMinPrice,
+        estimateMaxPrice: pricing.estimateMaxPrice,
+        optionDeltas: pricing.optionDeltas,
       },
       create: {
         professionalId: pro.id,
@@ -201,9 +305,28 @@ export class ServicesService {
         bufferMin: data.bufferMin ?? 0,
         description: data.description,
         isActive: data.isActive ?? true,
+        pricingMode: pricing.pricingMode,
+        depositAmount: pricing.depositAmount,
+        estimateMinPrice: pricing.estimateMinPrice,
+        estimateMaxPrice: pricing.estimateMaxPrice,
+        optionDeltas: pricing.optionDeltas,
       },
       include: {
-        service: { include: { category: true } },
+        service: {
+          include: {
+            category: true,
+            attributeGroups: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                options: {
+                  where: { isActive: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
         priceRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
         durationRules: {
           where: { isActive: true },
@@ -224,15 +347,32 @@ export class ServicesService {
       bufferMin?: number;
       description?: string;
       isActive?: boolean;
+      pricingMode?: string;
+      depositAmount?: number;
+      estimateMinPrice?: number;
+      estimateMaxPrice?: number;
+      optionDeltas?: Record<string, unknown>;
     },
   ) {
-    await this.requireOwnPs(userId, id);
+    const { ps } = await this.requireOwnPs(userId, id);
     if (data.durationMin != null && data.durationMin < 5) {
       throw new BadRequestException('مدت باید حداقل ۵ دقیقه باشد');
     }
     if (data.price != null && data.price < 0) {
       throw new BadRequestException('قیمت نامعتبر است');
     }
+
+    const service = await this.prisma.service.findUnique({ where: { id: ps.serviceId } });
+    if (!service) throw new NotFoundException('خدمت یافت نشد');
+    const flags = this.catalogFlags(service);
+    const wantsPricing =
+      data.pricingMode !== undefined ||
+      data.depositAmount !== undefined ||
+      data.estimateMinPrice !== undefined ||
+      data.estimateMaxPrice !== undefined ||
+      data.optionDeltas !== undefined;
+    const pricing = wantsPricing ? this.resolvePricingFields(flags, data, ps) : null;
+
     return this.prisma.professionalService.update({
       where: { id },
       data: {
@@ -241,9 +381,32 @@ export class ServicesService {
         ...(data.bufferMin != null ? { bufferMin: data.bufferMin } : {}),
         ...(data.description !== undefined ? { description: data.description } : {}),
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+        ...(pricing
+          ? {
+              pricingMode: pricing.pricingMode,
+              depositAmount: pricing.depositAmount,
+              estimateMinPrice: pricing.estimateMinPrice,
+              estimateMaxPrice: pricing.estimateMaxPrice,
+              optionDeltas: pricing.optionDeltas,
+            }
+          : {}),
       },
       include: {
-        service: { include: { category: true } },
+        service: {
+          include: {
+            category: true,
+            attributeGroups: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                options: {
+                  where: { isActive: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
         addOns: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
         mediaAssets: { orderBy: { sortOrder: 'asc' } },
       },
@@ -255,7 +418,21 @@ export class ServicesService {
     return this.prisma.professionalService.findMany({
       where: { professionalId: pro.id },
       include: {
-        service: { include: { category: true } },
+        service: {
+          include: {
+            category: true,
+            attributeGroups: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                options: {
+                  where: { isActive: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
         priceRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
         durationRules: {
           where: { isActive: true },

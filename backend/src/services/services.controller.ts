@@ -1,13 +1,36 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsObject, IsOptional, IsString, IsUUID, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ServicesService } from './services.service';
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-class UpsertProServiceDto { @IsUUID() serviceId!: string; @Type(() => Number) @IsInt() @Min(5) durationMin!: number; @Type(() => Number) @IsInt() @Min(0) price!: number; @IsOptional() @Type(() => Number) @IsInt() @Min(0) bufferMin?: number; @IsOptional() @IsString() description?: string; @IsOptional() @IsBoolean() isActive?: boolean; }
-class PatchProServiceDto { @IsOptional() @Type(() => Number) @IsInt() @Min(5) durationMin?: number; @IsOptional() @Type(() => Number) @IsInt() @Min(0) price?: number; @IsOptional() @Type(() => Number) @IsInt() @Min(0) bufferMin?: number; @IsOptional() @IsString() description?: string; @IsOptional() @IsBoolean() isActive?: boolean; }
+class UpsertProServiceDto {
+  @IsUUID() serviceId!: string;
+  @Type(() => Number) @IsInt() @Min(5) durationMin!: number;
+  @Type(() => Number) @IsInt() @Min(0) price!: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) bufferMin?: number;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsIn(['fixed', 'variable', 'deposit']) pricingMode?: 'fixed' | 'variable' | 'deposit';
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) depositAmount?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) estimateMinPrice?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) estimateMaxPrice?: number;
+  @IsOptional() @IsObject() optionDeltas?: Record<string, unknown>;
+}
+class PatchProServiceDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(5) durationMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) price?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) bufferMin?: number;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsIn(['fixed', 'variable', 'deposit']) pricingMode?: 'fixed' | 'variable' | 'deposit';
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) depositAmount?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) estimateMinPrice?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) estimateMaxPrice?: number;
+  @IsOptional() @IsObject() optionDeltas?: Record<string, unknown>;
+}
 class RenameMyServiceDto { @IsString() @MinLength(1) name!: string; }
 class CreateCategoryNodeDto { @IsString() @MinLength(1) name!: string; @IsOptional() @IsUUID() parentId?: string; @IsOptional() @IsString() slug?: string; @IsOptional() @IsString() description?: string; @IsOptional() @IsString() icon?: string; @IsOptional() @Type(() => Number) @IsInt() sortOrder?: number; }
 class CreateServiceNodeDto { @IsString() @MinLength(1) name!: string; @IsUUID() categoryId!: string; @IsOptional() @IsString() slug?: string; @IsOptional() @IsString() description?: string; }
