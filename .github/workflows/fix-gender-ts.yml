@@ -1,8 +1,0 @@
-name: disabled-fix-gender
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo disabled

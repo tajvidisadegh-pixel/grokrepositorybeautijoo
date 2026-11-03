@@ -1,9 +1,0 @@
-name: fix-61-panel
-# Historical one-shot patch — disabled so it cannot fail main
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo disabled

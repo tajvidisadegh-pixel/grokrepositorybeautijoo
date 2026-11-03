@@ -1,8 +1,0 @@
-name: disabled-item9
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo disabled
