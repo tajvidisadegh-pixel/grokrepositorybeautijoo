@@ -28,9 +28,6 @@ export default function ComplaintPage() {
           </a>
         </li>
         <li>پاسخ اولیه معمولاً ظرف ۱ تا ۳ روز کاری ارسال می‌شود.</li>
-        <li>
-          برای قطع سرویس یا وضعیت سامانه: <Link href="/status" className="text-coral underline">/status</Link>
-        </li>
       </ol>
       <div className="rounded-2xl border border-border bg-gray-light/40 px-4 py-3 text-xs text-gray">
         شکایت‌های مرتبط با ایمنی یا تخلف جدی در اولویت بررسی ادمین قرار می‌گیرند و در لاگ audit ثبت می‌شوند.

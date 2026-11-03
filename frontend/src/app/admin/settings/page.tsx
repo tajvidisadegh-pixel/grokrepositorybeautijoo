@@ -102,7 +102,7 @@ export default function AdminSettingsPage() {
           <li>PAYMENT_PROVIDER و callback URL</li>
           <li>NEXT_PUBLIC_API_URL / APP_URL</li>
           <li>REMINDERS_ENABLED و JWT secrets</li>
-          <li>بعد از deploy: /status و یک رزرو آزمایشی</li>
+          <li>بعد از deploy: یک رزرو آزمایشی</li>
         </ul>
       </div>
 
