@@ -20,7 +20,7 @@ type Props = {
   onIndexChange: (i: number) => void;
 };
 
-/** Full-screen media lightbox with prev/next + Escape (issue #40 item 16). */
+/** Full-screen media lightbox — centered on mobile & desktop */
 export function ImageLightbox({ items, index, onClose, onIndexChange }: Props) {
   const n = items.length;
   const current = n > 0 ? items[((index % n) + n) % n] : null;
@@ -36,11 +36,8 @@ export function ImageLightbox({ items, index, onClose, onIndexChange }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-        // RTL: ArrowLeft = next visually often; still map both
-        if (e.key === 'ArrowRight') go(-1);
-        else go(1);
-      }
+      if (e.key === 'ArrowRight') go(-1);
+      if (e.key === 'ArrowLeft') go(1);
     }
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
@@ -60,8 +57,9 @@ export function ImageLightbox({ items, index, onClose, onIndexChange }: Props) {
       aria-modal="true"
       aria-label="بزرگ‌نمایی تصویر"
       onClick={onClose}
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="flex items-center justify-between px-4 py-3 text-white">
+      <div className="flex shrink-0 items-center justify-between px-3 py-2 text-white sm:px-4 sm:py-3">
         <span className="text-sm opacity-80" dir="ltr">
           {index + 1} / {n}
         </span>
@@ -78,7 +76,7 @@ export function ImageLightbox({ items, index, onClose, onIndexChange }: Props) {
       </div>
 
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center px-12"
+        className="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-12"
         onClick={(e) => e.stopPropagation()}
       >
         {n > 1 && (
@@ -86,7 +84,7 @@ export function ImageLightbox({ items, index, onClose, onIndexChange }: Props) {
             <button
               type="button"
               aria-label="قبلی"
-              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 px-3 py-2 text-white hover:bg-white/25"
+              className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/20 px-2.5 py-2 text-lg text-white hover:bg-white/30 sm:right-2 sm:px-3"
               onClick={() => go(-1)}
             >
               ‹
@@ -94,7 +92,7 @@ export function ImageLightbox({ items, index, onClose, onIndexChange }: Props) {
             <button
               type="button"
               aria-label="بعدی"
-              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 px-3 py-2 text-white hover:bg-white/25"
+              className="absolute left-1 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/20 px-2.5 py-2 text-lg text-white hover:bg-white/30 sm:left-2 sm:px-3"
               onClick={() => go(1)}
             >
               ›
@@ -102,28 +100,32 @@ export function ImageLightbox({ items, index, onClose, onIndexChange }: Props) {
           </>
         )}
 
-        {isVideo(current.mimeType) ? (
-          <video
-            key={current.id}
-            src={current.url}
-            className="max-h-[80vh] max-w-full rounded-lg object-contain"
-            controls
-            playsInline
-            autoPlay
-          />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={current.id}
-            src={current.url}
-            alt={current.caption || ''}
-            className="max-h-[80vh] max-w-full rounded-lg object-contain"
-          />
-        )}
+        <div className="flex h-full w-full max-w-[100vw] items-center justify-center">
+          {isVideo(current.mimeType) ? (
+            <video
+              key={current.id}
+              src={current.url}
+              className="max-h-[min(80vh,100%)] max-w-[min(100%,100vw-1rem)] rounded-lg object-contain"
+              controls
+              playsInline
+              autoPlay
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={current.id}
+              src={current.url}
+              alt={current.caption || ''}
+              className="max-h-[min(80vh,100%)] max-w-[min(100%,100vw-1rem)] rounded-lg object-contain"
+            />
+          )}
+        </div>
       </div>
 
       {current.caption && (
-        <p className="px-4 pb-6 text-center text-sm text-white/90">{current.caption}</p>
+        <p className="shrink-0 px-4 pb-4 text-center text-sm text-white/90 sm:pb-6">
+          {current.caption}
+        </p>
       )}
     </div>
   );
