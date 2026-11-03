@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -27,7 +28,7 @@ export class SupportService {
         take: safeLimit,
         include: {
           messages: {
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
             take: 1,
             select: { body: true, createdAt: true, isStaff: true },
           },
@@ -134,11 +135,38 @@ export class SupportService {
     return ticket;
   }
 
-  async createTicket(userId: string, subject: string, body: string) {
-    const sub = (subject || '').trim().slice(0, 200);
+  async createTicket(
+    userId: string,
+    subject: string,
+    body: string,
+    source?: string,
+  ) {
     const msg = (body || '').trim();
-    if (sub.length < 3) throw new ForbiddenException('موضوع حداقل ۳ کاراکتر باشد');
-    if (msg.length < 2) throw new ForbiddenException('پیام حداقل ۲ کاراکتر باشد');
+    if (msg.length < 1) throw new BadRequestException('متن پیام خالی است');
+
+    const src = (source || '').trim().toLowerCase();
+    const sourceLabel =
+      src === 'zibagar'
+        ? 'پنل زیباگر'
+        : src === 'panel'
+          ? 'پنل مشتری'
+          : src === 'contact'
+            ? 'تماس با ما'
+            : '';
+
+    let sub = (subject || '').trim().slice(0, 180);
+    if (sub.length < 3) throw new BadRequestException('موضوع حداقل ۳ کاراکتر باشد');
+    if (sourceLabel && !sub.includes(sourceLabel)) {
+      sub = (`[${sourceLabel}] ${sub}`).slice(0, 200);
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { accountType: true },
+    });
+    const ackHref =
+      user?.accountType === 'professional' ? '/zibagar/support' : '/panel';
+
     const ticket = await this.prisma.supportTicket.create({
       data: {
         userId,
@@ -147,25 +175,22 @@ export class SupportService {
         messages: {
           create: {
             senderId: userId,
-            body: msg,
+            body: sourceLabel ? `از: ${sourceLabel}\n\n${msg}` : msg,
             isStaff: false,
           },
         },
       },
-      include: {
-        messages: true,
-      },
+      include: { messages: true },
     });
 
-    // Auto-ack to sender (#65.17) — in-app only, never fails the ticket create
     try {
       await this.notifications.notify({
         userId,
         type: NotificationType.system,
         title: 'پیام شما دریافت شد',
         body:
-          'پیام شما با موفقیت ارسال شد. تیم پشتیبانی در اسرع وقت پیگیری می‌کند و به شما پاسخ خواهد داد. از همراهی‌تان سپاسگزاریم.',
-        data: { ticketId: ticket.id, href: '/zibagar/support' },
+          'پیام شما با موفقیت ارسال شد. تیم پشتیبانی در اسرع وقت پیگیری می‌کند و به شما پاسخ خواهد داد. از همراهی و اعتمادتان سپاسگزاریم.',
+        data: { ticketId: ticket.id, href: ackHref, source: src || null },
         sms: false,
       });
     } catch {
@@ -189,7 +214,7 @@ export class SupportService {
       throw new ForbiddenException('دسترسی ندارید');
     }
     const msg = (body || '').trim();
-    if (msg.length < 1) throw new ForbiddenException('پیام خالی است');
+    if (msg.length < 1) throw new BadRequestException('پیام خالی است');
     const message = await this.prisma.supportTicketMessage.create({
       data: {
         ticketId,
@@ -203,18 +228,41 @@ export class SupportService {
       where: { id: ticketId },
       data: { status: newStatus, updatedAt: new Date() },
     });
+
+    try {
+      if (isStaff && ticket.userId) {
+        const owner = await this.prisma.user.findUnique({
+          where: { id: ticket.userId },
+          select: { accountType: true },
+        });
+        const href =
+          owner?.accountType === 'professional'
+            ? '/zibagar/support'
+            : '/panel';
+        await this.notifications.notify({
+          userId: ticket.userId,
+          type: NotificationType.system,
+          title: 'پاسخ پشتیبانی',
+          body: 'پشتیبانی به تیکت شما پاسخ داد. برای مشاهده وارد بخش پشتیبانی شوید.',
+          data: { ticketId, href },
+          sms: false,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+
     return message;
   }
 
   async setStatus(ticketId: string, status: string) {
     const allowed = ['open', 'answered', 'closed'];
     if (!allowed.includes(status)) {
-      throw new ForbiddenException('وضعیت نامعتبر');
+      throw new BadRequestException('وضعیت نامعتبر');
     }
-    const ticket = await this.prisma.supportTicket.update({
+    return this.prisma.supportTicket.update({
       where: { id: ticketId },
       data: { status },
     });
-    return ticket;
   }
 }
