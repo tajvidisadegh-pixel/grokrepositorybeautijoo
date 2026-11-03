@@ -16,122 +16,76 @@ jobs:
       - name: Patch professionals.service.ts
         run: |
           set -euo pipefail
-          F=backend/src/professionals/professionals.service.ts
-          if grep -q "from '../common/public-slug'" "$F"; then
-            echo "import already present"
-          else
-            sed -i "s|import { boundingBox, haversineKm, parseGeoQuery } from '../common/geo';|import { boundingBox, haversineKm, parseGeoQuery } from '../common/geo';\nimport { isValidPublicSlug, toPublicSlug } from '../common/public-slug';|" "$F"
-          fi
           python3 << 'PY'
           from pathlib import Path
           p = Path('backend/src/professionals/professionals.service.ts')
           t = p.read_text()
-          if 'const normalizedSlug = toPublicSlug(data.slug)' in t:
-              print('createForUser already patched')
-          else:
-              old = """  async createForUser(userId: string, data: { slug: string; title: string; bio?: string }) {
-    const existing = await this.prisma.professional.findUnique({ where: { userId } });
-    if (existing) throw new ConflictException('\\u067e\\u0631\\u0648\\u0641\\u0627\\u06cc\\u0644 \\u0632\\u06cc\\u0628\\u0627\\u06af\\u0631 \\u0642\\u0628\\u0644\\u0627\\u064b \\u0627\\u06cc\\u062c\\u0627\\u062f \\u0634\\u062f\\u0647 \\u0627\\u0633\\u062a');
-    const slugTaken = await this.prisma.professional.findUnique({ where: { slug: data.slug } });
-    if (slugTaken) throw new ConflictException('\\u0627\\u06cc\\u0646 \\u0627\\u0633\\u0644\\u0627\\u06af \\u0642\\u0628\\u0644\\u0627\\u064b \\u0627\\u0633\\u062a\\u0641\\u0627\\u062f\\u0647 \\u0634\\u062f\\u0647 \\u0627\\u0633\\u062a');
-    const proRole = await this.prisma.role.findUnique({ where: { name: 'professional' } });
-    if (proRole) {
-      await this.prisma.userRole.upsert({
-        where: { userId_roleId: { userId, roleId: proRole.id } },
-        update: {},
-        create: { userId, roleId: proRole.id },
-      });
-    }
-    return this.prisma.professional.create({
-      data: {
-        userId, slug: data.slug, title: data.title, bio: data.bio,
-        status: ProfessionalStatus.draft,
-      },
-    });
-  }"""
-              # file uses actual unicode escapes in source - match via simpler marker
-              import re
-              m = re.search(r'async createForUser\(userId: string, data: \{ slug: string; title: string; bio\?: string \}\) \{[\s\S]*?return this\.prisma\.professional\.create\(\{[\s\S]*?\}\);\n  \}', t)
-              if not m:
-                  raise SystemExit('createForUser block not found')
-              new = '''  async createForUser(userId: string, data: { slug: string; title: string; bio?: string }) {
-    const existing = await this.prisma.professional.findUnique({ where: { userId } });
-    if (existing) throw new ConflictException('\\u067e\\u0631\\u0648\\u0641\\u0627\\u06cc\\u0644 \\u0632\\u06cc\\u0628\\u0627\\u06af\\u0631 \\u0642\\u0628\\u0644\\u0627\\u064b \\u0627\\u06cc\\u062c\\u0627\\u062f \\u0634\\u062f\\u0647 \\u0627\\u0633\\u062a');
-    const normalizedSlug = toPublicSlug(data.slug);
-    if (!isValidPublicSlug(normalizedSlug)) {
-      throw new BadRequestException('\\u0627\\u0633\\u0644\\u0627\\u06af \\u0639\\u0645\\u0648\\u0645\\u06cc \\u0646\\u0627\\u0645\\u0639\\u062a\\u0628\\u0631 \\u0627\\u0633\\u062a. \\u0641\\u0642\\u0637 \\u062d\\u0631\\u0648\\u0641 \\u0644\\u0627\\u062a\\u06cc\\u0646\\u060c \\u0639\\u062f\\u062f \\u0648 \\u062e\\u0637 \\u0641\\u0627\\u0635\\u0644\\u0647 \\u0645\\u062c\\u0627\\u0632 \\u0627\\u0633\\u062a \\u0648 \\u0646\\u0628\\u0627\\u06cc\\u062f \\u0634\\u0645\\u0627\\u0631\\u0647 \\u062a\\u0644\\u0641\\u0646 \\u0628\\u0627\\u0634\\u062f.');
-    }
-    const slugTaken = await this.prisma.professional.findUnique({ where: { slug: normalizedSlug } });
-    if (slugTaken) throw new ConflictException('\\u0627\\u06cc\\u0646 \\u0627\\u0633\\u0644\\u0627\\u06af \\u0642\\u0628\\u0644\\u0627\\u064b \\u0627\\u0633\\u062a\\u0641\\u0627\\u062f\\u0647 \\u0634\\u062f\\u0647 \\u0627\\u0633\\u062a');
-    const proRole = await this.prisma.role.findUnique({ where: { name: 'professional' } });
-    if (proRole) {
-      await this.prisma.userRole.upsert({
-        where: { userId_roleId: { userId, roleId: proRole.id } },
-        update: {},
-        create: { userId, roleId: proRole.id },
-      });
-    }
-    return this.prisma.professional.create({
-      data: {
-        userId, slug: normalizedSlug, title: data.title, bio: data.bio,
-        status: ProfessionalStatus.draft,
-      },
-    });
-  }'''
-              # Use unicode from original match
-              orig = m.group(0)
-              # Build new from structure
-              new_body = orig
-              if 'data.slug' in new_body and 'normalizedSlug' not in new_body:
-                  new_body = new_body.replace(
-                      "const slugTaken = await this.prisma.professional.findUnique({ where: { slug: data.slug } });",
-                      "const normalizedSlug = toPublicSlug(data.slug);\n    if (!isValidPublicSlug(normalizedSlug)) {\n      throw new BadRequestException('اسلاگ عمومی نامعتبر است. فقط حروف لاتین، عدد و خط فاصله مجاز است و نباید شماره تلفن باشد.');\n    }\n    const slugTaken = await this.prisma.professional.findUnique({ where: { slug: normalizedSlug } });",
-                      1,
-                  )
-                  new_body = new_body.replace('slug: data.slug,', 'slug: normalizedSlug,', 1)
-              t = t[:m.start()] + new_body + t[m.end():]
-              p.write_text(t)
+
+          if "from '../common/public-slug'" not in t:
+              t = t.replace(
+                  "import { boundingBox, haversineKm, parseGeoQuery } from '../common/geo';",
+                  "import { boundingBox, haversineKm, parseGeoQuery } from '../common/geo';\nimport { isValidPublicSlug, toPublicSlug } from '../common/public-slug';",
+                  1,
+              )
+              print('added import')
+
+          if 'const normalizedSlug = toPublicSlug(data.slug)' not in t:
+              needle = "const slugTaken = await this.prisma.professional.findUnique({ where: { slug: data.slug } });"
+              if needle not in t:
+                  raise SystemExit('slugTaken needle missing')
+              replacement = (
+                  "const normalizedSlug = toPublicSlug(data.slug);\n"
+                  "    if (!isValidPublicSlug(normalizedSlug)) {\n"
+                  "      throw new BadRequestException('اسلاگ عمومی نامعتبر است. فقط حروف لاتین، عدد و خط فاصله مجاز است و نباید شماره تلفن باشد.');\n"
+                  "    }\n"
+                  "    const slugTaken = await this.prisma.professional.findUnique({ where: { slug: normalizedSlug } });"
+              )
+              t = t.replace(needle, replacement, 1)
+              t = t.replace('userId, slug: data.slug, title: data.title, bio: data.bio,', 'userId, slug: normalizedSlug, title: data.title, bio: data.bio,', 1)
               print('createForUser patched')
-          # publish normalize
-          t = p.read_text()
-          if 'Normalize legacy phone/invalid slugs' in t:
-              print('publish already patched')
-          else:
-              old_pub = """    const updated = await this.prisma.professional.update({
-      where: { id: pro.id },
-      data: {
-        status: ProfessionalStatus.pending_review,
-        publishedAt: null,
-      },
-    });"""
-              if old_pub not in t:
-                  raise SystemExit('publish block not found')
-              new_pub = """    // Normalize legacy phone/invalid slugs before entering review
-    const data: Prisma.ProfessionalUpdateInput = {
-      status: ProfessionalStatus.pending_review,
-      publishedAt: null,
-    };
-    if (!isValidPublicSlug(pro.slug)) {
-      const base = toPublicSlug(pro.title || pro.slug) || `pro-${pro.id.slice(0, 8)}`;
-      let candidate = isValidPublicSlug(base) ? base : `pro-${pro.id.slice(0, 8)}`;
-      let n = 0;
-      while (await this.prisma.professional.findFirst({ where: { slug: candidate, NOT: { id: pro.id } } })) {
-        n += 1;
-        candidate = `${base.slice(0, 70)}-${n}`;
-      }
-      data.slug = candidate;
-    }
-    const updated = await this.prisma.professional.update({
-      where: { id: pro.id },
-      data,
-    });"""
-              t = t.replace(old_pub, new_pub, 1)
-              p.write_text(t)
+
+          if 'Normalize legacy phone/invalid slugs' not in t:
+              old = (
+                  "    const updated = await this.prisma.professional.update({\n"
+                  "      where: { id: pro.id },\n"
+                  "      data: {\n"
+                  "        status: ProfessionalStatus.pending_review,\n"
+                  "        publishedAt: null,\n"
+                  "      },\n"
+                  "    });"
+              )
+              if old not in t:
+                  raise SystemExit('publish block missing')
+              new = (
+                  "    // Normalize legacy phone/invalid slugs before entering review\n"
+                  "    const data: Prisma.ProfessionalUpdateInput = {\n"
+                  "      status: ProfessionalStatus.pending_review,\n"
+                  "      publishedAt: null,\n"
+                  "    };\n"
+                  "    if (!isValidPublicSlug(pro.slug)) {\n"
+                  "      const base = toPublicSlug(pro.title || pro.slug) || `pro-${pro.id.slice(0, 8)}`;\n"
+                  "      let candidate = isValidPublicSlug(base) ? base : `pro-${pro.id.slice(0, 8)}`;\n"
+                  "      let n = 0;\n"
+                  "      while (await this.prisma.professional.findFirst({ where: { slug: candidate, NOT: { id: pro.id } } })) {\n"
+                  "        n += 1;\n"
+                  "        candidate = `${base.slice(0, 70)}-${n}`;\n"
+                  "      }\n"
+                  "      data.slug = candidate;\n"
+                  "    }\n"
+                  "    const updated = await this.prisma.professional.update({\n"
+                  "      where: { id: pro.id },\n"
+                  "      data,\n"
+                  "    });"
+              )
+              t = t.replace(old, new, 1)
               print('publish patched')
+
+          p.write_text(t)
+          assert "from '../common/public-slug'" in t
+          assert 'normalizedSlug' in t
+          assert 'Normalize legacy phone/invalid slugs' in t
+          print('OK')
           PY
-          grep -q toPublicSlug "$F"
-          grep -q normalizedSlug "$F" || grep -q 'Normalize legacy' "$F"
-          echo "service markers OK"
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
