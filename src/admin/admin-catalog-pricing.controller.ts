@@ -22,7 +22,7 @@ import {
 import { Type } from 'class-transformer';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppCacheService } from '../cache/app-cache.service';
-import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import {
   normalizePricingMode,
   type CatalogPricingFlags,
