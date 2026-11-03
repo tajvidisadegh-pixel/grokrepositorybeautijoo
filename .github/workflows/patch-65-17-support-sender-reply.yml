@@ -1,0 +1,357 @@
+name: patch-65-17-support-sender-reply
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-65-17-support-sender-reply.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Support sender identity + reply + ack
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # ---- controller: staff detection + source on create ----
+          cp = Path('backend/src/support/support.controller.ts')
+          c = '''import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from \'@nestjs/common\';
+import { ApiBearerAuth, ApiTags } from \'@nestjs/swagger\';
+import { SupportService } from \'./support.service\';
+import { CurrentUser } from \'../common/decorators/current-user.decorator\';
+import { Roles } from \'../common/decorators/roles.decorator\';
+import { RequirePermissions } from \'../common/decorators/permissions.decorator\';
+
+function isStaffUser(roles?: string[], permissions?: string[]): boolean {
+  const r = Array.isArray(roles) ? roles : [];
+  const p = Array.isArray(permissions) ? permissions : [];
+  if (r.includes(\'SUPER_ADMIN\') || r.includes(\'admin\')) return true;
+  if (p.includes(\'admin.support.handle\')) return true;
+  return false;
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  zibagar: \'پنل زیباگر\',
+  panel: \'پنل مشتری\',
+  contact: \'تماس با ما\',
+  admin: \'ادمین\',
+  other: \'سایر\',
+};
+
+@ApiTags(\'support\')
+@ApiBearerAuth()
+@Controller(\'support\')
+export class SupportController {
+  constructor(private readonly service: SupportService) {}
+
+  @Get(\'tickets\')
+  listMine(
+    @CurrentUser(\'id\') userId: string,
+    @Query(\'page\') page?: string,
+  ) {
+    return this.service.listMine(userId, page ? parseInt(page, 10) : 1);
+  }
+
+  @Get(\'tickets/all\')
+  @Roles(\'admin\', \'SUPER_ADMIN\')
+  @RequirePermissions(\'admin.support.handle\')
+  listAll(
+    @Query(\'page\') page?: string,
+    @Query(\'status\') status?: string,
+  ) {
+    return this.service.listAll(
+      page ? parseInt(page, 10) : 1,
+      40,
+      status,
+    );
+  }
+
+  @Get(\'tickets/:id\')
+  getOne(
+    @CurrentUser(\'id\') userId: string,
+    @CurrentUser(\'roles\') roles: string[] | undefined,
+    @CurrentUser(\'permissions\') permissions: string[] | undefined,
+    @Param(\'id\') id: string,
+  ) {
+    return this.service.getOne(id, userId, isStaffUser(roles, permissions));
+  }
+
+  @Post(\'tickets\')
+  create(
+    @CurrentUser(\'id\') userId: string,
+    @Body() body: { subject?: string; body?: string; source?: string },
+  ) {
+    return this.service.createTicket(
+      userId,
+      body?.subject ?? \'\',
+      body?.body ?? \'\',
+      body?.source,
+    );
+  }
+
+  @Post(\'tickets/:id/messages\')
+  addMessage(
+    @CurrentUser(\'id\') userId: string,
+    @CurrentUser(\'roles\') roles: string[] | undefined,
+    @CurrentUser(\'permissions\') permissions: string[] | undefined,
+    @Param(\'id\') id: string,
+    @Body() body: { body?: string },
+  ) {
+    return this.service.addMessage(
+      id,
+      userId,
+      body?.body ?? \'\',
+      isStaffUser(roles, permissions),
+    );
+  }
+
+  @Patch(\'tickets/:id/status\')
+  @Roles(\'admin\', \'SUPER_ADMIN\')
+  @RequirePermissions(\'admin.support.handle\')
+  setStatus(
+    @Param(\'id\') id: string,
+    @Body() body: { status?: string },
+  ) {
+    return this.service.setStatus(id, body?.status ?? \'open\');
+  }
+}
+'''
+          # fix escaped quotes - I used \' which is wrong for file content
+          c = c.replace("\\'", "'")
+          cp.write_text(c)
+          print('controller written', cp.stat().st_size)
+
+          # ---- service: source prefix, ack href, staff reply notify ----
+          ss = Path('backend/src/support/support.service.ts')
+          t = ss.read_text()
+
+          if 'BadRequestException' not in t:
+              t = t.replace(
+                  'ForbiddenException,\n  Injectable,',
+                  'BadRequestException,\n  ForbiddenException,\n  Injectable,',
+              )
+
+          # replace createTicket signature and body
+          import re
+          new_create = '''
+  async createTicket(
+    userId: string,
+    subject: string,
+    body: string,
+    source?: string,
+  ) {
+    const subRaw = (subject || '').trim().slice(0, 180);
+    const msg = (body || '').trim();
+    if (subRaw.length < 3) throw new BadRequestException('موضوع حداقل ۳ کاراکتر باشد');
+    if (msg.length < 1) throw new BadRequestException('متن پیام خالی است');
+
+    const src = (source || '').trim().toLowerCase();
+    const sourceLabel =
+      src === 'zibagar'
+        ? 'پنل زیباگر'
+        : src === 'panel'
+          ? 'پنل مشتری'
+          : src === 'contact'
+            ? 'تماس با ما'
+            : src
+              ? src
+              : '';
+    // Prefix subject so admin always sees channel even in plain list
+    const sub =
+      sourceLabel && !subRaw.includes(sourceLabel)
+        ? `[${sourceLabel}] ${subRaw}`.slice(0, 200)
+        : subRaw;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { accountType: true },
+    });
+    const ackHref =
+      user?.accountType === 'professional'
+        ? '/zibagar/support'
+        : '/panel';
+
+    const ticket = await this.prisma.supportTicket.create({
+      data: {
+        userId,
+        subject: sub,
+        status: 'open',
+        messages: {
+          create: {
+            senderId: userId,
+            body: sourceLabel
+              ? `از: ${sourceLabel}\n\n${msg}`
+              : msg,
+            isStaff: false,
+          },
+        },
+      },
+      include: { messages: true },
+    });
+
+    // #65.17 auto-ack
+    try {
+      await this.notifications.notify({
+        userId,
+        type: NotificationType.system,
+        title: 'پیام شما دریافت شد',
+        body:
+          'پیام شما با موفقیت ارسال شد. تیم پشتیبانی در اسرع وقت پیگیری می‌کند و به شما پاسخ خواهد داد. از همراهی و اعتمادتان سپاسگزاریم.',
+        data: { ticketId: ticket.id, href: ackHref, source: src || null },
+        sms: false,
+      });
+    } catch {
+      /* ignore */
+    }
+
+    return ticket;
+  }
+'''
+
+          t = re.sub(
+              r"async createTicket\([\s\S]*?\n  async addMessage",
+              new_create + "\n  async addMessage",
+              t,
+              count=1,
+          )
+
+          # enhance addMessage for staff notify
+          old_add_end = '''    const newStatus = isStaff ? 'answered' : 'open';
+    await this.prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { status: newStatus, updatedAt: new Date() },
+    });
+    return message;
+  }'''
+
+          new_add_end = '''    const newStatus = isStaff ? 'answered' : 'open';
+    await this.prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { status: newStatus, updatedAt: new Date() },
+    });
+
+    // #65.17 — notify the other party
+    try {
+      if (isStaff && ticket.userId) {
+        const owner = await this.prisma.user.findUnique({
+          where: { id: ticket.userId },
+          select: { accountType: true },
+        });
+        const href =
+          owner?.accountType === 'professional'
+            ? '/zibagar/support'
+            : '/panel';
+        await this.notifications.notify({
+          userId: ticket.userId,
+          type: NotificationType.system,
+          title: 'پاسخ پشتیبانی',
+          body: 'پشتیبانی به تیکت شما پاسخ داد. برای مشاهده وارد بخش پشتیبانی شوید.',
+          data: { ticketId, href },
+          sms: false,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return message;
+  }'''
+
+          if old_add_end in t:
+              t = t.replace(old_add_end, new_add_end, 1)
+              print('addMessage notify ok')
+          else:
+              print('WARN addMessage end not found')
+
+          ss.write_text(t)
+          print('service updated', ss.stat().st_size)
+
+          # ---- zibagar support: pass source ----
+          zp = Path('frontend/src/app/zibagar/support/page.tsx')
+          if zp.exists():
+              z = zp.read_text()
+              z = z.replace(
+                  "await apiClient.post<{ id?: string }>('/support/tickets', {\n        subject: s.length > 3 ? s : `${category}: ${s}`,\n        body: b,\n      });",
+                  "await apiClient.post<{ id?: string }>('/support/tickets', {\n        subject: s.length > 3 ? s : `${category}: ${s}`,\n        body: b,\n        source: 'zibagar',\n      });",
+              )
+              # alternate formatting
+              z = z.replace(
+                  "await apiClient.post('/support/tickets', { subject: s, body: b });",
+                  "await apiClient.post('/support/tickets', { subject: s, body: b, source: 'zibagar' });",
+              )
+              zp.write_text(z)
+              print('zibagar support source tag')
+
+          # ---- admin support page: richer sender block ----
+          ap = Path('frontend/src/app/admin/support/page.tsx')
+          a = ap.read_text()
+          # improve list row
+          a = a.replace(
+              '''                    <p className="text-sm text-gray">{name} · {accountTypeFa(t.user?.accountType)}</p>''',
+              '''                    <p className="text-sm font-medium text-foreground">
+                      {name}
+                      {t.user?.phone ? (
+                        <span className="mr-2 font-normal text-gray" dir="ltr">
+                          · {t.user.phone}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-xs text-gray">
+                      {accountTypeFa(t.user?.accountType)}
+                      {t.subject?.startsWith('[') ? ' · از بخش مشخص‌شده در عنوان' : ''}
+                    </p>''',
+          )
+          # detail header richer
+          a = a.replace(
+              '''          <p className="text-xs text-gray">
+            فرستنده: {userLabel} ({accountTypeFa(detail.user?.accountType)}) · {STATUS_LABEL[detail.status] || detail.status} · {formatDate(detail.createdAt, { style: 'short', includeTime: true })}
+          </p>''',
+              '''          <div className="rounded-xl bg-gray-light/50 px-3 py-2 text-sm space-y-1">
+            <p>
+              <span className="text-gray">فرستنده: </span>
+              <span className="font-semibold">{userLabel}</span>
+            </p>
+            <p className="text-xs text-gray">
+              نقش: {accountTypeFa(detail.user?.accountType)}
+              {detail.user?.phone ? (
+                <>
+                  {' '}
+                  · تلفن:{' '}
+                  <span dir="ltr">{detail.user.phone}</span>
+                </>
+              ) : null}
+            </p>
+            <p className="text-xs text-gray">
+              {STATUS_LABEL[detail.status] || detail.status} ·{' '}
+              {formatDate(detail.createdAt, { style: 'short', includeTime: true })}
+            </p>
+            <p className="text-xs text-gray">
+              منبع از عنوان تیکت مشخص است (مثلاً [پنل زیباگر]) — از همین صفحه پاسخ بدهید.
+            </p>
+          </div>''',
+          )
+          ap.write_text(a)
+          print('admin support UI updated', ap.stat().st_size)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/support/support.controller.ts \
+            backend/src/support/support.service.ts \
+            frontend/src/app/zibagar/support/page.tsx \
+            frontend/src/app/admin/support/page.tsx
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "feat(#65.17): sender+source on tickets, staff reply notify, auto-ack"
+          git push
