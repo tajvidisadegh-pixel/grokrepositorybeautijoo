@@ -1,0 +1,249 @@
+name: apply-65-fe-remaining
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-65-fe-remaining.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch frontend files
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          # --- hours page: 24h selects ---
+          hp = Path('frontend/src/app/zibagar/hours/page.tsx')
+          ht = hp.read_text()
+          if 'TIME_OPTIONS_24H' not in ht:
+              ht = ht.replace(
+                  "const HOURS_DRAFT_KEY = 'bj_zibagar_hours_draft_v1';",
+                  """const HOURS_DRAFT_KEY = 'bj_zibagar_hours_draft_v1';
+
+/** 24h time options (HH:MM) — avoids browser AM/PM type=time UI */
+const TIME_OPTIONS_24H: string[] = Array.from({ length: 24 * 4 }, (_, i) => {
+  const h = Math.floor(i / 4);
+  const m = (i % 4) * 15;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+});""",
+                  1,
+              )
+          # replace type=time inputs for weekly drafts
+          if 'type="time"' in ht:
+              # weekly start/end
+              pattern = re.compile(
+                  r'<Input\s+className="h-8 min-w-0 flex-1 px-1\.5 text-center text-sm"\s+type="time"\s+value=\{draft\.startTime\}[\s\S]*?/>\s*<span className="text-xs[^"]*">[\s\S]*?</span>\s*<Input\s+className="h-8 min-w-0 flex-1 px-1\.5 text-center text-sm"\s+type="time"\s+value=\{draft\.endTime\}[\s\S]*?/>',
+                  re.M,
+              )
+              repl = '''<select
+                      className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-white px-1.5 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                      value={draft.startTime}
+                      onChange={(e) =>
+                        setDayDrafts((p) => ({
+                          ...p,
+                          [d.value]: { ...p[d.value], startTime: e.target.value },
+                        }))
+                      }
+                    >
+                      {TIME_OPTIONS_24H.map((t) => (
+                        <option key={`s-${d.value}-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-gray">تا</span>
+                    <select
+                      className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-white px-1.5 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                      value={draft.endTime}
+                      onChange={(e) =>
+                        setDayDrafts((p) => ({
+                          ...p,
+                          [d.value]: { ...p[d.value], endTime: e.target.value },
+                        }))
+                      }
+                    >
+                      {TIME_OPTIONS_24H.map((t) => (
+                        <option key={`e-${d.value}-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>'''
+              ht2, n = pattern.subn(repl, ht, count=1)
+              if n == 0:
+                  print('WARN: weekly time inputs not matched')
+              else:
+                  ht = ht2
+                  print('weekly selects ok')
+              # block times
+              old_block = '''<Input type="time" dir="ltr" value={blockFrom} onChange={(e) => setBlockFrom(e.target.value)} />
+              <Input type="time" dir="ltr" value={blockTo} onChange={(e) => setBlockTo(e.target.value)} />'''
+              new_block = '''<select
+                dir="ltr"
+                className="h-10 w-full rounded-lg border border-border bg-white px-2 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                value={blockFrom}
+                onChange={(e) => setBlockFrom(e.target.value)}
+              >
+                {TIME_OPTIONS_24H.map((t) => (
+                  <option key={`bf-${t}`} value={t}>{t}</option>
+                ))}
+              </select>
+              <select
+                dir="ltr"
+                className="h-10 w-full rounded-lg border border-border bg-white px-2 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                value={blockTo}
+                onChange={(e) => setBlockTo(e.target.value)}
+              >
+                {TIME_OPTIONS_24H.map((t) => (
+                  <option key={`bt-${t}`} value={t}>{t}</option>
+                ))}
+              </select>'''
+              if old_block in ht:
+                  ht = ht.replace(old_block, new_block, 1)
+                  print('block selects ok')
+              else:
+                  print('WARN: block time inputs not matched')
+              ht = ht.replace(
+                  'className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-gray"',
+                  'className="shrink-0 rounded-lg border border-border bg-white px-2 py-1 text-xs font-medium text-blue"',
+              )
+          left = ht.count('type="time"')
+          print('remaining type=time', left)
+          if left:
+              raise SystemExit('type=time still present')
+          hp.write_text(ht)
+
+          # --- pro page reviews ---
+          pp = Path('frontend/src/app/professionals/[slug]/page.tsx')
+          pt = pp.read_text()
+          if 'نظرات مشتریان' not in pt:
+              m = re.search(r'\{pro\.bio && \([\s\S]*?\)\}', pt)
+              if not m:
+                  raise SystemExit('bio block not found')
+              section = '''
+
+          {Array.isArray((pro as { reviews?: Array<{ id: string; rating: number; comment?: string | null; createdAt?: string; reply?: string | null; customer?: { profile?: { displayName?: string | null } | null } | null }> }).reviews) &&
+            ((pro as { reviews?: unknown[] }).reviews?.length ?? 0) > 0 && (
+            <section className="mt-8 rounded-2xl border border-border bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-lg font-bold text-blue">نظرات مشتریان</h2>
+              <ul className="space-y-4">
+                {((pro as { reviews: Array<{ id: string; rating: number; comment?: string | null; createdAt?: string; reply?: string | null; customer?: { profile?: { displayName?: string | null } | null } | null }> }).reviews).map((r) => (
+                  <li key={r.id} className="border-b border-border pb-4 last:border-0 last:pb-0">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium text-blue">{r.customer?.profile?.displayName || 'مشتری'}</span>
+                      <span className="tabular-nums text-amber-600" aria-label={`امتیاز ${r.rating}`}>{'★'.repeat(Math.max(0, Math.min(5, r.rating)))}{'☆'.repeat(Math.max(0, 5 - Math.min(5, r.rating)))}</span>
+                      {r.createdAt && (
+                        <span className="text-xs text-gray">{new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Tehran' }).format(new Date(r.createdAt))}</span>
+                      )}
+                    </div>
+                    {r.comment && <p className="mt-1.5 text-sm leading-relaxed text-gray-700">{r.comment}</p>}
+                    {r.reply && (
+                      <p className="mt-2 rounded-lg bg-coral-soft/40 px-3 py-2 text-xs text-gray-700">
+                        <span className="font-medium text-coral">پاسخ زیباگر: </span>{r.reply}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+'''
+              pt = pt[:m.end()] + section + pt[m.end():]
+              pp.write_text(pt)
+              print('reviews section added')
+          else:
+              print('reviews already present')
+
+          # --- services description ---
+          sp = Path('frontend/src/app/zibagar/services/page.tsx')
+          st = sp.read_text()
+          if 'editDescription' not in st:
+              st = st.replace(
+                  "const [editDuration, setEditDuration] = useState('60');",
+                  "const [editDuration, setEditDuration] = useState('60');\n  const [editDescription, setEditDescription] = useState('');",
+                  1,
+              )
+              st = st.replace(
+                  "setEditDuration(String(ps.durationMin || 60));\n    setError(null);\n    setSheet({ kind: 'price', ps });",
+                  "setEditDuration(String(ps.durationMin || 60));\n    setEditDescription(ps.description || '');\n    setError(null);\n    setSheet({ kind: 'price', ps });",
+                  1,
+              )
+              st = st.replace(
+                  """await patchMyService(sheet.ps.id, {
+        price: priceNum,
+        durationMin: dur,
+        isActive: true,
+      });""",
+                  """await patchMyService(sheet.ps.id, {
+        price: priceNum,
+        durationMin: dur,
+        description: editDescription.trim() || undefined,
+        isActive: true,
+      });""",
+                  1,
+              )
+              old_ui = '''            <div>
+              <label className="mb-1.5 block text-sm text-gray">مدت (دقیقه)</label>
+              <Input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={editDuration}
+                onChange={(e) => setEditDuration(e.target.value.replace(/[^\\d]/g, ''))}
+                className="h-12 rounded-2xl text-base tabular-nums"
+              />
+            </div>
+            <Button'''
+              new_ui = '''            <div>
+              <label className="mb-1.5 block text-sm text-gray">مدت (دقیقه)</label>
+              <Input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={editDuration}
+                onChange={(e) => setEditDuration(e.target.value.replace(/[^\\d]/g, ''))}
+                className="h-12 rounded-2xl text-base tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm text-gray">توضیح خدمت (اختیاری)</label>
+              <textarea
+                dir="rtl"
+                rows={3}
+                maxLength={500}
+                className="w-full rounded-2xl border border-border bg-white px-3 py-2.5 text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                placeholder="مثلاً: شامل شستشو و استایلینگ"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+              />
+            </div>
+            <Button'''
+              if old_ui not in st:
+                  raise SystemExit('services duration UI not found')
+              st = st.replace(old_ui, new_ui, 1)
+              sp.write_text(st)
+              print('services description added')
+          else:
+              print('services description already present')
+
+          print('ALL FE PATCHES DONE')
+          PY
+      - name: Verify
+        run: |
+          set -euo pipefail
+          grep -q TIME_OPTIONS_24H frontend/src/app/zibagar/hours/page.tsx
+          ! grep -q 'type="time"' frontend/src/app/zibagar/hours/page.tsx
+          grep -q 'نظرات مشتریان' "frontend/src/app/professionals/[slug]/page.tsx"
+          grep -q editDescription frontend/src/app/zibagar/services/page.tsx
+          echo verify OK
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/hours/page.tsx \
+                  "frontend/src/app/professionals/[slug]/page.tsx" \
+                  frontend/src/app/zibagar/services/page.tsx
+          if git diff --cached --quiet; then echo No changes; exit 0; fi
+          git commit -m "fix(#65): hours 24h selects, public reviews section, service description field"
+          git push origin HEAD:main
