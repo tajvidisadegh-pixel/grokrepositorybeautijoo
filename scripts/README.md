@@ -7,4 +7,8 @@ Keep only production-safe helpers here.
 - `check-env.sh` — validate env
 - `generate-secrets.sh` — generate secrets for deploy
 
-One-shot patch scripts for migrations may appear temporarily and should be removed after CI is green.
+Temporary one-shot patch scripts for migrations may appear and should be removed after CI is green.
+
+## #80 pricing
+
+Pro pricing API (`pricingMode`, `depositAmount`, `optionDeltas`) is applied on main via services.controller/service.
