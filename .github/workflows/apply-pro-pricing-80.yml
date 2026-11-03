@@ -1,0 +1,27 @@
+name: Apply pro pricing API 80.3
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-pro-pricing-80.yml'
+      - 'scripts/apply_pro_pricing_80.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: python3 scripts/apply_pro_pricing_80.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/services/services.controller.ts backend/src/services/services.service.ts
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#80.3): pro service API pricingMode, deposit, optionDeltas"
+          git push origin HEAD:main
