@@ -1,23 +1,9 @@
-name: apply-item-46-50
-
+name: item21-25
+# Historical one-shot patch — disabled so it cannot fail main
 on:
-  push:
-    paths:
-      - '.github/triggers/apply-46-50.flag'
-
+  workflow_dispatch:
 jobs:
-  patch:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Run patch
-        run: python3 .github/triggers/patch-46-50.py
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "feat(#40): items 46-50 capacity, membership, block customer, daily summary" || echo nochange
-          git push
+      - run: echo disabled

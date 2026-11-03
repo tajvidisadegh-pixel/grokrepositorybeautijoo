@@ -1,21 +1,9 @@
-name: fix-55-60
-
+name: item18-city
+# Historical one-shot patch — disabled so it cannot fail main
 on:
-  push:
-    paths:
-      - '.github/triggers/fix-55-60.flag'
-
+  workflow_dispatch:
 jobs:
-  patch:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 .github/triggers/fix-55-60.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "feat(#40): items 56-60 lead time, counters, pin, rejection, date filter" || echo nochange
-          git push
+      - run: echo disabled
