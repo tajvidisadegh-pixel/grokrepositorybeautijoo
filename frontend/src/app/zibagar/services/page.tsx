@@ -102,6 +102,7 @@ export default function ZibagarServicesPage() {
 
   const [editPrice, setEditPrice] = useState('');
   const [editDuration, setEditDuration] = useState('60');
+  const [editDescription, setEditDescription] = useState('');
 
   const load = useCallback(async () => {
     setError(null);
@@ -161,6 +162,7 @@ export default function ZibagarServicesPage() {
     const p = displayPrice(ps);
     setEditPrice(p != null ? String(p) : '');
     setEditDuration(String(ps.durationMin || 60));
+    setEditDescription(ps.description || '');
     setError(null);
     setSheet({ kind: 'price', ps });
   }
@@ -237,6 +239,7 @@ export default function ZibagarServicesPage() {
       await patchMyService(sheet.ps.id, {
         price: priceNum,
         durationMin: dur,
+        description: editDescription.trim() || undefined,
         isActive: true,
       });
       try {
@@ -588,6 +591,18 @@ export default function ZibagarServicesPage() {
                 value={editDuration}
                 onChange={(e) => setEditDuration(e.target.value.replace(/[^\d]/g, ''))}
                 className="h-12 rounded-2xl text-base tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm text-gray">توضیح خدمت (اختیاری)</label>
+              <textarea
+                dir="rtl"
+                rows={3}
+                maxLength={500}
+                className="w-full rounded-2xl border border-border bg-white px-3 py-2.5 text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                placeholder="مثلاً: شامل شستشو و استایلینگ"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
               />
             </div>
             <Button

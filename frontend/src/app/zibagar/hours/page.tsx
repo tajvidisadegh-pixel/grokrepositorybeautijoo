@@ -29,6 +29,13 @@ const INTERVALS = [15, 30, 45, 60, 90, 120] as const;
 
 const HOURS_DRAFT_KEY = 'bj_zibagar_hours_draft_v1';
 
+/** 24h time options (HH:MM) — avoids browser AM/PM type=time UI */
+const TIME_OPTIONS_24H: string[] = Array.from({ length: 24 * 4 }, (_, i) => {
+  const h = Math.floor(i / 4);
+  const m = (i % 4) * 15;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+});
+
 const pm = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
@@ -563,7 +570,7 @@ export default function ZibagarHoursPage() {
               {weeklySummary.length ? weeklySummary.join(' · ') : 'هنوز روزی فعال نشده'}
             </p>
           </div>
-          <span className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-gray">
+          <span className="shrink-0 rounded-lg border border-border bg-white px-2 py-1 text-xs font-medium text-blue">
             {hoursOpen ? 'بستن' : 'ویرایش'}
           </span>
         </button>
@@ -601,9 +608,8 @@ export default function ZibagarHoursPage() {
                     }`}
                     dir="ltr"
                   >
-                    <Input
-                      className="h-8 min-w-0 flex-1 px-1.5 text-center text-sm"
-                      type="time"
+                    <select
+                      className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-white px-1.5 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
                       value={draft.startTime}
                       onChange={(e) =>
                         setDayDrafts((p) => ({
@@ -611,11 +617,14 @@ export default function ZibagarHoursPage() {
                           [d.value]: { ...p[d.value], startTime: e.target.value },
                         }))
                       }
-                    />
+                    >
+                      {TIME_OPTIONS_24H.map((t) => (
+                        <option key={`s-${d.value}-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
                     <span className="text-xs text-gray">–</span>
-                    <Input
-                      className="h-8 min-w-0 flex-1 px-1.5 text-center text-sm"
-                      type="time"
+                    <select
+                      className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-white px-1.5 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
                       value={draft.endTime}
                       onChange={(e) =>
                         setDayDrafts((p) => ({
@@ -623,7 +632,11 @@ export default function ZibagarHoursPage() {
                           [d.value]: { ...p[d.value], endTime: e.target.value },
                         }))
                       }
-                    />
+                    >
+                      {TIME_OPTIONS_24H.map((t) => (
+                        <option key={`e-${d.value}-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               );
@@ -727,8 +740,26 @@ export default function ZibagarHoursPage() {
 
             <JalaliDateInput value={blockDate} onChange={setBlockDate} />
             <div className="grid grid-cols-2 gap-2">
-              <Input type="time" dir="ltr" value={blockFrom} onChange={(e) => setBlockFrom(e.target.value)} />
-              <Input type="time" dir="ltr" value={blockTo} onChange={(e) => setBlockTo(e.target.value)} />
+              <select
+                dir="ltr"
+                className="h-10 w-full rounded-lg border border-border bg-white px-2 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                value={blockFrom}
+                onChange={(e) => setBlockFrom(e.target.value)}
+              >
+                {TIME_OPTIONS_24H.map((t) => (
+                  <option key={`bf-${t}`} value={t}>{t}</option>
+                ))}
+              </select>
+              <select
+                dir="ltr"
+                className="h-10 w-full rounded-lg border border-border bg-white px-2 text-center text-sm text-blue shadow-sm focus:border-coral focus:outline-none focus:ring-1 focus:ring-coral"
+                value={blockTo}
+                onChange={(e) => setBlockTo(e.target.value)}
+              >
+                {TIME_OPTIONS_24H.map((t) => (
+                  <option key={`bt-${t}`} value={t}>{t}</option>
+                ))}
+              </select>
             </div>
             <Input
               placeholder="دلیل (اختیاری)"
