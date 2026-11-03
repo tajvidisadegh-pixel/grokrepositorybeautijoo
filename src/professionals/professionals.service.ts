@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppCacheService } from '../cache/app-cache.service';
 import { MediaKind, ProfessionalStatus, Prisma } from '@prisma/client';
 import { boundingBox, haversineKm, parseGeoQuery } from '../common/geo';
+import { isValidPublicSlug, toPublicSlug } from '../common/public-slug';
 
 export type CompletionFieldKey =
   | 'title'
@@ -405,7 +406,11 @@ export class ProfessionalsService {
   async createForUser(userId: string, data: { slug: string; title: string; bio?: string }) {
     const existing = await this.prisma.professional.findUnique({ where: { userId } });
     if (existing) throw new ConflictException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u0642\u0628\u0644\u0627\u064b \u0627\u06cc\u062c\u0627\u062f \u0634\u062f\u0647 \u0627\u0633\u062a');
-    const slugTaken = await this.prisma.professional.findUnique({ where: { slug: data.slug } });
+    const normalizedSlug = toPublicSlug(data.slug);
+    if (!isValidPublicSlug(normalizedSlug)) {
+      throw new BadRequestException('اسلاگ عمومی نامعتبر است. فقط حروف لاتین، عدد و خط فاصله مجاز است و نباید شماره تلفن باشد.');
+    }
+    const slugTaken = await this.prisma.professional.findUnique({ where: { slug: normalizedSlug } });
     if (slugTaken) throw new ConflictException('\u0627\u06cc\u0646 \u0627\u0633\u0644\u0627\u06af \u0642\u0628\u0644\u0627\u064b \u0627\u0633\u062a\u0641\u0627\u062f\u0647 \u0634\u062f\u0647 \u0627\u0633\u062a');
     const proRole = await this.prisma.role.findUnique({ where: { name: 'professional' } });
     if (proRole) {
@@ -417,7 +422,7 @@ export class ProfessionalsService {
     }
     return this.prisma.professional.create({
       data: {
-        userId, slug: data.slug, title: data.title, bio: data.bio,
+        userId, slug: normalizedSlug, title: data.title, bio: data.bio,
         status: ProfessionalStatus.draft,
       },
     });
@@ -498,12 +503,24 @@ export class ProfessionalsService {
         completion,
       });
     }
+    // Normalize legacy phone/invalid slugs before entering review
+    const data: Prisma.ProfessionalUpdateInput = {
+      status: ProfessionalStatus.pending_review,
+      publishedAt: null,
+    };
+    if (!isValidPublicSlug(pro.slug)) {
+      const base = toPublicSlug(pro.title || pro.slug) || `pro-${pro.id.slice(0, 8)}`;
+      let candidate = isValidPublicSlug(base) ? base : `pro-${pro.id.slice(0, 8)}`;
+      let n = 0;
+      while (await this.prisma.professional.findFirst({ where: { slug: candidate, NOT: { id: pro.id } } })) {
+        n += 1;
+        candidate = `${base.slice(0, 70)}-${n}`;
+      }
+      data.slug = candidate;
+    }
     const updated = await this.prisma.professional.update({
       where: { id: pro.id },
-      data: {
-        status: ProfessionalStatus.pending_review,
-        publishedAt: null,
-      },
+      data,
     });
     this.cache.invalidateCatalog();
     try {
