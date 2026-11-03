@@ -1,16 +1,10 @@
-# Scripts
+# Operational scripts
 
-اسکریپت‌های کمکی برای توسعه و عملیات محلی Beautijoo.
+Keep only production-safe helpers here.
 
-| فایل | کاربرد |
-|------|--------|
-| `dev-up.sh` | بالا آوردن Postgres + نصب + migrate + seed + اجرای همزمان backend و frontend |
-| `db-reset.sh` | ریست کامل دیتابیس توسعه (حذف volume + migrate + seed) |
-| `check-env.sh` | بررسی وجود متغیرهای ضروری `.env` قبل از اجرا |
-| `generate-secrets.sh` | تولید `JWT_ACCESS_SECRET` و `JWT_REFRESH_SECRET` امن |
+- `dev-up.sh` — local stack
+- `db-reset.sh` — reset local DB (dev only)
+- `check-env.sh` — validate env
+- `generate-secrets.sh` — generate secrets for deploy
 
-همه اسکریپت‌ها از **ریشه پروژه** اجرا شوند:
-
-```bash
-./scripts/dev-up.sh
-```
+One-shot patch scripts for migrations may appear temporarily and should be removed after CI is green.
