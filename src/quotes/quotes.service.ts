@@ -5,13 +5,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const STATUSES = ['pending', 'quoted', 'declined', 'cancelled', 'expired'] as const;
 export type QuoteStatus = (typeof STATUSES)[number];
 
 @Injectable()
 export class QuotesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(customerId: string, data: {
     professionalId: string;
@@ -43,7 +47,7 @@ export class QuotesService {
       .map((u) => u.trim())
       .slice(0, 5);
 
-    return this.prisma.priceQuoteRequest.create({
+    const created = await this.prisma.priceQuoteRequest.create({
       data: {
         customerId,
         professionalId: data.professionalId,
@@ -54,6 +58,18 @@ export class QuotesService {
       },
       include: this.include(),
     });
+
+    const proUserId = pro.userId;
+    await this.notifications.notify({
+      userId: proUserId,
+      type: 'quote_request',
+      title: 'درخواست قیمت جدید',
+      body: 'یک مشتری برای خدمت شما درخواست قیمت فرستاده است.',
+      data: { href: '/zibagar/quotes', quoteId: created.id },
+      sms: true,
+    });
+
+    return created;
   }
 
   async listMineAsCustomer(customerId: string) {
@@ -99,7 +115,7 @@ export class QuotesService {
       }
     }
 
-    return this.prisma.priceQuoteRequest.update({
+    const updated = await this.prisma.priceQuoteRequest.update({
       where: { id: quoteId },
       data: {
         status: body.status,
@@ -110,6 +126,23 @@ export class QuotesService {
       },
       include: this.include(),
     });
+
+    const title =
+      body.status === 'quoted' ? 'پاسخ قیمت دریافت شد' : 'درخواست قیمت رد شد';
+    const bodyText =
+      body.status === 'quoted'
+        ? `زیباگر برای درخواست شما قیمت اعلام کرد${body.quotedPrice != null ? `: ${body.quotedPrice.toLocaleString('fa-IR')} تومان` : ''}.`
+        : 'زیباگر درخواست قیمت شما را رد کرد.';
+    await this.notifications.notify({
+      userId: row.customerId,
+      type: 'quote_responded',
+      title,
+      body: bodyText,
+      data: { href: '/dashboard/quotes', quoteId },
+      sms: true,
+    });
+
+    return updated;
   }
 
   async cancelAsCustomer(customerId: string, quoteId: string) {
