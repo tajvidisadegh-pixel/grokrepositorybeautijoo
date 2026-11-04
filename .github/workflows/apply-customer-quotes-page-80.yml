@@ -1,0 +1,27 @@
+name: Apply customer quotes page 80
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-customer-quotes-page-80.yml'
+      - 'scripts/patch_cancel_quote_api_80.py'
+      - 'frontend/src/app/dashboard/quotes/**'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_cancel_quote_api_80.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/panel-api.ts frontend/src/app/dashboard/quotes/page.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#80.phase3): customer /dashboard/quotes page + cancel helper"
+          git push origin HEAD:main
