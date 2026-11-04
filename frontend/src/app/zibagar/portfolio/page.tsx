@@ -182,60 +182,6 @@ export default function ZibagarPortfolioPage() {
     }
   }
 
-  async function onUpload(file: File) {
-    const video = isAllowedVideoFile(file);
-    const image = isAllowedImageFile(file);
-    if (!video && !image) {
-      setMsg('فقط تصویر JPG/PNG/WEBP/GIF/HEIC یا ویدیو MP4/WEBM/MOV مجاز است.');
-      return;
-    }
-    if (image && !video && file.size > MAX_IMAGE_BYTES) {
-      setMsg('حجم تصویر حداکثر ۱۰ مگابایت است.');
-      return;
-    }
-    if (video && file.size > MAX_VIDEO_BYTES) {
-      setMsg('حجم ویدیو حداکثر ۵۰۰ مگابایت است.');
-      return;
-    }
-    if (video) {
-      try {
-        const sec = await readVideoDuration(file);
-        if (sec > MAX_VIDEO_SEC + 0.5) {
-          setMsg(`مدت ویدیو حداکثر ${MAX_VIDEO_SEC} ثانیه است.`);
-          return;
-        }
-      } catch {
-        /* continue */
-      }
-    }
-    if (items.length >= MAX_PORTFOLIO) {
-      setMsg(
-        'سقف رایگان نمونه‌کار پر است. برای آپلود بیشتر از ۱۰۰ مورد می‌توانید نسخه ویژه را تهیه کنید.',
-      );
-      return;
-    }
-    setBusy(true);
-    setUploadProgress(0);
-    setMsg(null);
-    try {
-      const url = URL.createObjectURL(file);
-      setLocalPreview(url);
-    } catch { /* ignore */ }
-    try {
-      await uploadMyMedia(file, 'portfolio', undefined, setUploadProgress);
-      setMsg(video ? 'ویدیو آپلود شد.' : 'تصویر آپلود شد.');
-      try { toastSuccess(video ? 'ویدیو آپلود شد' : 'تصویر آپلود شد'); } catch { /* */ }
-      await load();
-    } catch (e) {
-      setMsg(friendlyApiError(e));
-    } finally {
-      setBusy(false);
-      setUploadProgress(null);
-      if (localPreview) { try { URL.revokeObjectURL(localPreview); } catch { /* */ } }
-      setLocalPreview(null);
-      if (inputRef.current) inputRef.current.value = '';
-    }
-  }
 
   async function onDelete(id: string) {
     if (!confirm('حذف این مورد؟')) return;
