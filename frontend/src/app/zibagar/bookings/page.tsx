@@ -88,7 +88,9 @@ function bookingTimeline(b: { status?: string; createdAt?: string; startAt?: str
     steps.push({ label: 'انجام شد', at: b.updatedAt || b.startAt });
   }
   if (st === 'cancelled' || st === 'rejected' || st === 'no_show') {
-    steps.push({ label: st === 'rejected' ? 'رد شد' : 'لغو شد', at: b.updatedAt });
+    const endLabel =
+      st === 'rejected' ? 'رد شد' : st === 'no_show' ? 'عدم حضور' : 'لغو شد';
+    steps.push({ label: endLabel, at: b.updatedAt });
   }
   return steps;
 }

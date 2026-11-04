@@ -464,6 +464,8 @@ model Booking {
   confirmedAt    DateTime?     @map("confirmed_at") @db.Timestamptz
   cancelledAt    DateTime?     @map("cancelled_at") @db.Timestamptz
   completedAt    DateTime?     @map("completed_at") @db.Timestamptz
+  noShowAt       DateTime?     @map("no_show_at") @db.Timestamptz
+  noShowReason   String?       @map("no_show_reason") @db.VarChar(255)
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
   customer     User         @relation("CustomerBookings", fields: [customerId], references: [id])
