@@ -1,22 +1,8 @@
-name: Fix portfolio unused 73
+name: noop-fix-portfolio-unused-73
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/fix-portfolio-unused-73.yml'
-      - 'scripts/fix_portfolio_unused_73.py'
-permissions:
-  contents: write
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/fix_portfolio_unused_73.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/portfolio/page.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "fix(#73): drop unused single-file onUpload"
-          git push origin HEAD:main
+      - run: echo retired
