@@ -1,26 +1,8 @@
-name: Apply forcesDeposit checkbox 80.2.1
-
+name: noop-apply-forces-deposit-checkbox-80
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/apply-forces-deposit-checkbox-80.yml'
-      - 'scripts/patch_forces_deposit_checkbox_80.py'
-
-permissions:
-  contents: write
-
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/patch_forces_deposit_checkbox_80.py
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/components/admin/ServicePricingPanel.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "feat(#80.phase2.1): forcesDeposit checkbox on option form and list toggle"
-          git push origin HEAD:main
+      - run: echo retired
