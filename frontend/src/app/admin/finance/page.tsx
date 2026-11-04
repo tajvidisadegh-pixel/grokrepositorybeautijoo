@@ -22,6 +22,7 @@ import {
 } from '@/lib/admin-finance-api';
 import { persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
+import { apiClient } from '@/lib/api';
 import { formatPrice, formatTime24 } from '@/lib/utils';
 
 export default function AdminFinancePage() {
@@ -375,6 +376,12 @@ export default function AdminFinancePage() {
             </Button>
           </div>
         </div>
+      </Card>
+
+      <Card className="mt-6 space-y-3 p-4">
+        <h2 className="font-bold">درخواست‌های تسویه زیباگران</h2>
+        <p className="text-xs text-gray">پس از واریز دستی، وضعیت را «تسویه‌شده» کنید.</p>
+        <PayoutRequestsPanel />
       </Card>
 
       {(detail || detailLoading) && (
