@@ -47,7 +47,7 @@ export default async function BookingPage({ params, searchParams }: Props) {
     throw e;
   }
 
-  const services = (pro.professionalServices || []).map((ps: any) => ({
+  const services = (pro.professionalServices || []).map((ps) => ({
     professionalServiceId: ps.id,
     serviceId: ps.service.id,
     name: ps.service.name,
@@ -60,29 +60,29 @@ export default async function BookingPage({ params, searchParams }: Props) {
     estimateMinPrice: ps.estimateMinPrice ?? null,
     estimateMaxPrice: ps.estimateMaxPrice ?? null,
     optionDeltas: ps.optionDeltas || null,
-    attributeGroups: (ps.service?.attributeGroups || []).map((g: any) => ({
+    attributeGroups: (ps.service?.attributeGroups || []).map((g) => ({
       id: g.id,
       name: g.name,
       required: g.required !== false,
-      options: (g.options || []).map((o: any) => ({
+      options: (g.options || []).map((o) => ({
         id: o.id,
         label: o.label,
         suggestedPriceDelta: o.suggestedPriceDelta ?? 0,
         suggestedDurationDeltaMin: o.suggestedDurationDeltaMin ?? 0,
       })),
     })),
-    addOns: (ps.addOns || []).map((a: any) => ({
+    addOns: (ps.addOns || []).map((a) => ({
       id: a.id,
       name: a.name,
       price: a.price,
       extraDurationMin: a.extraDurationMin || 0,
     })),
-    priceRules: (ps.priceRules || []).map((r: any) => ({
+    priceRules: (ps.priceRules || []).map((r) => ({
       id: r.id,
       label: r.label,
       price: r.price,
     })),
-    durationRules: (ps.durationRules || []).map((r: any) => ({
+    durationRules: (ps.durationRules || []).map((r) => ({
       id: r.id,
       label: r.label,
       durationMin: r.durationMin,

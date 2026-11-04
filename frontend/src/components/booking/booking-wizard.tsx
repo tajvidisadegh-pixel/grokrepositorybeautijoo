@@ -134,7 +134,7 @@ export function BookingWizard({
   );
   const [notes, setNotes] = useState('');
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>(initialAddOnIds || []);
-  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([])
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [priceRuleId, setPriceRuleId] = useState<string | null>(initialPriceRuleId || null);
   const [durationRuleId, setDurationRuleId] = useState<string | null>(
     initialDurationRuleId || null,
