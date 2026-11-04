@@ -18,6 +18,22 @@ export type LocationSnippet = {
   precision?: 'exact' | 'approximate' | string | null;
 };
 
+export type ServiceAttributeOptionPublic = {
+  id: string;
+  label: string;
+  suggestedPriceDelta?: number;
+  suggestedDurationDeltaMin?: number;
+  isActive?: boolean;
+};
+
+export type ServiceAttributeGroupPublic = {
+  id: string;
+  name: string;
+  required?: boolean;
+  isActive?: boolean;
+  options?: ServiceAttributeOptionPublic[];
+};
+
 export type ServiceSnippet = {
   id: string;
   name: string;
@@ -27,6 +43,7 @@ export type ServiceSnippet = {
     name: string;
     slug: string;
   } | null;
+  attributeGroups?: ServiceAttributeGroupPublic[];
 };
 
 export type ProfessionalServiceMedia = {
@@ -71,6 +88,14 @@ export type ProfessionalServiceItem = {
   bufferMin?: number;
   description?: string | null;
   isActive?: boolean;
+  pricingMode?: string | null;
+  depositAmount?: number | null;
+  estimateMinPrice?: number | null;
+  estimateMaxPrice?: number | null;
+  optionDeltas?: Record<
+    string,
+    { priceDelta?: number; durationDeltaMin?: number; active?: boolean }
+  > | null;
   service: ServiceSnippet;
   mediaAssets?: ProfessionalServiceMedia[];
   addOns?: ProfessionalServiceAddOn[];
