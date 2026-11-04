@@ -11,12 +11,18 @@ import { formatPrice, formatDate } from '@/lib/utils';
 type EarningsSummary = {
   professionalNet: number;
   paidCount: number;
+  grossRevenue?: number;
+  platformCommission?: number;
   totalEarned?: number;
   totalPaidOut?: number;
   totalPendingPayout?: number;
   available?: number;
   settledCount?: number;
   pendingCount?: number;
+  awaitingServiceNet?: number;
+  settleableNet?: number;
+  awaitingServiceCount?: number;
+  settleableCount?: number;
 };
 
 type PeriodBlock = { earned: number; count: number };
