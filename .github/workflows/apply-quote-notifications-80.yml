@@ -1,0 +1,30 @@
+name: Apply quote notifications 80
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-quote-notifications-80.yml'
+      - 'scripts/patch_quote_notifications_80.py'
+      - 'backend/prisma/migrations/20261104130000_quote_notification_types/**'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_quote_notifications_80.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/prisma/schema.prisma \
+            backend/src/quotes/quotes.module.ts \
+            backend/src/quotes/quotes.service.ts
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#80.phase3): notify pro on quote request and customer on response"
+          git push origin HEAD:main
