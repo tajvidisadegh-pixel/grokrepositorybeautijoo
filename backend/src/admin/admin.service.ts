@@ -1463,4 +1463,59 @@ export class AdminService {
     };
   }
 
+
+  // #75 — admin payout queue
+  async listPayoutRequests(page = 1, limit = 20, status?: string) {
+    const take = Math.min(Math.max(limit || 20, 1), 100);
+    const skip = (Math.max(page || 1, 1) - 1) * take;
+    const where: { status?: string } = {};
+    if (status) where.status = status;
+    const [items, total] = await Promise.all([
+      this.prisma.payoutRequest.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          professional: {
+            select: {
+              id: true,
+              title: true,
+              user: { select: { phone: true, profile: { select: { displayName: true } } } },
+            },
+          },
+        },
+      }),
+      this.prisma.payoutRequest.count({ where }),
+    ]);
+    return {
+      items,
+      meta: { page: Math.max(1, page), limit: take, total, totalPages: Math.ceil(total / take) || 0 },
+    };
+  }
+
+  async updatePayoutRequest(
+    adminUserId: string,
+    id: string,
+    status: 'approved' | 'paid' | 'rejected',
+    note?: string,
+  ) {
+    const row = await this.prisma.payoutRequest.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('درخواست تسویه یافت نشد');
+    const data: { status: string; processedAt?: Date; adminNote?: string | null } = {
+      status,
+      processedAt: new Date(),
+    };
+    if (note != null) data.adminNote = note;
+    const updated = await this.prisma.payoutRequest.update({ where: { id }, data: data as never });
+    await this.audit(
+      adminUserId,
+      'finance.payout_update',
+      'payout_request',
+      id,
+      { status: row.status },
+      { status, note: note ?? null },
+    );
+    return updated;
+  }
 }

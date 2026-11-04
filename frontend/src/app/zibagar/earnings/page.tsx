@@ -35,6 +35,14 @@ type PaymentRow = {
   } | null;
 };
 
+function financialStatusLabel(s?: string, paymentStatus?: string) {
+  if (paymentStatus === 'refunded' || s === 'refunded') return 'استردادشده';
+  if (s === 'awaiting_service') return 'در انتظار انجام';
+  if (s === 'settleable') return 'قابل تسویه';
+  if (s === 'settled' || paymentStatus === 'paid') return 'پرداخت‌شده';
+  return s || paymentStatus || '—';
+}
+
 export default function ZibagarEarningsPage() {
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
   const [periods, setPeriods] = useState<{
@@ -104,7 +112,7 @@ export default function ZibagarEarningsPage() {
     setBusy(true);
     setMsg(null);
     try {
-      await apiClient.post('/professionals/me/payout-requests', { amount: n, note: note.trim() || undefined });
+      await apiClient.post('/professionals/me/payout-request', { amount: n, note: note.trim() || undefined });
       setMsg('درخواست تسویه ثبت شد');
       setAmount('');
       setNote('');
@@ -155,14 +163,30 @@ export default function ZibagarEarningsPage() {
       </div>
 
       {summary && (
-        <Card className="grid gap-3 p-4 sm:grid-cols-2">
+        <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <p className="text-xs text-gray">خالص حرفه‌ای</p>
-            <p className="text-lg font-bold text-coral">{formatPrice(summary.professionalNet)}</p>
+            <p className="text-xs text-gray">مبلغ کل پرداخت‌شده</p>
+            <p className="text-lg font-bold">{formatPrice(summary.grossRevenue ?? 0)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray">تعداد پرداخت‌شده</p>
-            <p className="text-lg font-bold">{summary.paidCount.toLocaleString('fa-IR')}</p>
+            <p className="text-xs text-gray">سهم پلتفرم (کمیسیون)</p>
+            <p className="text-lg font-bold">{formatPrice(summary.platformCommission ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray">سهم شما (خالص)</p>
+            <p className="text-lg font-bold text-coral">{formatPrice(summary.professionalNet ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray">در انتظار انجام خدمت</p>
+            <p className="text-lg font-bold">{formatPrice(summary.awaitingServiceNet ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray">قابل تسویه</p>
+            <p className="text-lg font-bold text-blue">{formatPrice(summary.settleableNet ?? summary.available ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray">قابل برداشت الان</p>
+            <p className="text-lg font-bold text-coral">{formatPrice(summary.available ?? 0)}</p>
           </div>
         </Card>
       )}
@@ -182,10 +206,18 @@ export default function ZibagarEarningsPage() {
         <ul className="space-y-2">
           {items.map((it) => (
             <li key={it.id}>
-              <Card className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-                <span>{formatPrice(it.professionalNetAmount ?? it.amount)}</span>
-                <span className="text-gray">{it.status}</span>
-                <span className="text-xs text-gray">{formatDate(it.createdAt)}</span>
+              <Card className="space-y-1 p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">سهم شما: {formatPrice(it.professionalNetAmount ?? it.amount)}</span>
+                  <span className="rounded-full bg-gray-light px-2 py-0.5 text-xs">
+                    {financialStatusLabel((it as { financialStatus?: string }).financialStatus, it.status)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs text-gray">
+                  <span>کل: {formatPrice(it.amount)}</span>
+                  <span>کمیسیون: {formatPrice((it as { platformCommissionAmount?: number }).platformCommissionAmount ?? 0)}</span>
+                  <span>{formatDate(it.createdAt)}</span>
+                </div>
               </Card>
             </li>
           ))}

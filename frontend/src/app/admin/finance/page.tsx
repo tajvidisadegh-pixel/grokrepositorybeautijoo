@@ -401,3 +401,74 @@ export default function AdminFinancePage() {
     </div>
   );
 }
+
+
+function PayoutRequestsPanel() {
+  const [items, setItems] = useState<Array<{
+    id: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+    professional?: { title?: string | null; user?: { phone?: string | null } | null } | null;
+  }>>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await apiClient.get<{ items?: typeof items }>("/admin/finance/payout-requests");
+      setItems(res.items || []);
+    } catch {
+      setItems([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function mark(id: string, status: "paid" | "rejected" | "approved") {
+    setBusy(id);
+    setMsg(null);
+    try {
+      await apiClient.patch(`/admin/finance/payout-requests/${id}`, { status });
+      setMsg(status === "paid" ? "به‌عنوان تسویه‌شده ثبت شد" : "وضعیت به‌روز شد");
+      await load();
+    } catch (e) {
+      setMsg(friendlyApiError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!items.length) return <p className="text-sm text-gray">درخواستی در صف نیست.</p>;
+  return (
+    <div className="space-y-2">
+      {msg && <p className="text-xs text-blue">{msg}</p>}
+      <ul className="space-y-2">
+        {items.map((it) => (
+          <li key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3 text-sm">
+            <div>
+              <p className="font-medium">{it.professional?.title || "زیباگر"}</p>
+              <p className="text-xs text-gray">{it.professional?.user?.phone}</p>
+              <p className="text-xs text-gray">{it.status} · {new Date(it.createdAt).toLocaleDateString("fa-IR")}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-coral">{Number(it.amount).toLocaleString("fa-IR")} تومان</span>
+              {it.status !== "paid" && (
+                <Button size="sm" loading={busy === it.id} onClick={() => void mark(it.id, "paid")}>
+                  تسویه‌شده
+                </Button>
+              )}
+              {it.status === "pending" && (
+                <Button size="sm" variant="outline" loading={busy === it.id} onClick={() => void mark(it.id, "rejected")}>
+                  رد
+                </Button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
