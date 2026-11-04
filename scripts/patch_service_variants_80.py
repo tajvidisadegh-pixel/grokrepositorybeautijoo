@@ -6,10 +6,9 @@ from pathlib import Path
 def patch_schema() -> None:
     path = Path('backend/prisma/schema.prisma')
     t = path.read_text()
-    if 'parentId' in t and 'ServiceVariants' in t:
+    if 'ServiceVariants' in t:
         print('schema variants already present')
         return
-    # Insert parent relation into Service model
     old = '''model Service {
   id          String   @id @default(uuid()) @db.Uuid
   categoryId  String   @map("category_id") @db.Uuid
@@ -40,7 +39,6 @@ def patch_schema() -> None:
   description String?  @db.Text
   isActive    Boolean  @default(true) @map("is_active")
   sortOrder   Int      @default(0) @map("sort_order")
-  /// Optional parent for variants / sub-services (#80.2)
   parentId    String?  @map("parent_id") @db.Uuid
   allowFixed          Boolean @default(true)  @map("allow_fixed")
   allowVariable       Boolean @default(false) @map("allow_variable")
@@ -68,12 +66,11 @@ def patch_schema() -> None:
 def patch_admin_catalog() -> None:
     path = Path('backend/src/admin/admin-catalog.controller.ts')
     t = path.read_text()
-    if 'variants' in t and 'CreateVariantDto' in t:
+    if 'catalog-services/:id/variants' in t:
         print('admin catalog variants already present')
         return
 
-    # Extend DTOs
-    if 'parentId?: string' not in t:
+    if 'class CreateVariantDto' not in t:
         t = t.replace(
             '''class CreateCatalogServiceDto {
   @IsString() @MinLength(1) name!: string;
@@ -97,34 +94,16 @@ class CreateVariantDto {
             1,
         )
 
-    # listCatalogServices include parentId
-    t = t.replace(
-        '''listCatalogServices() {
-    return this.prisma.service.findMany({
-''',
-        '''listCatalogServices() {
-    return this.prisma.service.findMany({
-      // parentId exposed for variant grouping in admin UI
-''',
-        1,
-    )
+    if 'parentId: dto.parentId' not in t:
+        marker = 'description: dto.description?.trim() || null,'
+        if marker in t:
+            t = t.replace(
+                marker,
+                marker + '\n        parentId: dto.parentId || null,',
+                1,
+            )
 
-    # createCatalogService accept parentId + inherit pricing flags from parent
-    old_create = '''    return this.prisma.service.create({
-      data: {
-        name: dto.name.trim(),
-        slug,
-        categoryId: dto.categoryId,
-        description: dto.description?.trim() || null,
-'''
-    # Find actual create block
-    if 'parentId' not in t.split('createCatalogService')[1][:800] if 'createCatalogService' in t else True:
-        # Patch create data if simple form exists
-        pass
-
-    # Append variant endpoints before last class closing brace
-    if "catalog-services/:id/variants" not in t:
-        endpoints = r'''
+    endpoints = r'''
   @Get('catalog-services/:id/variants')
   @ApiOperation({ summary: 'List variants (sub-services) of a catalog service (#80.2)' })
   async listVariants(@Param('id') id: string) {
@@ -158,7 +137,6 @@ class CreateVariantDto {
         categoryId: parent.categoryId,
         description: dto.description?.trim() || null,
         parentId: parent.id,
-        // inherit pricing mode flags from parent
         allowFixed: parent.allowFixed,
         allowVariable: parent.allowVariable,
         allowDeposit: parent.allowDeposit,
@@ -169,20 +147,8 @@ class CreateVariantDto {
     });
   }
 '''
-        idx = t.rfind('}')
-        t = t[:idx] + endpoints + '\n}\n'
-
-    # Also pass parentId on createCatalogService if DTO has it
-    if 'createCatalogService' in t and 'parentId: dto.parentId' not in t:
-        # Try inject into create data object
-        marker = 'description: dto.description?.trim() || null,'
-        if marker in t:
-            t = t.replace(
-                marker,
-                marker + '\n        parentId: dto.parentId || null,',
-                1,
-            )
-
+    idx = t.rfind('}')
+    t = t[:idx] + endpoints + '\n}\n'
     path.write_text(t)
     print('admin-catalog patched', path.stat().st_size)
 
@@ -190,110 +156,95 @@ class CreateVariantDto {
 def patch_pricing_panel() -> None:
     path = Path('frontend/src/components/admin/ServicePricingPanel.tsx')
     t = path.read_text()
-    if 'variants' in t and 'افزودن واریانت' in t:
+    if 'افزودن واریانت' in t:
         print('panel variants UI exists')
         return
 
-    # state
-    if 'const [variants' not in t:
-        t = t.replace(
-            "const [templateId, setTemplateId] = useState('');\n",
-            "const [templateId, setTemplateId] = useState('');\n"
-            "  const [variants, setVariants] = useState<Array<{ id: string; name: string; isActive?: boolean }>>([]);
-"
-            "  const [variantName, setVariantName] = useState('');\n",
-            1,
-        )
-        # fallback if templateId state missing
-        if 'const [variants' not in t:
-            t = t.replace(
-                "const [groupName, setGroupName] = useState('');\n",
-                "const [groupName, setGroupName] = useState('');\n"
-                "  const [variants, setVariants] = useState<Array<{ id: string; name: string; isActive?: boolean }>>([]);
-"
-                "  const [variantName, setVariantName] = useState('');\n",
-                1,
-            )
+    anchor_state = "const [groupName, setGroupName] = useState('');\n"
+    state_extra = (
+        "const [groupName, setGroupName] = useState('');\n"
+        "  const [variants, setVariants] = useState<Array<{ id: string; name: string; isActive?: boolean }>>([]);\n"
+        "  const [variantName, setVariantName] = useState('');\n"
+    )
+    if anchor_state in t and 'const [variants' not in t:
+        t = t.replace(anchor_state, state_extra, 1)
 
-    # load variants in load()
     if '/variants' not in t:
         t = t.replace(
             'async function load() {',
-            "async function load() {\n"
-            "    try {\n"
-            "      const vs = await apiClient.get<Array<{ id: string; name: string; isActive?: boolean }>>(`/admin/catalog-services/${serviceId}/variants`);\n"
-            "      setVariants(Array.isArray(vs) ? vs : []);\n"
-            "    } catch {\n"
-            "      setVariants([]);\n"
-            "    }",
+            (
+                'async function load() {\n'
+                '    try {\n'
+                '      const vs = await apiClient.get<Array<{ id: string; name: string; isActive?: boolean }>>(`/admin/catalog-services/${serviceId}/variants`);\n'
+                '      setVariants(Array.isArray(vs) ? vs : []);\n'
+                '    } catch {\n'
+                '      setVariants([]);\n'
+                '    }'
+            ),
             1,
         )
 
     if 'async function addVariant' not in t:
         helper = (
-            "async function addVariant() {\n"
-            "    if (!variantName.trim()) return;\n"
-            "    setBusy(true);\n"
-            "    setError(null);\n"
-            "    try {\n"
-            "      await apiClient.post(`/admin/catalog-services/${serviceId}/variants`, { name: variantName.trim() });\n"
+            'async function addVariant() {\n'
+            '    if (!variantName.trim()) return;\n'
+            '    setBusy(true);\n'
+            '    setError(null);\n'
+            '    try {\n'
+            '      await apiClient.post(`/admin/catalog-services/${serviceId}/variants`, { name: variantName.trim() });\n'
             "      setVariantName('');\n"
             "      setMsg('واریانت اضافه شد');\n"
-            "      await load();\n"
-            "    } catch (e) {\n"
+            '      await load();\n'
+            '    } catch (e) {\n'
             "      setError(e instanceof Error ? e.message : 'خطا در افزودن واریانت');\n"
-            "    } finally {\n"
-            "      setBusy(false);\n"
-            "    }\n"
-            "  }\n\n"
+            '    } finally {\n'
+            '      setBusy(false);\n'
+            '    }\n'
+            '  }\n\n'
         )
         if 'async function addGroup' in t:
             t = t.replace('async function addGroup', helper + 'async function addGroup', 1)
         elif 'async function saveFlags' in t:
             t = t.replace('async function saveFlags', helper + 'async function saveFlags', 1)
 
-    # UI block near top of panel after header
     if 'افزودن واریانت' not in t:
-        block = """
-      <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-white p-3">
-        <p className="text-xs font-semibold text-[#0B2C4A]">زیرخدمت / واریانت</p>
-        <p className="mt-0.5 text-[11px] text-gray-500">
-          مثلاً «بالیاژ ملایم» و «بالیاژ کامل» زیر یک خدمت. هر واریانت خدمت جدا در کاتالوگ است و حالت قیمت را از والد به ارث می‌برد.
-        </p>
-        <ul className="mt-2 space-y-1">
-          {variants.length === 0 && (
-            <li className="text-[11px] text-gray-400">واریانتی تعریف نشده</li>
-          )}
-          {variants.map((v) => (
-            <li key={v.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1 text-xs">
-              <span>{v.name}{v.isActive === false ? ' (غیرفعال)' : ''}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Input
-            value={variantName}
-            onChange={(e) => setVariantName(e.target.value)}
-            placeholder="نام واریانت"
-            className="max-w-xs"
-          />
-          <button
-            type="button"
-            disabled={busy || !variantName.trim()}
-            onClick={() => void addVariant()}
-            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-white disabled:opacity-50"
-          >
-            افزودن واریانت
-          </button>
-        </div>
-      </div>
-"""
-        # insert after first closing of header flex or before flags section
+        block = (
+            '\n'
+            '      <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-white p-3">\n'
+            '        <p className="text-xs font-semibold text-[#0B2C4A]">زیرخدمت / واریانت</p>\n'
+            '        <p className="mt-0.5 text-[11px] text-gray-500">\n'
+            '          مثلاً «بالیاژ ملایم» و «بالیاژ کامل» زیر یک خدمت. هر واریانت خدمت جدا است و حالت قیمت را از والد به ارث می‌برد.\n'
+            '        </p>\n'
+            '        <ul className="mt-2 space-y-1">\n'
+            '          {variants.length === 0 && (\n'
+            '            <li className="text-[11px] text-gray-400">واریانتی تعریف نشده</li>\n'
+            '          )}\n'
+            '          {variants.map((v) => (\n'
+            '            <li key={v.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1 text-xs">\n'
+            "              <span>{v.name}{v.isActive === false ? ' (غیرفعال)' : ''}</span>\n"
+            '            </li>\n'
+            '          ))}\n'
+            '        </ul>\n'
+            '        <div className="mt-2 flex flex-wrap gap-2">\n'
+            '          <Input\n'
+            '            value={variantName}\n'
+            '            onChange={(e) => setVariantName(e.target.value)}\n'
+            '            placeholder="نام واریانت"\n'
+            '            className="max-w-xs"\n'
+            '          />\n'
+            '          <button\n'
+            '            type="button"\n'
+            '            disabled={busy || !variantName.trim()}\n'
+            '            onClick={() => void addVariant()}\n'
+            '            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-white disabled:opacity-50"\n'
+            '          >\n'
+            '            افزودن واریانت\n'
+            '          </button>\n'
+            '        </div>\n'
+            '      </div>\n'
+        )
         if 'حالت‌های قیمت مجاز' in t:
             t = t.replace('حالت‌های قیمت مجاز', block + 'حالت‌های قیمت مجاز', 1)
-        elif 'allowFixed' in t:
-            # after opening panel div content
-            pass
 
     path.write_text(t)
     print('panel patched', path.stat().st_size)
