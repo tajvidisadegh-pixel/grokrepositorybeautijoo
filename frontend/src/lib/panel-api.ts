@@ -701,7 +701,7 @@ export type PriceQuoteRequest = {
   responseNote?: string | null;
   respondedAt?: string | null;
   createdAt: string;
-  professional?: { id: string; slug?: string; displayName?: string | null };
+  professional?: { id: string; slug?: string; title?: string | null; displayName?: string | null };
   professionalService?: { id: string; service?: { name?: string } } | null;
 };
 
@@ -727,4 +727,8 @@ export async function respondPriceQuote(
   body: { status: 'quoted' | 'declined'; quotedPrice?: number; quotedDurationMin?: number; responseNote?: string },
 ) {
   return apiClient.patch<PriceQuoteRequest>(`/professionals/me/quotes/${id}`, body);
+}
+
+export async function cancelPriceQuote(id: string) {
+  return apiClient.patch<PriceQuoteRequest>(`/quotes/${id}/cancel`, {});
 }
