@@ -23,6 +23,8 @@ class CreateBookingDto {
   @IsOptional() @IsArray() @IsUUID('4', { each: true }) addOnIds?: string[];
   @IsOptional() @IsUUID() priceRuleId?: string;
   @IsOptional() @IsUUID() durationRuleId?: string;
+  /** Catalog attribute option ids for variable pricing (#80) */
+  @IsOptional() @IsArray() @IsUUID('4', { each: true }) selectedOptionIds?: string[];
 }
 
 class RescheduleDto {
