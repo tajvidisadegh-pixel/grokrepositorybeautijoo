@@ -146,6 +146,7 @@ function RegisterForm() {
                   زیباگر هستم و نوبت می‌دهم
                 </button>
               </div>
+              <p className="mt-2 text-center text-xs text-gray">بعداً می‌توانید فقط با همین شماره وارد شوید؛ نوع حساب را اینجا مشخص کنید.</p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">شماره موبایل</label>
