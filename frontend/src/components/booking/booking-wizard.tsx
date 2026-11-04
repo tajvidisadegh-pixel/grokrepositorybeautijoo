@@ -31,6 +31,18 @@ import { Card } from '@/components/ui/card';
 import type { AvailabilitySlot, BookingRecord } from '@/types/booking';
 import { ApiError } from '@/lib/api';
 
+type AttrOption = {
+  id: string;
+  label: string;
+  suggestedPriceDelta: number;
+  suggestedDurationDeltaMin: number;
+};
+type AttrGroup = {
+  id: string;
+  name: string;
+  required: boolean;
+  options: AttrOption[];
+};
 type ServiceOption = {
   professionalServiceId: string;
   serviceId: string;
@@ -39,6 +51,12 @@ type ServiceOption = {
   bufferMin: number;
   price: number;
   categoryName?: string;
+  pricingMode?: string;
+  depositAmount?: number | null;
+  estimateMinPrice?: number | null;
+  estimateMaxPrice?: number | null;
+  optionDeltas?: Record<string, { priceDelta?: number; durationDeltaMin?: number; active?: boolean }> | null;
+  attributeGroups?: AttrGroup[];
   addOns?: { id: string; name: string; price: number; extraDurationMin: number }[];
   priceRules?: { id: string; label: string; price: number }[];
   durationRules?: { id: string; label: string; durationMin: number }[];
@@ -116,6 +134,7 @@ export function BookingWizard({
   );
   const [notes, setNotes] = useState('');
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>(initialAddOnIds || []);
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([])
   const [priceRuleId, setPriceRuleId] = useState<string | null>(initialPriceRuleId || null);
   const [durationRuleId, setDurationRuleId] = useState<string | null>(
     initialDurationRuleId || null,
@@ -133,6 +152,11 @@ export function BookingWizard({
     () => services.find((s) => s.serviceId === serviceId) || null,
     [services, serviceId],
   );
+
+  useEffect(() => {
+    setSelectedOptionIds([]);
+  }, [selected?.serviceId]);
+
 
   useEffect(() => {
     if (!selected) return;
@@ -154,14 +178,39 @@ export function BookingWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.serviceId]);
 
+  const mode = (selected?.pricingMode || 'fixed').toLowerCase();
+
+  const optionExtras = useMemo(() => {
+    if (!selected || mode !== 'variable') return { price: 0, duration: 0 };
+    let price = 0;
+    let duration = 0;
+    const deltas = selected.optionDeltas || {};
+    for (const g of selected.attributeGroups || []) {
+      for (const o of g.options || []) {
+        if (!selectedOptionIds.includes(o.id)) continue;
+        const ov = deltas[o.id];
+        if (ov && ov.active === false) continue;
+        price += typeof ov?.priceDelta === 'number' ? ov.priceDelta : o.suggestedPriceDelta || 0;
+        duration +=
+          typeof ov?.durationDeltaMin === 'number'
+            ? ov.durationDeltaMin
+            : o.suggestedDurationDeltaMin || 0;
+      }
+    }
+    return { price, duration };
+  }, [selected, mode, selectedOptionIds]);
+
   const basePrice = useMemo(() => {
     if (!selected) return 0;
+    if (mode === 'deposit') {
+      return selected.depositAmount != null ? selected.depositAmount : selected.price;
+    }
     if (priceRuleId) {
       const rule = (selected.priceRules || []).find((r) => r.id === priceRuleId);
       if (rule) return rule.price;
     }
     return selected.price;
-  }, [selected, priceRuleId]);
+  }, [selected, priceRuleId, mode]);
 
   const baseDuration = useMemo(() => {
     if (!selected) return 0;
@@ -186,8 +235,8 @@ export function BookingWizard({
       .reduce((s, a) => s + (a.extraDurationMin || 0), 0);
   }, [selected, selectedAddOnIds]);
 
-  const displayPrice = basePrice + addOnExtraPrice;
-  const serviceDuration = baseDuration + addOnExtraDuration;
+  const displayPrice = basePrice + optionExtras.price + addOnExtraPrice;
+  const serviceDuration = baseDuration + optionExtras.duration + addOnExtraDuration;
   const totalDuration = selected ? serviceDuration + selected.bufferMin : 30;
 
   const loadSlots = useCallback(async () => {
@@ -265,6 +314,7 @@ export function BookingWizard({
       slotStart,
       notes: notes || undefined,
       addOnIds: selectedAddOnIds.length ? selectedAddOnIds : undefined,
+      selectedOptionIds: selectedOptionIds.length ? selectedOptionIds : undefined,
       priceRuleId: priceRuleId || undefined,
       durationRuleId: durationRuleId || undefined,
     };
@@ -297,6 +347,7 @@ export function BookingWizard({
         locationId: locationId || undefined,
         notes: notes.trim() || undefined,
         addOnIds: selectedAddOnIds.length ? selectedAddOnIds : undefined,
+        selectedOptionIds: selectedOptionIds.length ? selectedOptionIds : undefined,
         priceRuleId: priceRuleId || undefined,
         durationRuleId: durationRuleId || undefined,
       });
@@ -345,6 +396,23 @@ export function BookingWizard({
     } finally {
       setSubmitting(false);
     }
+  }
+
+
+  function goToDatetime() {
+    if (!selected) return;
+    if (mode === 'variable') {
+      for (const g of selected.attributeGroups || []) {
+        if (!g.required) continue;
+        const ok = (g.options || []).some((o) => selectedOptionIds.includes(o.id));
+        if (!ok) {
+          setError(`لطفاً «${g.name}» را انتخاب کنید`);
+          return;
+        }
+      }
+    }
+    setError(null);
+    setStep('datetime');
   }
 
   if (services.length === 0) {
@@ -462,7 +530,65 @@ export function BookingWizard({
             </div>
           )}
 
-          {selected && (selected.addOns || []).length > 0 && (
+          
+            {selected && mode === 'variable' && (selected.attributeGroups || []).length > 0 && (
+              <div className="mt-4 space-y-3">
+                <p className="text-sm font-medium text-[#0B2C4A]">گزینه‌های خدمت</p>
+                {(selected.attributeGroups || []).map((g) => (
+                  <div key={g.id} className="rounded-xl border border-gray-200 bg-white p-3">
+                    <p className="mb-2 text-xs font-medium text-gray-700">
+                      {g.name}
+                      {g.required ? <span className="text-red-500"> *</span> : null}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(g.options || []).map((o) => {
+                        const on = selectedOptionIds.includes(o.id);
+                        const ov = selected.optionDeltas?.[o.id];
+                        const delta =
+                          typeof ov?.priceDelta === 'number' ? ov.priceDelta : o.suggestedPriceDelta || 0;
+                        return (
+                          <button
+                            key={o.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedOptionIds((prev) => {
+                                const groupIds = new Set((g.options || []).map((x) => x.id));
+                                const without = prev.filter((id) => !groupIds.has(id));
+                                return on ? without : [...without, o.id];
+                              });
+                            }}
+                            className={`rounded-xl border px-3 py-2 text-xs ${
+                              on
+                                ? 'border-[#0B2C4A] bg-[#0B2C4A] text-white'
+                                : 'border-gray-200 bg-white text-gray-800'
+                            }`}
+                          >
+                            {o.label}
+                            {delta !== 0 && (
+                              <span className="mr-1 opacity-80">
+                                {delta > 0 ? '+' : ''}
+                                {delta.toLocaleString('fa-IR')}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selected && mode === 'deposit' && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                مبلغ قابل پرداخت الان به‌صورت بیعانه است
+                {selected.depositAmount != null
+                  ? ` (${formatPrice(selected.depositAmount)})`
+                  : ''}
+                . باقی مبلغ طبق توافق با زیباگر تسویه می‌شود.
+              </div>
+            )}
+{selected && (selected.addOns || []).length > 0 && (
             <div className="space-y-2 border-t border-border pt-3">
               {!showAddOns ? (
                 <button

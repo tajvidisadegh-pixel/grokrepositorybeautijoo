@@ -22,6 +22,8 @@ export type CreateBookingPayload = {
   addOnIds?: string[];
   priceRuleId?: string;
   durationRuleId?: string;
+  /** Attribute option ids for variable pricing (#80) */
+  selectedOptionIds?: string[];
 };
 
 export type BookingItem = {
@@ -80,4 +82,5 @@ export type BookingDraft = {
   addOnIds?: string[];
   priceRuleId?: string;
   durationRuleId?: string;
+  selectedOptionIds?: string[];
 };
