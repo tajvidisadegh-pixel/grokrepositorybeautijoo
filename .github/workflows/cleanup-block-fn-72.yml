@@ -1,0 +1,22 @@
+name: Cleanup block fn 72
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/cleanup-block-fn-72.yml'
+      - 'scripts/cleanup_block_fn_72.py'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/cleanup_block_fn_72.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/bookings/page.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "chore(#72): remove unused blockCustomer helper"
+          git push origin HEAD:main
