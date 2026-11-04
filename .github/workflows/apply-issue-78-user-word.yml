@@ -1,45 +1,9 @@
 name: apply-issue-78-user-word
+# Completed one-shot for #78 — disabled
 on:
-  push:
-    paths:
-      - '.github/workflows/apply-issue-78-user-word.yml'
   workflow_dispatch:
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Replace UI Persian مشتری with کاربر
-        run: |
-          python3 << 'PY'
-          from pathlib import Path
-          changed = []
-          for p in list(Path('frontend').rglob('*.tsx')) + list(Path('frontend').rglob('*.ts')):
-              text = p.read_text(encoding='utf-8')
-              if 'مشتری' not in text:
-                  continue
-              orig = text
-              text = text.replace('مشتریان', 'کاربران')
-              text = text.replace('مشتری‌ای', 'کاربری')
-              text = text.replace('مشتری', 'کاربر')
-              # soften awkward phrase if produced
-              text = text.replace('کاربران با نقش کاربر', 'کاربران عادی (نوبت‌گیرنده)')
-              if text != orig:
-                  p.write_text(text, encoding='utf-8')
-                  changed.append(str(p))
-          print('changed', len(changed))
-          for c in changed:
-              print(c)
-          PY
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend
-          if git diff --cached --quiet; then echo nochange; exit 0; fi
-          git commit -m "fix(#78): replace UI Persian مشتری with کاربر"
-          git push
+      - run: echo disabled
