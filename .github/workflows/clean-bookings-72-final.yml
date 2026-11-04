@@ -1,22 +1,8 @@
-name: Clean bookings 72 final
+name: noop-clean-bookings-72-final
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/clean-bookings-72-final.yml'
-      - 'scripts/clean_bookings_72_final.py'
-permissions:
-  contents: write
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/clean_bookings_72_final.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/bookings/page.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "fix(#72): remove residual blockCustomer from bookings page"
-          git push origin HEAD:main
+      - run: echo retired
