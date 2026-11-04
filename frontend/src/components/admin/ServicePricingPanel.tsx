@@ -164,6 +164,19 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
     }
   }
 
+  async function toggleForcesDeposit(optionId: string, next: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiClient.patch(`/admin/attribute-options/${optionId}`, { forcesDeposit: next });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطا');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addOption(groupId: string) {
     const d = optionDraft[groupId];
     if (!d?.label?.trim()) return;
@@ -333,14 +346,25 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
                               {o.forcesDeposit ? ' · بیعانه' : ''}
                             </span>
                           </span>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void deactivateOption(o.id)}
-                            className="text-[#FF6F61]"
-                          >
-                            حذف
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-1 text-[10px] text-amber-800">
+                              <input
+                                type="checkbox"
+                                disabled={busy}
+                                checked={!!o.forcesDeposit}
+                                onChange={(e) => void toggleForcesDeposit(o.id, e.target.checked)}
+                              />
+                              بیعانه
+                            </label>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void deactivateOption(o.id)}
+                              className="text-[#FF6F61]"
+                            >
+                              حذف
+                            </button>
+                          </div>
                         </li>
                       ))}
                       {options.length === 0 && (
@@ -390,6 +414,19 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
                         + گزینه
                       </button>
                     </div>
+                    <label className="mt-1.5 flex items-center gap-2 text-[11px] text-amber-900">
+                      <input
+                        type="checkbox"
+                        checked={!!draft.forcesDeposit}
+                        onChange={(e) =>
+                          setOptionDraft((prev) => ({
+                            ...prev,
+                            [g.id]: { ...draft, forcesDeposit: e.target.checked },
+                          }))
+                        }
+                      />
+                      بیعانه اجباری (اگر مشتری این گزینه را بزند، مسیر رزرو بیعانه می‌شود)
+                    </label>
                   </div>
                 );
               })}
