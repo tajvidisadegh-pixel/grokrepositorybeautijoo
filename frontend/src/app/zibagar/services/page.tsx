@@ -22,6 +22,14 @@ import {
   type CatalogCategory,
   type PriceRuleItem,
 } from '@/lib/panel-api';
+import {
+  PricingModeFields,
+  allowedModesFromService,
+  initPricingState,
+  pricingPayload,
+  type PricingModeState,
+} from '@/components/zibagar/PricingModeFields';
+
 import { friendlyApiError } from '@/lib/api-errors';
 import {
   CATALOG_TEMPLATE,
@@ -103,6 +111,7 @@ export default function ZibagarServicesPage() {
   const [editPrice, setEditPrice] = useState('');
   const [editDuration, setEditDuration] = useState('60');
   const [editDescription, setEditDescription] = useState('');
+  const [editPricing, setEditPricing] = useState<PricingModeState>(initPricingState(null));
 
   const load = useCallback(async () => {
     setError(null);
@@ -163,6 +172,7 @@ export default function ZibagarServicesPage() {
     setEditPrice(p != null ? String(p) : '');
     setEditDuration(String(ps.durationMin || 60));
     setEditDescription(ps.description || '');
+    setEditPricing(initPricingState(ps));
     setError(null);
     setSheet({ kind: 'price', ps });
   }
@@ -236,11 +246,18 @@ export default function ZibagarServicesPage() {
     setBusy(true);
     setError(null);
     try {
+      const pricing = pricingPayload(editPricing);
+      if (pricing.pricingMode === 'deposit' && !(pricing.depositAmount != null && pricing.depositAmount >= 0)) {
+        setError('مبلغ بیعانه را وارد کنید');
+        setBusy(false);
+        return;
+      }
       await patchMyService(sheet.ps.id, {
         price: priceNum,
         durationMin: dur,
         description: editDescription.trim() || undefined,
         isActive: true,
+        ...pricing,
       });
       try {
         const rules = await fetchMyPriceRules(sheet.ps.id);
@@ -583,6 +600,15 @@ export default function ZibagarServicesPage() {
                 <p className="mt-1.5 text-sm text-gray">{formatPrice(Number(editPrice))}</p>
               )}
             </div>
+            {sheet.ps && (
+              <PricingModeFields
+                allowed={allowedModesFromService(sheet.ps.service)}
+                state={editPricing}
+                onChange={setEditPricing}
+                groups={sheet.ps.service?.attributeGroups}
+                disabled={busy}
+              />
+            )}
             <div>
               <label className="mb-1.5 block text-sm text-gray">مدت (دقیقه)</label>
               <Input

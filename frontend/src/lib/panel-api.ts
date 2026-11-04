@@ -31,9 +31,56 @@ export type ServiceAddOnItem = {
 export type PriceRuleItem = { id: string; label: string; price: number; attributes?: Record<string, unknown> | null; sortOrder?: number; isActive?: boolean };
 export type DurationRuleItem = { id: string; label: string; durationMin: number; durationMaxMin?: number | null; attributes?: Record<string, unknown> | null; sortOrder?: number; isActive?: boolean };
 export type MediaAssetItem = { id: string; kind: string; publicUrl: string; mimeType: string; status: string; title?: string | null; sortOrder?: number };
+export type ServiceAttributeOptionItem = {
+  id: string;
+  label: string;
+  suggestedPriceDelta: number;
+  suggestedDurationDeltaMin: number;
+  forcesDeposit?: boolean;
+  sortOrder?: number;
+  isActive?: boolean;
+};
+
+export type ServiceAttributeGroupItem = {
+  id: string;
+  name: string;
+  required?: boolean;
+  sortOrder?: number;
+  isActive?: boolean;
+  options?: ServiceAttributeOptionItem[];
+};
+
+export type PricingMode = 'fixed' | 'variable' | 'deposit';
+
+export type OptionDeltaMap = Record<
+  string,
+  { priceDelta?: number; durationDeltaMin?: number; active?: boolean }
+>;
+
 export type ProfessionalServiceItem = {
-  id: string; serviceId: string; durationMin: number; price: number; bufferMin?: number; description?: string | null; isActive?: boolean;
-  service?: { id: string; name: string; slug?: string; category?: { name?: string; id?: string; slug?: string; parentId?: string | null } | null };
+  id: string;
+  serviceId: string;
+  durationMin: number;
+  price: number;
+  bufferMin?: number;
+  description?: string | null;
+  isActive?: boolean;
+  pricingMode?: PricingMode | string;
+  depositAmount?: number | null;
+  estimateMinPrice?: number | null;
+  estimateMaxPrice?: number | null;
+  optionDeltas?: OptionDeltaMap | null;
+  service?: {
+    id: string;
+    name: string;
+    slug?: string;
+    allowFixed?: boolean;
+    allowVariable?: boolean;
+    allowDeposit?: boolean;
+    defaultPricingMode?: string;
+    attributeGroups?: ServiceAttributeGroupItem[];
+    category?: { name?: string; id?: string; slug?: string; parentId?: string | null } | null;
+  };
   priceRules?: PriceRuleItem[];
   durationRules?: DurationRuleItem[];
   addOns?: ServiceAddOnItem[];
@@ -229,13 +276,39 @@ export async function fetchMyServices() {
   const res = await apiClient.get<ProfessionalServiceItem[] | Paginated<ProfessionalServiceItem>>('/professionals/me/services');
   return unwrapList(res as Paginated<ProfessionalServiceItem>);
 }
-export async function upsertMyService(payload: { serviceId: string; durationMin: number; price: number; bufferMin?: number; description?: string; isActive?: boolean }) {
+export async function upsertMyService(payload: {
+  serviceId: string;
+  durationMin: number;
+  price: number;
+  bufferMin?: number;
+  description?: string;
+  isActive?: boolean;
+  pricingMode?: PricingMode | string;
+  depositAmount?: number;
+  estimateMinPrice?: number;
+  estimateMaxPrice?: number;
+  optionDeltas?: OptionDeltaMap;
+}) {
   return apiClient.post('/professionals/me/services', payload ?? {});
 }
 export async function deactivateMyService(id: string) {
   return apiClient.delete(`/professionals/me/services/${id}`);
 }
-export async function patchMyService(id: string, payload: { durationMin?: number; price?: number; bufferMin?: number; description?: string; isActive?: boolean }) {
+export async function patchMyService(
+  id: string,
+  payload: {
+    durationMin?: number;
+    price?: number;
+    bufferMin?: number;
+    description?: string;
+    isActive?: boolean;
+    pricingMode?: PricingMode | string;
+    depositAmount?: number;
+    estimateMinPrice?: number;
+    estimateMaxPrice?: number;
+    optionDeltas?: OptionDeltaMap;
+  },
+) {
   return apiClient.patch(`/professionals/me/services/${id}`, payload ?? {});
 }
 export async function renameMyService(id: string, name: string) {
