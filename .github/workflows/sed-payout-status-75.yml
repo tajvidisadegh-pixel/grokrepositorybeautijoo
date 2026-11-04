@@ -1,48 +1,8 @@
-name: Sed PayoutStatus import 75
+name: noop-sed-payout-status-75
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/sed-payout-status-75.yml'
-permissions:
-  contents: write
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Insert import
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('backend/src/admin/admin.service.ts')
-          lines = p.read_text().splitlines(keepends=True)
-          out = []
-          done = False
-          for line in lines:
-              out.append(line)
-              if (not done) and line.strip() == 'PaymentStatus,' and 'PayoutStatus' not in ''.join(out):
-                  out.append('  PayoutStatus,\n')
-                  done = True
-          text = ''.join(out)
-          # listPayoutRequests where
-          text = text.replace(
-              'async listPayoutRequests(page = 1, limit = 20, status?: string) {\n    const take = Math.min(Math.max(limit || 20, 1), 100);\n    const skip = (Math.max(page || 1, 1) - 1) * take;\n    const where: { status?: string } = {};\n    if (status) where.status = status;',
-              'async listPayoutRequests(page = 1, limit = 20, status?: string) {\n    const take = Math.min(Math.max(limit || 20, 1), 100);\n    const skip = (Math.max(page || 1, 1) - 1) * take;\n    const where: { status?: PayoutStatus } = {};\n    if (status && (Object.values(PayoutStatus) as string[]).includes(status)) {\n      where.status = status as PayoutStatus;\n    }',
-          )
-          if 'status: status as PayoutStatus' not in text:
-              text = text.replace(
-                  'data: {\n        status,\n        resolvedAt: new Date(),',
-                  'data: {\n        status: status as PayoutStatus,\n        resolvedAt: new Date(),',
-              )
-          p.write_text(text)
-          print('PayoutStatus present', 'PayoutStatus' in text)
-          PY
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/admin/admin.service.ts
-          git diff --cached --stat
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "fix(#75): add PayoutStatus import for admin payout APIs"
-          git push origin HEAD:main
+      - run: echo retired

@@ -1,22 +1,8 @@
-name: Force PayoutStatus 75
+name: noop-force-payout-status-75
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/force-payout-status-75.yml'
-      - 'scripts/force_payout_status_75.py'
-permissions:
-  contents: write
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/force_payout_status_75.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/admin/admin.service.ts
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "fix(#75): force PayoutStatus import and typed filters"
-          git push origin HEAD:main
+      - run: echo retired
