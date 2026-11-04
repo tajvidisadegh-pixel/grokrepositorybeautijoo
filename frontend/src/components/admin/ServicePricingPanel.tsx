@@ -54,6 +54,8 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
   const [defaultMode, setDefaultMode] = useState<PricingMode>('fixed');
 
   const [groupName, setGroupName] = useState('');
+  const [variants, setVariants] = useState<Array<{ id: string; name: string; isActive?: boolean }>>([]);
+  const [variantName, setVariantName] = useState('');
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [templateId, setTemplateId] = useState('');
   const [optionDraft, setOptionDraft] = useState<
@@ -132,7 +134,23 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
     }
   }
 
-  async function addGroup() {
+  async function addVariant() {
+    if (!variantName.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiClient.post(`/admin/catalog-services/${serviceId}/variants`, { name: variantName.trim() });
+      setVariantName('');
+      setMsg('واریانت اضافه شد');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطا در افزودن واریانت');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+async function addGroup() {
     if (!groupName.trim()) return;
     setBusy(true);
     setError(null);

@@ -333,6 +333,7 @@ model Service {
   description String?  @db.Text
   isActive    Boolean  @default(true) @map("is_active")
   sortOrder   Int      @default(0) @map("sort_order")
+  parentId    String?  @map("parent_id") @db.Uuid
   allowFixed          Boolean @default(true)  @map("allow_fixed")
   allowVariable       Boolean @default(false) @map("allow_variable")
   allowDeposit        Boolean @default(false) @map("allow_deposit")
@@ -340,11 +341,14 @@ model Service {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
   category             ServiceCategory      @relation(fields: [categoryId], references: [id])
+  parent               Service?             @relation("ServiceVariants", fields: [parentId], references: [id], onDelete: SetNull)
+  variants             Service[]            @relation("ServiceVariants")
   professionalServices ProfessionalService[]
   bookingItems         BookingItem[]
   attributeGroups      ServiceAttributeGroup[]
   @@index([categoryId])
   @@index([isActive])
+  @@index([parentId])
   @@map("services")
 }
 
