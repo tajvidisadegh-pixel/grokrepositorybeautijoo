@@ -126,9 +126,19 @@ export class BookingsService {
       throw new BadRequestException('یکی از خدمات برای این زیباگر فعال نیست');
     }
 
+    // #74 — preserve request order (not DB order)
+    const byServiceId = new Map(proServices.map((ps) => [ps.serviceId, ps]));
+    const orderedServices = data.serviceIds.map((sid) => {
+      const ps = byServiceId.get(sid);
+      if (!ps) throw new BadRequestException('یکی از خدمات برای این زیباگر فعال نیست');
+      return ps;
+    });
+
     const requestedAddOnIds = Array.from(new Set(data.addOnIds || []));
     const addOnById = new Map(
-      proServices.flatMap((ps) => ps.addOns.map((a) => [a.id, { ...a, professionalServiceId: ps.id }] as const)),
+      orderedServices.flatMap((ps) =>
+        ps.addOns.map((a) => [a.id, { ...a, professionalServiceId: ps.id }] as const),
+      ),
     );
     for (const id of requestedAddOnIds) {
       if (!addOnById.has(id)) {
@@ -136,30 +146,37 @@ export class BookingsService {
       }
     }
 
-    const primary = proServices[0];
-    let priceRuleId: string | null = null;
-    let durationRuleId: string | null = null;
+    // #74 — rules validated against any selected service; applied only on matching line
     if (data.priceRuleId) {
-      const rule = primary.priceRules.find((r) => r.id === data.priceRuleId);
-      if (!rule) throw new BadRequestException('قانون قیمت انتخاب‌شده معتبر نیست');
-      priceRuleId = rule.id;
+      const ok = orderedServices.some((ps) => ps.priceRules.some((r) => r.id === data.priceRuleId));
+      if (!ok) throw new BadRequestException('قانون قیمت انتخاب‌شده معتبر نیست');
     }
     if (data.durationRuleId) {
-      const rule = primary.durationRules.find((r) => r.id === data.durationRuleId);
-      if (!rule) throw new BadRequestException('قانون زمان انتخاب‌شده معتبر نیست');
-      durationRuleId = rule.id;
+      const ok = orderedServices.some((ps) =>
+        ps.durationRules.some((r) => r.id === data.durationRuleId),
+      );
+      if (!ok) throw new BadRequestException('قانون زمان انتخاب‌شده معتبر نیست');
     }
 
-    const lines = proServices.map((ps) => {
+    const lines = orderedServices.map((ps) => {
       let price = ps.price;
       let durationMin = ps.durationMin;
-      if (priceRuleId) {
-        const rule = ps.priceRules.find((r) => r.id === priceRuleId);
-        if (rule) price = rule.price;
+      // Apply price/duration rules only when they belong to THIS service
+      let linePriceRuleId: string | null = null;
+      let lineDurationRuleId: string | null = null;
+      if (data.priceRuleId) {
+        const rule = ps.priceRules.find((r) => r.id === data.priceRuleId);
+        if (rule) {
+          price = rule.price;
+          linePriceRuleId = rule.id;
+        }
       }
-      if (durationRuleId) {
-        const rule = ps.durationRules.find((r) => r.id === durationRuleId);
-        if (rule) durationMin = rule.durationMin;
+      if (data.durationRuleId) {
+        const rule = ps.durationRules.find((r) => r.id === data.durationRuleId);
+        if (rule) {
+          durationMin = rule.durationMin;
+          lineDurationRuleId = rule.id;
+        }
       }
 
       const mode: PricingMode = normalizePricingMode(ps.pricingMode || 'fixed');
@@ -243,8 +260,8 @@ export class BookingsService {
         durationMin: durationMin + addOnDur,
         price: price + addOnPrice,
         addOnsSnapshot: addOns.map((a) => ({ id: a.id, name: a.name, price: a.price })),
-        priceRuleId,
-        durationRuleId,
+        priceRuleId: linePriceRuleId,
+        durationRuleId: lineDurationRuleId,
         pricingMode: mode,
         isDeposit,
         selectedOptions: selectedOptionsSnapshot.length
