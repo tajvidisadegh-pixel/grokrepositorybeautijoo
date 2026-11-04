@@ -114,6 +114,74 @@ export default function ZibagarPortfolioPage() {
     void load();
   }, [load]);
 
+  async function onUploadMany(fileList: FileList | File[]) {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length) return;
+    let remaining = Math.max(0, MAX_PORTFOLIO - items.length);
+    if (remaining <= 0) {
+      setMsg(
+        'سقف رایگان نمونه‌کار پر است. برای آپلود بیشتر از ۱۰۰ مورد می‌توانید نسخه ویژه را تهیه کنید.',
+      );
+      return;
+    }
+    const queue = files.slice(0, remaining);
+    if (files.length > remaining) {
+      setMsg(`فقط ${remaining} فایل تا سقف نمونه‌کار آپلود می‌شود.`);
+    }
+    setBusy(true);
+    setMsg(null);
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < queue.length; i++) {
+      const file = queue[i]!;
+      setUploadProgress(0);
+      setMsg(`آپلود ${i + 1} از ${queue.length}…`);
+      try {
+        const video = isAllowedVideoFile(file);
+        const image = isAllowedImageFile(file);
+        if (!video && !image) {
+          fail += 1;
+          continue;
+        }
+        if (image && !video && file.size > MAX_IMAGE_BYTES) {
+          fail += 1;
+          continue;
+        }
+        if (video && file.size > MAX_VIDEO_BYTES) {
+          fail += 1;
+          continue;
+        }
+        if (video) {
+          try {
+            const sec = await readVideoDuration(file);
+            if (sec > MAX_VIDEO_SEC + 0.5) {
+              fail += 1;
+              continue;
+            }
+          } catch {
+            /* continue */
+          }
+        }
+        await uploadMyMedia(file, 'portfolio', undefined, setUploadProgress);
+        ok += 1;
+      } catch {
+        fail += 1;
+      }
+    }
+    setBusy(false);
+    setUploadProgress(null);
+    if (inputRef.current) inputRef.current.value = '';
+    await load();
+    if (ok && !fail) setMsg(`${ok} فایل با موفقیت آپلود شد.`);
+    else if (ok && fail) setMsg(`${ok} موفق، ${fail} ناموفق.`);
+    else if (fail) setMsg('آپلود ناموفق بود. فرمت و حجم فایل‌ها را بررسی کنید.');
+    try {
+      if (ok) toastSuccess(`${ok} فایل آپلود شد`);
+    } catch {
+      /* */
+    }
+  }
+
   async function onUpload(file: File) {
     const video = isAllowedVideoFile(file);
     const image = isAllowedImageFile(file);
@@ -261,9 +329,10 @@ export default function ZibagarPortfolioPage() {
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.heic,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
             className="hidden"
+            multiple
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void onUpload(f);
+              const list = e.target.files;
+              if (list && list.length) void onUploadMany(list);
             }}
           />
           <Button size="sm" loading={busy} disabled={atLimit} onClick={() => inputRef.current?.click()}>
@@ -321,13 +390,13 @@ export default function ZibagarPortfolioPage() {
           }
         />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
           {items.map((m) => {
             const vid = isVideo(m.mimeType, m.publicUrl);
             const svcName = services.find((s) => s.id === m.professionalServiceId)?.service?.name;
             return (
               <li key={m.id}>
-                <Card className="space-y-2 overflow-hidden p-2">
+                <Card className="space-y-1 overflow-hidden p-1.5">
                   {vid ? (
                     <button
                       type="button"
