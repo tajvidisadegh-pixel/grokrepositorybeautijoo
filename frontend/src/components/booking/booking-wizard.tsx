@@ -125,6 +125,10 @@ export function BookingWizard({
 
   const [step, setStep] = useState<Step>('service');
   const [serviceId, setServiceId] = useState(initialServiceId || '');
+  /** #74 multi-service selection (includes focused serviceId) */
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
+    initialServiceId ? [initialServiceId] : [],
+  );
   const [date, setDate] = useState(initialDate || todayISO());
   const [slotStart, setSlotStart] = useState(initialSlot || '');
   const [locationId, setLocationId] = useState(
@@ -153,6 +157,17 @@ export function BookingWizard({
     () => services.find((s) => s.serviceId === serviceId) || null,
     [services, serviceId],
   );
+
+  const selectedServices = useMemo(() => {
+    const ids = selectedServiceIds.length
+      ? selectedServiceIds
+      : serviceId
+        ? [serviceId]
+        : [];
+    return ids
+      .map((id) => services.find((s) => s.serviceId === id))
+      .filter((s): s is ServiceOption => !!s);
+  }, [services, selectedServiceIds, serviceId]);
 
   useEffect(() => {
     setSelectedOptionIds([]);
@@ -255,6 +270,25 @@ export function BookingWizard({
       ? selected.depositAmount
       : displayPriceRaw;
   const serviceDuration = baseDuration + optionExtras.duration + addOnExtraDuration;
+
+  // #74 — multi-service: each line independent, then sum (base or cheapest rule)
+  const multiServiceTotals = useMemo(() => {
+    if (selectedServices.length <= 1) {
+      return null;
+    }
+    let price = 0;
+    let duration = 0;
+    const lines = selectedServices.map((s) => {
+      const rules = [...(s.priceRules || [])].sort((a, b) => a.price - b.price);
+      const linePrice = rules.length ? rules[0]!.price : s.price;
+      const lineDur = s.durationMin + (s.bufferMin || 0);
+      price += linePrice;
+      duration += lineDur;
+      return { serviceId: s.serviceId, name: s.name, price: linePrice, durationMin: lineDur };
+    });
+    return { price, duration, lines };
+  }, [selectedServices]);
+
   const totalDuration = selected ? serviceDuration + selected.bufferMin : 30;
 
   const loadSlots = useCallback(async () => {
@@ -360,7 +394,9 @@ export function BookingWizard({
       const startAt = slotToStartAt(date, slotStart);
       const created = await createBooking({
         professionalId: professional.id,
-        serviceIds: [selected.serviceId],
+        serviceIds: selectedServices.length
+          ? selectedServices.map((s) => s.serviceId)
+          : [selected.serviceId],
         startAt,
         locationId: locationId || undefined,
         notes: notes.trim() || undefined,
@@ -482,6 +518,7 @@ export function BookingWizard({
               onClick={() => {
                 const s = services[0];
                 setServiceId(s.serviceId);
+                setSelectedServiceIds([s.serviceId]);
                 trackFunnel('service_select', { serviceId: s.serviceId, pro: professional.id, quick: 1 });
                 const d = new Date();
                 d.setDate(d.getDate() + 1);
@@ -492,6 +529,7 @@ export function BookingWizard({
             >رزرو سریع: {services[0].name} · اولین نوبت ممکن</button>
           )}
 
+          <p className="text-xs text-gray">برای رزرو چندخدمت، چند مورد را انتخاب کنید؛ قیمت و مدت هر کدام جدا جمع می‌شود.</p>
           <ul className="space-y-2">
             {services.map((s) => (
               <li key={s.serviceId}>
@@ -499,11 +537,18 @@ export function BookingWizard({
                   type="button"
                   onClick={() => {
                     setServiceId(s.serviceId);
+                    setSelectedServiceIds((prev) => {
+                      if (prev.includes(s.serviceId)) {
+                        // keep at least one selection when tapping focused
+                        if (prev.length === 1) return prev;
+                        return prev.filter((id) => id !== s.serviceId);
+                      }
+                      return [...prev, s.serviceId];
+                    });
                     trackFunnel('service_select', { serviceId: s.serviceId, pro: professional.id });
-                    if (!(s.priceRules || []).length) setStep('datetime');
                   }}
                   className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-right text-sm transition ${
-                    serviceId === s.serviceId
+                    selectedServiceIds.includes(s.serviceId) || serviceId === s.serviceId
                       ? 'border-coral bg-coral-soft'
                       : 'border-border hover:border-coral-light'
                   }`}
@@ -674,7 +719,7 @@ export function BookingWizard({
             </div>
           )}
 
-          <Button className="w-full" disabled={!serviceId} onClick={goDatetime}>
+          <Button className="w-full" disabled={!serviceId && selectedServiceIds.length === 0} onClick={goDatetime}>
             ادامه
           </Button>
         </Card>
@@ -814,6 +859,30 @@ export function BookingWizard({
               <dd>{professional.name}</dd>
             </div>
             <div className="flex justify-between gap-2">
+              {multiServiceTotals && multiServiceTotals.lines.length > 1 ? (
+                <>
+                  <dt className="text-gray">تفکیک خدمات</dt>
+                  <dd className="font-medium">
+                    <ul className="space-y-1 text-sm">
+                      {multiServiceTotals.lines.map((l) => (
+                        <li key={l.serviceId} className="flex justify-between gap-2">
+                          <span>{l.name}</span>
+                          <span className="text-gray" dir="ltr">
+                            {l.durationMin}m · {l.price.toLocaleString('fa-IR')}
+                          </span>
+                        </li>
+                      ))}
+                      <li className="flex justify-between gap-2 border-t border-border pt-1 font-bold">
+                        <span>جمع</span>
+                        <span>
+                          {multiServiceTotals.duration} دقیقه ·{' '}
+                          {multiServiceTotals.price.toLocaleString('fa-IR')} تومان
+                        </span>
+                      </li>
+                    </ul>
+                  </dd>
+                </>
+              ) : null}
               <dt className="text-gray">خدمت</dt>
               <dd>
                 {selected.name}
