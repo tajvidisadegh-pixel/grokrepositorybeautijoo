@@ -67,6 +67,8 @@ enum NotificationType {
   booking_completed
   booking_reminder
   review_request
+  quote_request
+  quote_responded
   system
   otp
 }
