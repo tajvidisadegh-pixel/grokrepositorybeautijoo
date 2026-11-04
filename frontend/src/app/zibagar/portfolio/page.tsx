@@ -73,6 +73,7 @@ export default function ZibagarPortfolioPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -113,75 +114,60 @@ export default function ZibagarPortfolioPage() {
     void load();
   }, [load]);
 
-  async function onUploadMany(fileList: FileList | File[]) {
-    const files = Array.from(fileList || []).filter(Boolean);
-    if (!files.length) return;
-    const remaining = Math.max(0, MAX_PORTFOLIO - items.length);
-    if (remaining <= 0) {
+  async function onUpload(file: File) {
+    const video = isAllowedVideoFile(file);
+    const image = isAllowedImageFile(file);
+    if (!video && !image) {
+      setMsg('فقط تصویر JPG/PNG/WEBP/GIF/HEIC یا ویدیو MP4/WEBM/MOV مجاز است.');
+      return;
+    }
+    if (image && !video && file.size > MAX_IMAGE_BYTES) {
+      setMsg('حجم تصویر حداکثر ۱۰ مگابایت است.');
+      return;
+    }
+    if (video && file.size > MAX_VIDEO_BYTES) {
+      setMsg('حجم ویدیو حداکثر ۵۰۰ مگابایت است.');
+      return;
+    }
+    if (video) {
+      try {
+        const sec = await readVideoDuration(file);
+        if (sec > MAX_VIDEO_SEC + 0.5) {
+          setMsg(`مدت ویدیو حداکثر ${MAX_VIDEO_SEC} ثانیه است.`);
+          return;
+        }
+      } catch {
+        /* continue */
+      }
+    }
+    if (items.length >= MAX_PORTFOLIO) {
       setMsg(
         'سقف رایگان نمونه‌کار پر است. برای آپلود بیشتر از ۱۰۰ مورد می‌توانید نسخه ویژه را تهیه کنید.',
       );
       return;
     }
-    const queue = files.slice(0, remaining);
-    if (files.length > remaining) {
-      setMsg(`فقط ${remaining} فایل تا سقف نمونه‌کار آپلود می‌شود.`);
-    }
     setBusy(true);
+    setUploadProgress(0);
     setMsg(null);
-    let ok = 0;
-    let fail = 0;
-    for (let i = 0; i < queue.length; i++) {
-      const file = queue[i];
-      if (!file) continue;
-      setUploadProgress(0);
-      setMsg(`آپلود ${i + 1} از ${queue.length}…`);
-      try {
-        const video = isAllowedVideoFile(file);
-        const image = isAllowedImageFile(file);
-        if (!video && !image) {
-          fail += 1;
-          continue;
-        }
-        if (image && !video && file.size > MAX_IMAGE_BYTES) {
-          fail += 1;
-          continue;
-        }
-        if (video && file.size > MAX_VIDEO_BYTES) {
-          fail += 1;
-          continue;
-        }
-        if (video) {
-          try {
-            const sec = await readVideoDuration(file);
-            if (sec > MAX_VIDEO_SEC + 0.5) {
-              fail += 1;
-              continue;
-            }
-          } catch {
-            /* continue */
-          }
-        }
-        await uploadMyMedia(file, 'portfolio', undefined, setUploadProgress);
-        ok += 1;
-      } catch {
-        fail += 1;
-      }
-    }
-    setBusy(false);
-    setUploadProgress(null);
-    if (inputRef.current) inputRef.current.value = '';
-    await load();
-    if (ok && !fail) setMsg(`${ok} فایل با موفقیت آپلود شد.`);
-    else if (ok && fail) setMsg(`${ok} موفق، ${fail} ناموفق.`);
-    else if (fail) setMsg('آپلود ناموفق بود. فرمت و حجم فایل‌ها را بررسی کنید.');
     try {
-      if (ok) toastSuccess(`${ok} فایل آپلود شد`);
-    } catch {
-      /* */
+      const url = URL.createObjectURL(file);
+      setLocalPreview(url);
+    } catch { /* ignore */ }
+    try {
+      await uploadMyMedia(file, 'portfolio', undefined, setUploadProgress);
+      setMsg(video ? 'ویدیو آپلود شد.' : 'تصویر آپلود شد.');
+      try { toastSuccess(video ? 'ویدیو آپلود شد' : 'تصویر آپلود شد'); } catch { /* */ }
+      await load();
+    } catch (e) {
+      setMsg(friendlyApiError(e));
+    } finally {
+      setBusy(false);
+      setUploadProgress(null);
+      if (localPreview) { try { URL.revokeObjectURL(localPreview); } catch { /* */ } }
+      setLocalPreview(null);
+      if (inputRef.current) inputRef.current.value = '';
     }
   }
-
 
   async function onDelete(id: string) {
     if (!confirm('حذف این مورد؟')) return;
@@ -273,12 +259,18 @@ export default function ZibagarPortfolioPage() {
           <input
             ref={inputRef}
             type="file"
+            multiple
             accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.heic,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
             className="hidden"
-            multiple
             onChange={(e) => {
               const list = e.target.files;
-              if (list && list.length) void onUploadMany(list);
+              if (!list?.length) return;
+              void (async () => {
+                const files = Array.from(list);
+                for (const f of files) {
+                  await onUpload(f);
+                }
+              })();
             }}
           />
           <Button size="sm" loading={busy} disabled={atLimit} onClick={() => inputRef.current?.click()}>
@@ -304,6 +296,13 @@ export default function ZibagarPortfolioPage() {
         </div>
       )}
 
+      {localPreview && (
+        <div className="overflow-hidden rounded-xl border border-border bg-white p-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={localPreview} alt="پیش‌نمایش" className="mx-auto max-h-40 rounded-lg object-contain" />
+          <p className="mt-1 text-center text-xs text-gray">پیش‌نمایش قبل از اتمام آپلود</p>
+        </div>
+      )}
       {uploadProgress != null && (
         <div className="rounded-xl border border-blue/20 bg-blue/5 px-3 py-3">
           <div className="mb-1 flex items-center justify-between text-xs">
@@ -335,7 +334,7 @@ export default function ZibagarPortfolioPage() {
             const svcName = services.find((s) => s.id === m.professionalServiceId)?.service?.name;
             return (
               <li key={m.id}>
-                <Card className="space-y-1 overflow-hidden p-1.5">
+                <Card className="space-y-2 overflow-hidden p-2">
                   {vid ? (
                     <button
                       type="button"
