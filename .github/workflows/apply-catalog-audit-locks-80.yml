@@ -1,0 +1,29 @@
+name: Apply catalog audit locks 80.2.4
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-catalog-audit-locks-80.yml'
+      - 'scripts/patch_catalog_audit_locks_80.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_catalog_audit_locks_80.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/src/admin/admin-catalog-pricing.controller.ts \
+            backend/src/admin/admin-catalog.controller.ts \
+            frontend/src/app/admin/service-categories/page.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#80.phase2.4): catalog pricing audit logs + dependency-safe soft delete"
+          git push origin HEAD:main
