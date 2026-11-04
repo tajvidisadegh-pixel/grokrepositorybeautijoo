@@ -1,0 +1,22 @@
+name: Fix issue 75 types
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-issue-75-types.yml'
+      - 'scripts/fix_issue_75_types.py'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_issue_75_types.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/earnings/page.tsx backend/src/admin/admin.service.ts
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "fix(#75): TS types for earnings summary and PayoutStatus"
+          git push origin HEAD:main
