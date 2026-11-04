@@ -64,28 +64,15 @@ function createSmsProvider(config: ConfigService): SmsProvider {
     });
   }
 
+  // #77 — mock SMS never boots in production (no ALLOW_MOCK_SMS escape)
   if (raw === 'mock' || raw === '' || raw === 'none') {
     if (isProd) {
-      const allow = (
-        process.env.ALLOW_MOCK_SMS ||
-        config.get<string>('allowMockSms') ||
-        ''
-      )
-        .toLowerCase()
-        .trim();
-      if (allow !== 'true' && allow !== '1') {
-        throw new Error(
-          'FATAL: SMS_PROVIDER=mock is not allowed in production. ' +
-            'Set SMS_PROVIDER=smsir with SMSIR_API_KEY and SMSIR_OTP_TEMPLATE_ID, ' +
-            'or set ALLOW_MOCK_SMS=true only for emergency diagnostics.',
-        );
-      }
-      logger.warn(
-        'SMS_BOOT provider=mock ALLOW_MOCK_SMS=true — OTP will NOT reach phones (production diagnostic mode).',
+      throw new Error(
+        'FATAL: SMS_PROVIDER=mock (or empty) is forbidden in production. ' +
+          'Set SMS_PROVIDER=smsir with SMSIR_API_KEY and SMSIR_OTP_TEMPLATE_ID.',
       );
-    } else {
-      logger.log('SMS_BOOT provider=mock (development)');
     }
+    logger.log('SMS_BOOT provider=mock (development)');
     return new MockSmsProvider();
   }
 

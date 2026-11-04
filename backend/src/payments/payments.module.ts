@@ -52,23 +52,36 @@ export function resolvePaymentProvider(
     return deps.disabled;
   }
 
-  if (raw === 'mock' || raw === '') {
+  // #77 — mock is never allowed in production (fail loud, no silent fallback)
+  if (raw === 'mock') {
     if (prod) {
-      logger.warn(
-        'PAYMENT_PROVIDER is mock/empty in production — online payment DISABLED (no fake PAID)',
+      throw new Error(
+        'FATAL: PAYMENT_PROVIDER=mock is forbidden in production. ' +
+          'Set PAYMENT_PROVIDER=zarinpal with ZARINPAL_MERCHANT_ID, ' +
+          'or PAYMENT_PROVIDER=disabled to turn online payment off deliberately.',
       );
-      return deps.disabled;
     }
     logger.log('Payment provider: mock (non-production)');
     return deps.mock;
   }
 
+  if (raw === '') {
+    if (prod) {
+      throw new Error(
+        'FATAL: PAYMENT_PROVIDER is empty in production. ' +
+          'Set PAYMENT_PROVIDER=zarinpal (real gateway) or PAYMENT_PROVIDER=disabled.',
+      );
+    }
+    logger.log('Payment provider: mock (default non-production)');
+    return deps.mock;
+  }
+
   // Unknown key
   if (prod) {
-    logger.warn(
-      `Unknown PAYMENT_PROVIDER="${raw}" in production — online payment DISABLED`,
+    throw new Error(
+      `FATAL: Unknown PAYMENT_PROVIDER="${raw}" in production. ` +
+        'Supported: zarinpal, disabled. Mock is not allowed.',
     );
-    return deps.disabled;
   }
   logger.warn(`Unknown PAYMENT_PROVIDER="${raw}" — falling back to mock (dev)`);
   return deps.mock;

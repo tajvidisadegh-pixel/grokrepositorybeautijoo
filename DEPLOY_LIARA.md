@@ -49,3 +49,18 @@ Require stack: - /app/standalone/server.js
 - Assume GitHub commit = live site without Redeploy.
 
 More: `docs/BRANCH_AND_DEPLOY.md`, `README.md`, issue #42.
+
+## Production providers (#77) — بدون mock
+
+در `NODE_ENV=production` سرویس **بالا نمی‌آید** اگر mock تنظیم شده باشد.
+
+| متغیر | مقدار واقعی | توضیح |
+|--------|-------------|--------|
+| `PAYMENT_PROVIDER` | `zarinpal` یا `disabled` | `mock` / خالی = FATAL |
+| `ZARINPAL_MERCHANT_ID` | شناسه درگاه | وقتی zarinpal است الزامی |
+| `SMS_PROVIDER` | `smsir` | `mock` / خالی = FATAL |
+| `SMSIR_API_KEY` | کلید SMS.ir | هرگز در گیت |
+| `SMSIR_OTP_TEMPLATE_ID` | شناسه قالب OTP | عددی |
+
+بعد از هر تغییر provider: یک **پرداخت واقعی** و یک **OTP واقعی** تست شود.
+
