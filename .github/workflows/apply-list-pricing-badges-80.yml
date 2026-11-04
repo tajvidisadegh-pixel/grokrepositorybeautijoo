@@ -1,26 +1,8 @@
-name: Apply list pricing badges 80.9
-
+name: noop-apply-list-pricing-badges-80
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/apply-list-pricing-badges-80.yml'
-      - 'scripts/patch_list_pricing_badges_80.py'
-
-permissions:
-  contents: write
-
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/patch_list_pricing_badges_80.py
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/admin/service-categories/page.tsx frontend/src/app/zibagar/services/page.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "feat(#80.9): pricing mode badges on admin and zibagar service lists"
-          git push origin HEAD:main
+      - run: echo retired
