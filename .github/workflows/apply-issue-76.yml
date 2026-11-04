@@ -1,0 +1,34 @@
+name: Apply issue 76 no-show separation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-issue-76.yml'
+      - 'scripts/patch_issue_76_no_show.py'
+      - 'backend/prisma/migrations/20261104160000_booking_no_show_fields/migration.sql'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_issue_76_no_show.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/prisma/schema.prisma \
+            backend/prisma/migrations/20261104160000_booking_no_show_fields/migration.sql \
+            backend/src/bookings/bookings.service.ts \
+            frontend/src/app/zibagar/bookings/page.tsx \
+            frontend/src/lib/persian-status.ts \
+            frontend/src/app/panel/bookings/page.tsx \
+            frontend/src/app/admin/bookings/page.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#76): noShowAt/noShowReason; stop using cancel fields for no-show"
+          git push origin HEAD:main
