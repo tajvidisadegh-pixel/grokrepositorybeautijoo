@@ -205,6 +205,24 @@ export class BookingsService {
         const totals = computeVariableTotals(price, durationMin, deltas);
         price = totals.price;
         durationMin = totals.durationMin;
+
+        const forces = selectedOptionsSnapshot.some((s) => {
+          for (const g of groups) {
+            const o = (g.options || []).find((x) => x.id === s.optionId);
+            if (o && (o as { forcesDeposit?: boolean }).forcesDeposit) return true;
+          }
+          return false;
+        });
+        if (forces) {
+          const dep = ps.depositAmount;
+          if (dep == null || dep < 0) {
+            throw new BadRequestException(
+              'این انتخاب نیازمند بیعانه است؛ مبلغ بیعانه برای خدمت تنظیم نشده',
+            );
+          }
+          price = dep;
+          isDeposit = true;
+        }
       } else if (mode === 'deposit') {
         const dep = ps.depositAmount;
         if (dep == null || dep < 0) {

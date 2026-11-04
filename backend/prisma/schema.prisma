@@ -717,6 +717,23 @@ model SupportTicketMessage {
   @@map("support_ticket_messages")
 }
 
+
+model ServiceAttributeTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(120)
+  description String?  @db.Text
+  categoryId  String?  @map("category_id") @db.Uuid
+  payload     Json     @default("[]")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([isActive])
+  @@index([categoryId])
+  @@map("service_attribute_templates")
+}
+
 model CatalogAddOn {
   id                       String   @id @default(uuid()) @db.Uuid
   name                     String   @db.VarChar(120)

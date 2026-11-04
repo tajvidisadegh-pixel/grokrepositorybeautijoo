@@ -54,8 +54,10 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
   const [defaultMode, setDefaultMode] = useState<PricingMode>('fixed');
 
   const [groupName, setGroupName] = useState('');
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
+  const [templateId, setTemplateId] = useState('');
   const [optionDraft, setOptionDraft] = useState<
-    Record<string, { label: string; priceDelta: string; durationDelta: string }>
+    Record<string, { label: string; priceDelta: string; durationDelta: string; forcesDeposit?: boolean }>
   >({});
 
   const load = useCallback(async () => {
@@ -95,6 +97,36 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
       onSaved?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'خطا در ذخیره');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyTemplate() {
+    if (!templateId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiClient.post(`/admin/catalog-services/${serviceId}/apply-template`, { templateId });
+      setMsg('قالب اعمال شد');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطا در اعمال قالب');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveAsTemplate() {
+    const name = window.prompt('نام قالب');
+    if (!name?.trim()) return;
+    setBusy(true);
+    try {
+      await apiClient.post(`/admin/catalog-services/${serviceId}/save-as-template`, { name: name.trim() });
+      setMsg('قالب ذخیره شد');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'خطا');
     } finally {
       setBusy(false);
     }
@@ -142,8 +174,9 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
         label: d.label.trim(),
         suggestedPriceDelta: Number(d.priceDelta) || 0,
         suggestedDurationDeltaMin: Number(d.durationDelta) || 0,
+        forcesDeposit: !!d.forcesDeposit,
       });
-      setOptionDraft((prev) => ({ ...prev, [groupId]: { label: '', priceDelta: '0', durationDelta: '0' } }));
+      setOptionDraft((prev) => ({ ...prev, [groupId]: { label: '', priceDelta: '0', durationDelta: '0', forcesDeposit: false } }));
       await load();
       setMsg('گزینه اضافه شد');
     } catch (e) {
@@ -263,7 +296,7 @@ export function ServicePricingPanel({ serviceId, serviceName, onClose, onSaved }
                 <p className="text-xs text-gray-400">هنوز گروهی تعریف نشده.</p>
               )}
               {groups.map((g) => {
-                const draft = optionDraft[g.id] || { label: '', priceDelta: '0', durationDelta: '0' };
+                const draft = optionDraft[g.id] || { label: '', priceDelta: '0', durationDelta: '0', forcesDeposit: false };
                 const options = (g.options || []).filter((o) => o.isActive !== false);
                 return (
                   <div key={g.id} className="rounded-xl border border-gray-200 bg-white p-3">
