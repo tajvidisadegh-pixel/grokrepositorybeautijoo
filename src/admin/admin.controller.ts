@@ -180,6 +180,30 @@ export class AdminController {
     return this.service.updateCommissionSetting(dto.rate, actorId);
   }
 
+  @RequirePermissions('admin.finance.read')
+  @Get('finance/payout-requests')
+  listPayoutRequests(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.service.listPayoutRequests(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+      status,
+    );
+  }
+
+  @RequirePermissions('admin.finance.write')
+  @Patch('finance/payout-requests/:id')
+  updatePayoutRequest(
+    @CurrentUser('id') adminUserId: string,
+    @Param('id') id: string,
+    @Body() body: { status: 'approved' | 'paid' | 'rejected'; note?: string },
+  ) {
+    return this.service.updatePayoutRequest(adminUserId, id, body.status, body.note);
+  }
+
   @RequirePermissions('admin.finance.write')
   @Post('finance/failed-alert/threshold')
   setFailedThreshold(@Body() body: { threshold?: number }, @CurrentUser('id') actorId?: string) {

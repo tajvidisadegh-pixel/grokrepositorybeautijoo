@@ -793,6 +793,8 @@ export class ProfessionalsService {
             select: {
               id: true,
               startAt: true,
+              endAt: true,
+              status: true,
               customer: {
                 select: {
                   phone: true,
@@ -827,7 +829,42 @@ export class ProfessionalsService {
       }
     }
 
-    const available = Math.max(0, allTime.net - settled - pendingPayout);
+    // #75 — only completed / past-end bookings are settleable
+    const nowMs = Date.now();
+    const allPaidForStatus = await this.prisma.payment.findMany({
+      where: paidWhere,
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+        professionalNetAmount: true,
+        platformCommissionAmount: true,
+        booking: { select: { status: true, endAt: true } },
+      },
+    });
+    let awaitingServiceNet = 0;
+    let settleableNet = 0;
+    let awaitingServiceCount = 0;
+    let settleableCount = 0;
+    for (const p of allPaidForStatus) {
+      const net =
+        Number(p.professionalNetAmount || 0) ||
+        Math.max(0, Number(p.amount || 0) - Number(p.platformCommissionAmount || 0));
+      const b = p.booking;
+      const done =
+        b?.status === 'completed' ||
+        (b?.endAt != null && new Date(b.endAt).getTime() <= nowMs);
+      if (done) {
+        settleableNet += net;
+        settleableCount += 1;
+      } else {
+        awaitingServiceNet += net;
+        awaitingServiceCount += 1;
+      }
+    }
+
+    const available = Math.max(0, settleableNet - settled - pendingPayout);
+
 
     return {
       summary: {
@@ -835,13 +872,17 @@ export class ProfessionalsService {
         platformCommission: allTime.commission,
         professionalNet: allTime.net,
         paidCount: allTime.count,
-        // automatic balance
         totalEarned: allTime.net,
         totalPaidOut: settled,
         totalPendingPayout: pendingPayout,
         available,
         settledCount,
         pendingCount,
+        // #75 breakdown
+        awaitingServiceNet,
+        settleableNet,
+        awaitingServiceCount,
+        settleableCount,
       },
       periods: {
         today: { earned: today.net, gross: today.gross, count: today.count },
@@ -849,7 +890,27 @@ export class ProfessionalsService {
         month: { earned: month.net, gross: month.gross, count: month.count },
         allTime: { earned: allTime.net, gross: allTime.gross, count: allTime.count },
       },
-      items,
+      items: items.map((p) => {
+        const net =
+          Number(p.professionalNetAmount || 0) ||
+          Math.max(0, Number(p.amount || 0) - Number(p.platformCommissionAmount || 0));
+        const commission = Number(p.platformCommissionAmount || 0);
+        const b = p.booking;
+        let financialStatus: 'awaiting_service' | 'settleable' | 'refunded' | 'paid' = 'paid';
+        if (p.status === 'refunded') financialStatus = 'refunded';
+        else if (
+          b?.status === 'completed' ||
+          (b?.endAt != null && new Date(b.endAt).getTime() <= nowMs)
+        )
+          financialStatus = 'settleable';
+        else financialStatus = 'awaiting_service';
+        return {
+          ...p,
+          professionalNetAmount: net,
+          platformCommissionAmount: commission,
+          financialStatus,
+        };
+      }),
       meta: {
         page: Math.max(1, page),
         limit: take,
@@ -857,7 +918,7 @@ export class ProfessionalsService {
         totalPages: Math.ceil(total / take) || 0,
       },
       notice:
-        'درآمد به‌صورت خودکار از رزروهای پرداخت‌شده محاسبه می‌شود. مبلغ قابل برداشت = درآمد خالص − تسویه‌شده − در صف تسویه.',
+        'پس از انجام خدمت (یا پایان زمان نوبت) سهم شما قابل تسویه می‌شود. قابل برداشت = قابل تسویه − تسویه‌شده − در صف تسویه.',
     };
   }
 
