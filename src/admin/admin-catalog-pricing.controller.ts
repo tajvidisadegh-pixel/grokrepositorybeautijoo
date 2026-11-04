@@ -23,6 +23,7 @@ import { Type } from 'class-transformer';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppCacheService } from '../cache/app-cache.service';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import {
   normalizePricingMode,
   type CatalogPricingFlags,
@@ -92,6 +93,31 @@ export class AdminCatalogPricingController {
     private readonly cache: AppCacheService,
   ) {}
 
+  private async audit(
+    actorId: string | undefined,
+    action: string,
+    entityType: string,
+    entityId: string | null,
+    before: unknown,
+    after: unknown,
+  ) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId || null,
+          action,
+          entityType,
+          entityId,
+          before: before as object,
+          after: after as object,
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
+  }
+
+
   private serviceInclude() {
     return {
       category: { select: { id: true, name: true, slug: true } },
@@ -117,7 +143,11 @@ export class AdminCatalogPricingController {
 
   @Patch('catalog-services/:id/pricing-flags')
   @ApiOperation({ summary: 'Update allowFixed/allowVariable/allowDeposit/defaultPricingMode (#80)' })
-  async updatePricingFlags(@Param('id') id: string, @Body() dto: UpdatePricingFlagsDto) {
+  async updatePricingFlags(
+    @Param('id') id: string,
+    @Body() dto: UpdatePricingFlagsDto,
+    @CurrentUser('id') actorId?: string,
+  ) {
     const row = await this.prisma.service.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('service not found');
 
@@ -130,7 +160,7 @@ export class AdminCatalogPricingController {
     assertAtLeastOneMode(next);
 
     this.cache.invalidateCatalog();
-    return this.prisma.service.update({
+    const updated = await this.prisma.service.update({
       where: { id },
       data: {
         allowFixed: next.allowFixed,
@@ -156,7 +186,7 @@ export class AdminCatalogPricingController {
 
   @Post('catalog-services/:id/attribute-groups')
   @ApiOperation({ summary: 'Create attribute group on catalog service (#80)' })
-  async createAttributeGroup(@Param('id') id: string, @Body() dto: UpsertAttributeGroupDto) {
+  async createAttributeGroup(@Param('id') id: string, @Body() dto: UpsertAttributeGroupDto, @CurrentUser('id') actorId?: string) {
     const row = await this.prisma.service.findUnique({ where: { id }, select: { id: true } });
     if (!row) throw new NotFoundException('service not found');
     const name = dto.name.trim();
@@ -194,7 +224,7 @@ export class AdminCatalogPricingController {
 
   @Delete('attribute-groups/:groupId')
   @ApiOperation({ summary: 'Soft-deactivate attribute group (#80)' })
-  async deleteAttributeGroup(@Param('groupId') groupId: string) {
+  async deleteAttributeGroup(@Param('groupId') groupId: string, @CurrentUser('id') actorId?: string) {
     const group = await this.prisma.serviceAttributeGroup.findUnique({ where: { id: groupId } });
     if (!group) throw new NotFoundException('attribute group not found');
     this.cache.invalidateCatalog();
@@ -202,18 +232,19 @@ export class AdminCatalogPricingController {
       where: { id: groupId },
       data: { isActive: false },
     });
+    await this.audit(actorId, 'catalog.attribute_group.deactivate', 'service_attribute_group', groupId, { isActive: true }, { isActive: false });
     return { id: groupId, deleted: true, hard: false };
   }
 
   @Post('attribute-groups/:groupId/options')
   @ApiOperation({ summary: 'Create option under attribute group (#80)' })
-  async createAttributeOption(@Param('groupId') groupId: string, @Body() dto: UpsertAttributeOptionDto) {
+  async createAttributeOption(@Param('groupId') groupId: string, @Body() dto: UpsertAttributeOptionDto, @CurrentUser('id') actorId?: string) {
     const group = await this.prisma.serviceAttributeGroup.findUnique({ where: { id: groupId } });
     if (!group) throw new NotFoundException('attribute group not found');
     const label = dto.label.trim();
     if (!label) throw new BadRequestException('label required');
     this.cache.invalidateCatalog();
-    return this.prisma.serviceAttributeOption.create({
+    const created = await this.prisma.serviceAttributeOption.create({
       data: {
         groupId,
         label,
@@ -224,6 +255,8 @@ export class AdminCatalogPricingController {
         isActive: dto.isActive ?? true,
       },
     });
+    await this.audit(actorId, 'catalog.attribute_option.create', 'service_attribute_option', created.id, null, created);
+    return created;
   }
 
   @Patch('attribute-options/:optionId')
@@ -249,7 +282,7 @@ export class AdminCatalogPricingController {
 
   @Delete('attribute-options/:optionId')
   @ApiOperation({ summary: 'Soft-deactivate attribute option (#80)' })
-  async deleteAttributeOption(@Param('optionId') optionId: string) {
+  async deleteAttributeOption(@Param('optionId') optionId: string, @CurrentUser('id') actorId?: string) {
     const opt = await this.prisma.serviceAttributeOption.findUnique({ where: { id: optionId } });
     if (!opt) throw new NotFoundException('attribute option not found');
     this.cache.invalidateCatalog();
@@ -257,6 +290,7 @@ export class AdminCatalogPricingController {
       where: { id: optionId },
       data: { isActive: false },
     });
+    await this.audit(actorId, 'catalog.attribute_option.deactivate', 'service_attribute_option', optionId, { isActive: true }, { isActive: false });
     return { id: optionId, deleted: true, hard: false };
   }
 
@@ -289,7 +323,7 @@ export class AdminCatalogPricingController {
 
   @Post('catalog-services/:id/apply-template')
   @ApiOperation({ summary: 'Copy template groups/options onto catalog service (#80.2)' })
-  async applyTemplate(@Param('id') serviceId: string, @Body() dto: ApplyTemplateDto) {
+  async applyTemplate(@Param('id') serviceId: string, @Body() dto: ApplyTemplateDto, @CurrentUser('id') actorId?: string) {
     const service = await this.prisma.service.findUnique({ where: { id: serviceId } });
     if (!service) throw new NotFoundException('service not found');
     const tpl = await this.prisma.serviceAttributeTemplate.findUnique({ where: { id: dto.templateId } });
@@ -338,7 +372,9 @@ export class AdminCatalogPricingController {
       });
       created.push(group);
     }
-    return { serviceId, templateId: tpl.id, groupsCreated: created.length, groups: created };
+    const result = { serviceId, templateId: tpl.id, groupsCreated: created.length, groups: created };
+    await this.audit(actorId, 'catalog.template.apply', 'service', serviceId, null, { templateId: tpl.id, groupsCreated: created.length });
+    return result;
   }
 
   @Post('catalog-services/:id/save-as-template')
