@@ -51,6 +51,13 @@ class CreateCatalogServiceDto {
   @IsUUID() categoryId!: string;
   @IsOptional() @IsString() slug?: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsUUID() parentId?: string | null;
+}
+
+class CreateVariantDto {
+  @IsString() @MinLength(1) name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() slug?: string;
 }
 
 class UpdateCatalogServiceDto {
@@ -288,6 +295,50 @@ export class AdminCatalogController {
     return this.prisma.catalogAddOn.update({
       where: { id },
       data: { isActive: false },
+    });
+  }
+
+
+  @Get('catalog-services/:id/variants')
+  @ApiOperation({ summary: 'List variants (sub-services) of a catalog service (#80.2)' })
+  async listVariants(@Param('id') id: string) {
+    const parent = await this.prisma.service.findUnique({ where: { id } });
+    if (!parent) throw new NotFoundException('service not found');
+    return this.prisma.service.findMany({
+      where: { parentId: id },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+  }
+
+  @Post('catalog-services/:id/variants')
+  @ApiOperation({ summary: 'Create a variant under a catalog service (#80.2)' })
+  async createVariant(@Param('id') id: string, @Body() dto: CreateVariantDto) {
+    const parent = await this.prisma.service.findUnique({ where: { id } });
+    if (!parent) throw new NotFoundException('service not found');
+    if (parent.parentId) {
+      throw new BadRequestException('نمی‌توان زیرِ یک واریانت، واریانت ساخت');
+    }
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name required');
+    let slug = (dto.slug || slugify(`${parent.slug}-${name}`)).trim();
+    const clash = await this.prisma.service.findUnique({ where: { slug } });
+    if (clash) slug = `${slug}-${Date.now().toString(36)}`;
+    this.cache.invalidateCatalog();
+    return this.prisma.service.create({
+      data: {
+        name,
+        slug,
+        categoryId: parent.categoryId,
+        description: dto.description?.trim() || null,
+        parentId: parent.id,
+        allowFixed: parent.allowFixed,
+        allowVariable: parent.allowVariable,
+        allowDeposit: parent.allowDeposit,
+        defaultPricingMode: parent.defaultPricingMode,
+        isActive: true,
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
     });
   }
 
