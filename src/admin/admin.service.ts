@@ -12,6 +12,7 @@ import {
   ProfessionalStatus,
   BookingStatus,
   PaymentStatus,
+  PayoutStatus,
   UserStatus,
   MediaStatus,
   NotificationType,
@@ -1468,8 +1469,10 @@ export class AdminService {
   async listPayoutRequests(page = 1, limit = 20, status?: string) {
     const take = Math.min(Math.max(limit || 20, 1), 100);
     const skip = (Math.max(page || 1, 1) - 1) * take;
-    const where: { status?: string } = {};
-    if (status) where.status = status;
+    const where: { status?: PayoutStatus } = {};
+    if (status && ['pending', 'approved', 'paid', 'rejected', 'cancelled'].includes(status)) {
+      where.status = status as PayoutStatus;
+    }
     const [items, total] = await Promise.all([
       this.prisma.payoutRequest.findMany({
         where,
@@ -1505,7 +1508,7 @@ export class AdminService {
     const updated = await this.prisma.payoutRequest.update({
       where: { id },
       data: {
-        status,
+        status: status as PayoutStatus,
         resolvedAt: new Date(),
         resolvedBy: adminUserId,
         adminNote: note != null ? note : undefined,
