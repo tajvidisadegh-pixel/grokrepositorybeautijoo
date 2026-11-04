@@ -1,0 +1,30 @@
+name: Apply service variants 80.2.3
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-service-variants-80.yml'
+      - 'scripts/patch_service_variants_80.py'
+      - 'backend/prisma/migrations/20261104110000_service_variants/**'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_service_variants_80.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/prisma/schema.prisma \
+            backend/src/admin/admin-catalog.controller.ts \
+            frontend/src/components/admin/ServicePricingPanel.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#80.phase2.3): service variants parentId + admin API + panel UI"
+          git push origin HEAD:main
