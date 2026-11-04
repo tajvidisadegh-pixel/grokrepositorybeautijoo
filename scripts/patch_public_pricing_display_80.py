@@ -165,7 +165,7 @@ def patch_card() -> None:
     const deltas = ps.optionDeltas || {};
     for (const g of attrGroups) {
       for (const o of g.options || []) {
- if (o.isActive === false) continue;
+        if (o.isActive === false) continue;
         if (!selectedOptionIds.includes(o.id)) continue;
         const ov = deltas[o.id];
         if (ov && ov.active === false) continue;
@@ -250,31 +250,66 @@ def patch_card() -> None:
 
     if 'گزینه‌ها' not in t:
         addon_block = """      {addOns.length > 0 && ("""
-        insert = """      {mode === 'variable' && attrGroups.length > 0 && (
-        <div className="mt-3 space-y-2">
-          <p className="text-xs font-medium text-gray-700">گزینه‌ها (پیش‌نمایش قیمت)</p>
-          {attrGroups.map((g) => (
-            <div key={g.id}>
-              <p className="mb-1 text-[11px] text-gray-500">
-                {g.name}
-                {g.required ? ' *' : ''}
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {(g.options || [])
-                  .filter((o) => o.isActive !== false)
-                  .map((o) => {
-                    const on = selectedOptionIds.includes(o.id);
-                    const ov = ps.optionDeltas?.[o.id];
-                    const delta =
-                      typeof ov?.priceDelta === 'number'
-                        ? ov.priceDelta
-                        : o.suggestedPriceDelta || 0;
-                    return (
-                      <button
-                        key={o.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedOptionIds((prev) => {
-                            const ids = new Set((g.options || []).map((x) => x.id));
-                            const without = prev.filter((id) => !ids.has(id));
-                            return on ? without : deb [... truncated for length]
+        insert = (
+            "      {mode === 'variable' && attrGroups.length > 0 && (\n"
+            "        <div className=\"mt-3 space-y-2\">\n"
+            "          <p className=\"text-xs font-medium text-gray-700\">گزینه‌ها (پیش‌نمایش قیمت)</p>\n"
+            "          {attrGroups.map((g) => (\n"
+            "            <div key={g.id}>\n"
+            "              <p className=\"mb-1 text-[11px] text-gray-500\">\n"
+            "                {g.name}\n"
+            "                {g.required ? ' *' : ''}\n"
+            "              </p>\n"
+            "              <div className=\"flex flex-wrap gap-1\">\n"
+            "                {(g.options || [])\n"
+            "                  .filter((o) => o.isActive !== false)\n"
+            "                  .map((o) => {\n"
+            "                    const on = selectedOptionIds.includes(o.id);\n"
+            "                    const ov = ps.optionDeltas?.[o.id];\n"
+            "                    const delta =\n"
+            "                      typeof ov?.priceDelta === 'number'\n"
+            "                        ? ov.priceDelta\n"
+            "                        : o.suggestedPriceDelta || 0;\n"
+            "                    return (\n"
+            "                      <button\n"
+            "                        key={o.id}\n"
+            "                        type=\"button\"\n"
+            "                        onClick={() => {\n"
+            "                          setSelectedOptionIds((prev) => {\n"
+            "                            const ids = new Set((g.options || []).map((x) => x.id));\n"
+            "                            const without = prev.filter((id) => !ids.has(id));\n"
+            "                            return on ? without : [...without, o.id];\n"
+            "                          });\n"
+            "                        }}\n"
+            "                        className={`rounded-full px-2.5 py-1 text-xs ${\n"
+            "                          on ? 'bg-[#0B2C4A] text-white' : 'bg-gray-100 text-gray-700'\n"
+            "                        }`}\n"
+            "                      >\n"
+            "                        {o.label}\n"
+            "                        {delta !== 0 && (\n"
+            "                          <span className=\"mr-1 opacity-80\">\n"
+            "                            {delta > 0 ? '+' : ''}\n"
+            "                            {Number(delta).toLocaleString('fa-IR')}\n"
+            "                          </span>\n"
+            "                        )}\n"
+            "                      </button>\n"
+            "                    );\n"
+            "                  })}\n"
+            "              </div>\n"
+            "            </div>\n"
+            "          ))}\n"
+            "        </div>\n"
+            "      )}\n\n"
+            "      {addOns.length > 0 && ("
+        )
+        if addon_block not in t:
+            raise SystemExit('addons block missing')
+        t = t.replace(addon_block, insert, 1)
+
+    path.write_text(t)
+    print('card patched', path.stat().st_size)
+
+
+if __name__ == '__main__':
+    patch_types()
+    patch_card()
