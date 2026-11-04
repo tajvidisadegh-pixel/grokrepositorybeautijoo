@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppCacheService } from '../cache/app-cache.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 function slugify(input: string): string {
   const base = input
@@ -94,6 +95,31 @@ export class AdminCatalogController {
     private readonly prisma: PrismaService,
     private readonly cache: AppCacheService,
   ) {}
+
+  private async audit(
+    actorId: string | undefined,
+    action: string,
+    entityType: string,
+    entityId: string | null,
+    before: unknown,
+    after: unknown,
+  ) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId || null,
+          action,
+          entityType,
+          entityId,
+          before: before as object,
+          after: after as object,
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
+  }
+
 
   @Get('service-categories')
   @ApiOperation({ summary: 'List all service categories (including inactive)' })
@@ -233,16 +259,43 @@ export class AdminCatalogController {
   /** Soft-delete specialty — do not wipe professionalService rows (#26). */
   @Delete('catalog-services/:id')
   @ApiOperation({ summary: 'Soft-delete catalog service (isActive=false)' })
-  async deleteCatalogService(@Param('id') id: string) {
-    const row = await this.prisma.service.findUnique({ where: { id } });
+  async deleteCatalogService(
+    @Param('id') id: string,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    const row = await this.prisma.service.findUnique({
+      where: { id },
+      include: { _count: { select: { professionalServices: true, variants: true } } },
+    });
     if (!row) throw new NotFoundException('service not found');
+    const dependentOffers = row._count.professionalServices;
+    const variantCount = row._count.variants;
     this.cache.invalidateCatalog();
     const updated = await this.prisma.service.update({
       where: { id },
       data: { isActive: false },
       include: { category: { select: { id: true, name: true, slug: true } } },
     });
-    return { id, deleted: true, hard: false, isActive: updated.isActive };
+    await this.audit(
+      actorId,
+      'catalog.service.deactivate',
+      'service',
+      id,
+      { isActive: row.isActive, name: row.name },
+      { isActive: false, dependentOffers, variantCount },
+    );
+    return {
+      id,
+      deleted: true,
+      hard: false,
+      isActive: updated.isActive,
+      dependentOffers,
+      variantCount,
+      warning:
+        dependentOffers > 0
+          ? `${dependentOffers} پیشنهاد فعال زیباگر به این خدمت وابسته است؛ حذف سخت انجام نشد و فقط غیرفعال شد.`
+          : undefined,
+    };
   }
   // --- Catalog Add-Ons (#30) ---
   @Get('catalog-addons')
@@ -313,7 +366,7 @@ export class AdminCatalogController {
 
   @Post('catalog-services/:id/variants')
   @ApiOperation({ summary: 'Create a variant under a catalog service (#80.2)' })
-  async createVariant(@Param('id') id: string, @Body() dto: CreateVariantDto) {
+  async createVariant(@Param('id') id: string, @Body() dto: CreateVariantDto, @CurrentUser('id') actorId?: string) {
     const parent = await this.prisma.service.findUnique({ where: { id } });
     if (!parent) throw new NotFoundException('service not found');
     if (parent.parentId) {
@@ -325,7 +378,7 @@ export class AdminCatalogController {
     const clash = await this.prisma.service.findUnique({ where: { slug } });
     if (clash) slug = `${slug}-${Date.now().toString(36)}`;
     this.cache.invalidateCatalog();
-    return this.prisma.service.create({
+    const created = await this.prisma.service.create({
       data: {
         name,
         slug,
@@ -340,6 +393,8 @@ export class AdminCatalogController {
       },
       include: { category: { select: { id: true, name: true, slug: true } } },
     });
+    await this.audit(actorId, 'catalog.variant.create', 'service', created.id, null, { parentId: parent.id, name: created.name });
+    return created;
   }
 
 }
