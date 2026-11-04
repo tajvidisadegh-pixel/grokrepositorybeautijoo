@@ -560,8 +560,9 @@ async function submitReport(id: string) {
                         {b.notes && (
                           <p className="text-xs text-gray">یادداشت: {b.notes}</p>
                         )}
-                            </>
-                          )}
+
+                        <div className="flex flex-wrap gap-2">
+
                           {(b.status === 'pending' || b.status === 'confirmed') && (
                             <>
                               <Button
@@ -572,6 +573,9 @@ async function submitReport(id: string) {
                                   setRescheduleDate('');
                                   setRescheduleSlots([]);
                                 }}
+                              >
+                                تغییر زمان
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -587,13 +591,16 @@ async function submitReport(id: string) {
                               >
                                 تکمیل
                               </Button>
-                              {(b.status === 'confirmed' || (b.payment && (b.payment as { status?: string }).status === 'paid')) && (
-                              <p className="w-full text-xs text-gray">
-                                نوبت قطعی است. در صورت مشکل از{' '}
-                                <a href="/zibagar/support" className="text-coral underline">پشتیبانی تیکت</a> ثبت کنید.
-                              </p>
-                            )}
-                            {b.status === 'confirmed' && (
+                              {b.status === 'confirmed' && (
+                                <p className="w-full text-xs text-gray">
+                                  نوبت قطعی است. در صورت مشکل از{' '}
+                                  <a href="/zibagar/support" className="text-coral underline">
+                                    پشتیبانی تیکت
+                                  </a>{' '}
+                                  ثبت کنید.
+                                </p>
+                              )}
+                              {b.status === 'confirmed' && (
                                 <Button
                                   size="sm"
                                   variant="outline"
