@@ -674,7 +674,21 @@ export class ProfessionalsService {
       professionalServices: {
         where: { isActive: true },
         include: {
-          service: { include: { category: true } },
+          service: {
+            include: {
+              category: true,
+              attributeGroups: {
+                where: { isActive: true },
+                orderBy: { sortOrder: 'asc' as const },
+                include: {
+                  options: {
+                    where: { isActive: true },
+                    orderBy: { sortOrder: 'asc' as const },
+                  },
+                },
+              },
+            },
+          },
           mediaAssets: { orderBy: { sortOrder: 'asc' as const } },
           addOns: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
           priceRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
