@@ -1,26 +1,8 @@
-name: Apply OTP limits + login labels 70
-
+name: noop-apply-otp-login-70
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/apply-otp-login-70.yml'
-      - 'scripts/patch_otp_limits_login_labels_70.py'
-
-permissions:
-  contents: write
-
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/patch_otp_limits_login_labels_70.py
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/auth/auth.service.ts frontend/src/app/login/page.tsx frontend/src/app/register/page.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "fix(#68,#69): OTP rate limits 100/hr and beginner login/register labels"
-          git push origin HEAD:main
+      - run: echo retired
