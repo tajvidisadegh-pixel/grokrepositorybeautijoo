@@ -1,0 +1,30 @@
+name: Apply issue 71 payment confirms
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-issue-71.yml'
+      - 'scripts/patch_issue_71_payment_confirms.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_issue_71_payment_confirms.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/src/bookings/bookings.service.ts \
+            backend/src/payments/payments.service.ts \
+            frontend/src/app/zibagar/bookings/page.tsx \
+            frontend/src/app/payment/callback/page.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#71): payment confirms booking; block pro confirm/reject/cancel-paid"
+          git push origin HEAD:main
