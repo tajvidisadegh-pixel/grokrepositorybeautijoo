@@ -1,26 +1,8 @@
-name: Apply booking pricing 80.5
-
+name: noop-apply-booking-pricing-80
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/apply-booking-pricing-80.yml'
-      - 'scripts/patch_booking_pricing_80.py'
-
-permissions:
-  contents: write
-
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/patch_booking_pricing_80.py
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/bookings/bookings.controller.ts backend/src/bookings/bookings.service.ts
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "feat(#80.5): booking create supports variable options and deposit"
-          git push origin HEAD:main
+      - run: echo retired
