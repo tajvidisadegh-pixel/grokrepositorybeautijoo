@@ -71,9 +71,10 @@ export class BookingsService {
       if (sl._pauseBookings === true) {
         throw new BadRequestException('این زیباگر فعلاً نوبت جدید نمی‌پذیرد.');
       }
+      // #72 — pro-initiated customer block no longer enforced
       const links = (proRow?.socialLinks as { _blockedCustomerIds?: string[] } | null) || null;
       const blocked = Array.isArray(links?._blockedCustomerIds) ? links!._blockedCustomerIds! : [];
-      if (blocked.includes(customerId)) {
+      if (false && blocked.includes(customerId)) {
         throw new BadRequestException('متأسفانه امکان رزرو نزد این زیباگر برای شما وجود ندارد.');
       }
     }

@@ -241,7 +241,7 @@ export default function ZibagarBookingsPage() {
   }
 
   
-  async function blockCustomer(customerId: string) {
+  async function blockCustomerDisabled(customerId: string) {
     if (!customerId) return;
     if (typeof window !== 'undefined' && !window.confirm('این مشتری دیگر نتواند از شما نوبت بگیرد. ادامه می‌دهید؟')) return;
     const reason =
@@ -674,19 +674,6 @@ async function submitReport(id: string) {
                               setReportText('');
                               setReportMsg(null);
                             }}
-                          >
-                            گزارش به سوپرادمین
-                          </Button>
-                          {b.customer?.id ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:text-red-700"
-                              loading={busy === `${b.customer.id}:block`}
-                              onClick={() => void blockCustomer(b.customer!.id)}
-                            >
-                              مسدود کردن مشتری
-                            </Button>
                           ) : null}
                         </div>
 

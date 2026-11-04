@@ -450,6 +450,14 @@ export class ProfessionalsService {
       proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;
     }
     if (data.socialLinks !== undefined) {
+      // #72 — public social URLs cannot be set by professional
+      const incoming = data.socialLinks as Record<string, unknown> | null;
+      if (incoming && typeof incoming === 'object') {
+        const publicKeys = ['instagram', 'telegram', 'website', 'phone', 'whatsapp'];
+        if (publicKeys.some((k) => k in incoming && incoming[k] != null && String(incoming[k]).trim() !== '')) {
+          throw new BadRequestException('ثبت لینک شبکه‌های اجتماعی در پروفایل زیباگر مجاز نیست');
+        }
+      }
       if (data.socialLinks === null) {
         proData.socialLinks = Prisma.JsonNull;
       } else {
@@ -957,6 +965,8 @@ export class ProfessionalsService {
   }
 
   async blockCustomer(userId: string, customerId: string) {
+    // #72 — professionals cannot block customers
+    throw new BadRequestException('مسدود کردن کاربر توسط زیباگر مجاز نیست. در صورت مشکل از پشتیبانی تیکت ثبت کنید.');
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
     if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
     if (customerId === userId) throw new BadRequestException('نمی‌توانید خودتان را مسدود کنید');
@@ -970,6 +980,8 @@ export class ProfessionalsService {
   }
 
   async unblockCustomer(userId: string, customerId: string) {
+    // #72
+    throw new BadRequestException('رفع مسدودی از این مسیر در دسترس نیست');
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
     if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
     const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;

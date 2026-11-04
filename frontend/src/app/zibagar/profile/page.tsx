@@ -130,6 +130,10 @@ export default function ZibagarProfilePage() {
   const locations = pro?.locations || [];
 
   async function saveSocialLinks() {
+    // #72 — social links disabled for professionals
+    setSocialMsg('ثبت لینک شبکه‌های اجتماعی مجاز نیست');
+    return;
+
     setSocialBusy(true);
     setSocialMsg(null);
     setSocialDirty(false);
