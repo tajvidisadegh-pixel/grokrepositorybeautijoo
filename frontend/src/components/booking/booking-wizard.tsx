@@ -289,7 +289,9 @@ export function BookingWizard({
     return { price, duration, lines };
   }, [selectedServices]);
 
-  const totalDuration = selected ? serviceDuration + selected.bufferMin : 30;
+  const singleTotalDuration = selected ? serviceDuration + selected.bufferMin : 30;
+  const totalDuration = multiServiceTotals?.duration ?? singleTotalDuration;
+  const effectiveDisplayPrice = multiServiceTotals?.price ?? displayPrice;
 
   const loadSlots = useCallback(async () => {
     if (!selected || !date) return;
@@ -360,7 +362,7 @@ export function BookingWizard({
       serviceId: selected!.serviceId,
       serviceName: selected!.name,
       durationMin: totalDuration,
-      price: displayPrice,
+      price: effectiveDisplayPrice,
       locationId: locationId || undefined,
       date,
       slotStart,
@@ -712,7 +714,7 @@ export function BookingWizard({
                   </button>
                   <div className="flex justify-between rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
                     <span className="text-gray">جمع · {serviceDuration} دقیقه</span>
-                    <span className="font-bold text-blue">{formatPrice(displayPrice)}</span>
+                    <span className="font-bold text-blue">{formatPrice(effectiveDisplayPrice)}</span>
                   </div>
                 </>
               )}
@@ -742,7 +744,7 @@ export function BookingWizard({
             {selectedRuleLabel ? ` · ${selectedRuleLabel}` : ''}
             {selectedAddOnNames.length ? ` · ${selectedAddOnNames.join('، ')}` : ''}
             {' — '}
-            {formatDurationFa(totalDuration)} — {formatPrice(displayPrice)}
+            {formatDurationFa(totalDuration)} — {formatPrice(effectiveDisplayPrice)}
           </p>
           <div>
             <p className="mb-2 text-xs text-gray">حداقل ۴ ساعت قبل از نوبت باید رزرو کنید.</p>
@@ -927,7 +929,7 @@ export function BookingWizard({
               ))}
             <div className="flex justify-between gap-2 border-t border-border pt-2 text-base font-bold">
               <span>{isDepositPath ? 'مبلغ بیعانه قابل پرداخت' : 'مبلغ نهایی قابل پرداخت'}</span>
-              <span className="text-coral">{formatPrice(displayPrice)}</span>
+              <span className="text-coral">{formatPrice(effectiveDisplayPrice)}</span>
             </div>
             <p className="text-xs text-gray">{isDepositPath ? 'الان فقط بیعانه پرداخت می‌شود؛ زمان نوبت قطعی است و مانده پس از بررسی توافق می‌شود.' : 'مبلغ نهایی همین است؛ هزینه پنهان، مالیات جدا یا کارمزد اضافه در درگاه ندارید.'}</p>
             <CancelPolicyNotice className="mb-0" />
