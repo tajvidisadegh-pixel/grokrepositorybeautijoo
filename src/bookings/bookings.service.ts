@@ -8,6 +8,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingStatus, NotificationType, Prisma } from '@prisma/client';
+import {
+  computeVariableTotals,
+  normalizePricingMode,
+  resolveOptionDeltas,
+  type PricingMode,
+} from '../services/pricing-mode';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -44,6 +50,7 @@ export class BookingsService {
       addOnIds?: string[];
       priceRuleId?: string;
       durationRuleId?: string;
+      selectedOptionIds?: string[];
     },
   ) {
     if (!data.serviceIds?.length) throw new BadRequestException('حداقل یک خدمت لازم است');
@@ -98,6 +105,20 @@ export class BookingsService {
         addOns: { where: { isActive: true } },
         priceRules: { where: { isActive: true } },
         durationRules: { where: { isActive: true } },
+        service: {
+          include: {
+            attributeGroups: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                options: {
+                  where: { isActive: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (proServices.length !== data.serviceIds.length) {
@@ -139,6 +160,59 @@ export class BookingsService {
         const rule = ps.durationRules.find((r) => r.id === durationRuleId);
         if (rule) durationMin = rule.durationMin;
       }
+
+      const mode: PricingMode = normalizePricingMode(ps.pricingMode || 'fixed');
+      let isDeposit = false;
+      let selectedOptionsSnapshot: Array<{
+        optionId: string;
+        groupId: string;
+        label: string;
+        priceDelta: number;
+        durationDeltaMin: number;
+      }> = [];
+
+      if (mode === 'variable') {
+        const groups = ps.service?.attributeGroups || [];
+        const selectedIds = new Set(data.selectedOptionIds || []);
+        const deltas: Array<{ priceDelta: number; durationDeltaMin: number }> = [];
+        for (const g of groups) {
+          const opts = g.options || [];
+          const picked = opts.filter((o) => selectedIds.has(o.id));
+          if (g.required && picked.length === 0) {
+            throw new BadRequestException(`انتخاب «${g.name}» الزامی است`);
+          }
+          for (const o of picked) {
+            const resolved = resolveOptionDeltas(
+              o.id,
+              {
+                priceDelta: o.suggestedPriceDelta ?? 0,
+                durationDeltaMin: o.suggestedDurationDeltaMin ?? 0,
+              },
+              (ps.optionDeltas as Record<string, { priceDelta?: number; durationDeltaMin?: number; active?: boolean }> | null) ||
+                null,
+            );
+            if (!resolved.active) continue;
+            deltas.push(resolved);
+            selectedOptionsSnapshot.push({
+              optionId: o.id,
+              groupId: g.id,
+              label: o.label,
+              priceDelta: resolved.priceDelta,
+              durationDeltaMin: resolved.durationDeltaMin,
+            });
+          }
+        }
+        const totals = computeVariableTotals(price, durationMin, deltas);
+        price = totals.price;
+        durationMin = totals.durationMin;
+      } else if (mode === 'deposit') {
+        const dep = ps.depositAmount;
+        if (dep == null || dep < 0) {
+          throw new BadRequestException('مبلغ بیعانه برای این خدمت تنظیم نشده است');
+        }
+        price = dep;
+        isDeposit = true;
+      }
       const addOns = requestedAddOnIds
         .map((id) => addOnById.get(id))
         .filter((a): a is NonNullable<typeof a> => !!a && a.professionalServiceId === ps.id);
@@ -152,6 +226,11 @@ export class BookingsService {
         addOnsSnapshot: addOns.map((a) => ({ id: a.id, name: a.name, price: a.price })),
         priceRuleId,
         durationRuleId,
+        pricingMode: mode,
+        isDeposit,
+        selectedOptions: selectedOptionsSnapshot.length
+          ? selectedOptionsSnapshot
+          : null,
       };
     });
 
@@ -249,6 +328,11 @@ export class BookingsService {
                   addOnsSnapshot: line.addOnsSnapshot as unknown as Prisma.InputJsonValue,
                   priceRuleId: line.priceRuleId,
                   durationRuleId: line.durationRuleId,
+                  pricingMode: line.pricingMode,
+                  isDeposit: line.isDeposit,
+                  selectedOptions: line.selectedOptions
+                    ? (line.selectedOptions as unknown as Prisma.InputJsonValue)
+                    : undefined,
                   sortOrder: i,
                 })),
               },
