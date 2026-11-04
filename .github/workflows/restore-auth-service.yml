@@ -1,0 +1,48 @@
+name: Restore auth.service.ts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-auth-service.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore from good commit
+        run: |
+          git show 775fd8956789ae128c859e904dffa795028f1873:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
+          # apply OTP limit bump
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/auth/auth.service.ts')
+          t = p.read_text()
+          t = t.replace("|| 5;", "|| 100;", 1) if "otpMaxPerHour') || 5" in t else t
+          t = t.replace("otpMaxPerHour') || 5", "otpMaxPerHour') || 100")
+          t = t.replace("otpMaxPerDay') || 10", "otpMaxPerDay') || 100")
+          t = t.replace(
+              "تعداد درخواست کد در این ساعت بیش از حد مجاز است",
+              "تعداد درخواست کد بیش از حد مجاز است. حدود ۱۰ دقیقه دیگر دوباره تلاش کنید",
+          )
+          t = t.replace(
+              "تعداد درخواست کد در امروز بیش از حد مجاز است",
+              "سقف روزانه درخواست کد پر شده است. فردا دوباره تلاش کنید",
+          )
+          p.write_text(t)
+          print('restored bytes', p.stat().st_size)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "fix: restore auth.service.ts from 775fd895 + OTP 100 limits (#68)"
+          git push origin HEAD:main
