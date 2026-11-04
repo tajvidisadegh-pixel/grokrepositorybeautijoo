@@ -188,8 +188,8 @@ async function submitReview(bookingId: string) {
       const reason =
         (typeof window !== 'undefined'
           ? window.prompt('دلیل لغو (اختیاری):')
-          : null) || 'لغو توسط مشتری';
-      await transitionBooking(b.id, 'cancel', reason.trim() || 'لغو توسط مشتری');
+          : null) || 'لغو توسط کاربر';
+      await transitionBooking(b.id, 'cancel', reason.trim() || 'لغو توسط کاربر');
       setActionMsg(
         paid
           ? 'رزرو لغو شد. در صورت پرداخت موفق، استرداد در حال پردازش است.'

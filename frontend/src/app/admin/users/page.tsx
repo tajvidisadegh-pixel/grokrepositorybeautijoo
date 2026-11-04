@@ -169,12 +169,12 @@ export default function AdminUsersPage() {
   };
 
   const removeOne = async (id: string) => {
-    if (!window.confirm('حذف کامل این مشتری؟ این عمل برگشت‌ناپذیر است و رزروهای مرتبط هم حذف می‌شوند.')) return;
+    if (!window.confirm('حذف کامل این کاربر؟ این عمل برگشت‌ناپذیر است و رزروهای مرتبط هم حذف می‌شوند.')) return;
     setBusy(true);
     setActionMsg(null);
     try {
       await hardDelete(id);
-      setActionMsg('مشتری به‌طور کامل حذف شد');
+      setActionMsg('کاربر به‌طور کامل حذف شد');
       setDetail(null);
       setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
       await load();
@@ -188,12 +188,12 @@ export default function AdminUsersPage() {
   const removeSelected = async () => {
     const ids = Array.from(selected);
     if (!ids.length) return;
-    if (!window.confirm(`حذف کامل ${ids.length} مشتری؟ این عمل برگشت‌ناپذیر است.`)) return;
+    if (!window.confirm(`حذف کامل ${ids.length} کاربر؟ این عمل برگشت‌ناپذیر است.`)) return;
     setBusy(true);
     setActionMsg(null);
     try {
       const res = await bulkHardDelete(ids);
-      setActionMsg(`${res.deleted} مشتری حذف شد${res.failed?.length ? ` · ناموفق: ${res.failed.length}` : ''}`);
+      setActionMsg(`${res.deleted} کاربر حذف شد${res.failed?.length ? ` · ناموفق: ${res.failed.length}` : ''}`);
       setSelected(new Set());
       setDetail(null);
       await load();
@@ -226,7 +226,7 @@ export default function AdminUsersPage() {
         body: notifyBody.trim(),
         sms: notifySms,
       });
-      setActionMsg(`اعلان برای ${res.notified} مشتری ارسال شد`);
+      setActionMsg(`اعلان برای ${res.notified} کاربر ارسال شد`);
       setNotifyOpen(false);
       setSelected(new Set());
     } catch (e) {
@@ -245,7 +245,7 @@ export default function AdminUsersPage() {
     setActionMsg(null);
     try {
       await adminCreateCustomer({ phone: createPhone.trim(), displayName: createName.trim() || undefined });
-      setActionMsg('مشتری افزوده شد');
+      setActionMsg('کاربر افزوده شد');
       setCreateOpen(false);
       await load();
     } catch (e) {
@@ -281,7 +281,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6" dir="rtl">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">مشتریان</h1>
+          <h1 className="text-2xl font-bold">کاربران</h1>
           <p className="mt-1 text-sm text-gray">افزودن، ویرایش، حذف کامل (تکی و چندتایی)، فیلتر و اعلان</p>
         </div>
         <button
@@ -289,14 +289,14 @@ export default function AdminUsersPage() {
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white"
           onClick={() => { setCreatePhone(''); setCreateName(''); setCreateOpen(true); }}
         >
-          افزودن مشتری
+          افزودن کاربر
         </button>
       </div>
 
       {stats && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <Card className="border-gray-200 bg-gray-50 p-4">
-            <p className="text-xs text-gray-600">کل مشتریان</p>
+            <p className="text-xs text-gray-600">کل کاربران</p>
             <p className="text-2xl font-bold">{stats.total}</p>
           </Card>
           <Card className="border-green-200 bg-green-50 p-4">
@@ -367,7 +367,7 @@ export default function AdminUsersPage() {
       </Card>
 
       {items.length === 0 ? (
-        <PanelEmpty title="مشتری‌ای یافت نشد" />
+        <PanelEmpty title="کاربری یافت نشد" />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-white">
           <table className="min-w-full border-collapse text-sm">
@@ -441,7 +441,7 @@ export default function AdminUsersPage() {
               <div className="space-y-5">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h2 className="text-xl font-bold">{detail.profile?.displayName || detail.phone || 'مشتری'}</h2>
+                    <h2 className="text-xl font-bold">{detail.profile?.displayName || detail.phone || 'کاربر'}</h2>
                     <p className="text-sm text-gray" dir="ltr">{detail.phone}</p>
                   </div>
                   <button type="button" className="text-sm underline" onClick={() => setDetail(null)}>بستن</button>
@@ -462,15 +462,15 @@ export default function AdminUsersPage() {
                     {hasRole('SUPER_ADMIN') && (
                       <button type="button" className="rounded-lg border border-coral px-3 py-1.5 text-xs text-coral" disabled={busy}
                         onClick={async () => {
-                          if (!confirm('آیا می‌خواهید به عنوان این مشتری وارد شوید؟')) return;
+                          if (!confirm('آیا می‌خواهید به عنوان این کاربر وارد شوید؟')) return;
                           setBusy(true);
                           try {
                             await startImpersonation(detail.id);
                             window.location.href = '/panel';
                           } catch (e: unknown) {
-                            setActionMsg(e instanceof Error ? e.message : 'خطا در ورود به حساب مشتری');
+                            setActionMsg(e instanceof Error ? e.message : 'خطا در ورود به حساب کاربر');
                           } finally { setBusy(false); }
-                        }}>ورود به حساب مشتری</button>
+                        }}>ورود به حساب کاربر</button>
                     )}
                   </div>
                 </Card>
@@ -482,7 +482,7 @@ export default function AdminUsersPage() {
                     <div className="grid gap-2 sm:grid-cols-2">
                       {([
                         { name: 'admin', label: 'مدیر کامل' },
-                        { name: 'admin_customers', label: 'ادمین مشتریان' },
+                        { name: 'admin_customers', label: 'ادمین کاربران' },
                         { name: 'admin_professionals', label: 'ادمین زیباگرها' },
                         { name: 'admin_bookings', label: 'ادمین رزروها' },
                         { name: 'admin_finance', label: 'ادمین مالی' },
@@ -580,7 +580,7 @@ export default function AdminUsersPage() {
       {createOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCreateOpen(false)}>
           <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} dir="rtl">
-            <h2 className="text-lg font-bold">افزودن مشتری</h2>
+            <h2 className="text-lg font-bold">افزودن کاربر</h2>
             <div>
               <label className="mb-1 block text-xs text-gray">موبایل *</label>
               <input className="w-full rounded-lg border px-3 py-2 text-sm" dir="ltr" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder="09xxxxxxxxx" />

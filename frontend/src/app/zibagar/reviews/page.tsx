@@ -76,7 +76,7 @@ export default function ZibagarReviewsPage() {
     <div className="space-y-4" dir="rtl">
       <div>
         <h1 className="text-2xl font-bold">نظرات</h1>
-        <p className="mt-1 text-sm text-gray">بازخورد مشتریان و پاسخ شما</p>
+        <p className="mt-1 text-sm text-gray">بازخورد کاربران و پاسخ شما</p>
       </div>
       {msg && (
         <p className="rounded-xl bg-gray-light px-3 py-2 text-sm text-foreground">{msg}</p>
@@ -90,7 +90,7 @@ export default function ZibagarReviewsPage() {
               <Card className="space-y-2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
-                    {r.customer?.profile?.displayName || r.customer?.phone || 'مشتری'}
+                    {r.customer?.profile?.displayName || r.customer?.phone || 'کاربر'}
                   </span>
                   <span className="text-xs text-gray">{formatDate(r.createdAt)}</span>
                 </div>
@@ -132,7 +132,7 @@ export default function ZibagarReviewsPage() {
                           className="min-h-[72px] w-full rounded-xl border border-border px-3 py-2 text-sm"
                           value={replyText}
                           onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="پاسخ محترمانه به مشتری..."
+                          placeholder="پاسخ محترمانه به کاربر..."
                           maxLength={2000}
                         />
                         <div className="flex gap-2">

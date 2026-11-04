@@ -28,7 +28,7 @@ const SECTIONS: { key: K; icon: string; title: string; desc: string }[] = [
   { key: 'reviews', icon: '⭐', title: 'نظرات و امتیازها', desc: 'قوانین ثبت و نمایش نظرات' },
   { key: 'search', icon: '🔎', title: 'جستجو و «نزدیک من»', desc: 'قوانین نمایش و رتبه‌بندی نتایج' },
   { key: 'auth', icon: '🔐', title: 'احراز هویت', desc: 'OTP، ورود و محدودیت‌های امنیتی' },
-  { key: 'privacy', icon: '🛡️', title: 'حریم خصوصی', desc: 'اطلاعاتی که به مشتری نمایش داده می‌شود' },
+  { key: 'privacy', icon: '🛡️', title: 'حریم خصوصی', desc: 'اطلاعاتی که به کاربر نمایش داده می‌شود' },
   { key: 'public', icon: '🌐', title: 'عمومی', desc: 'تنظیمات کلی پلتفرم' },
 ];
 
@@ -247,7 +247,7 @@ function labelFa(key: string): string {
     maxOtpAttempts: 'حداکثر تلاش OTP',
     loginRateLimitPerMinute: 'محدودیت ورود در دقیقه',
     defaultLocationPrecision: 'دقت پیش‌فرض مکان',
-    showPhoneToCustomer: 'نمایش شماره به مشتری',
+    showPhoneToCustomer: 'نمایش شماره به کاربر',
     siteName: 'نام سایت',
     supportPhone: 'تلفن پشتیبانی',
     maintenanceMode: 'حالت تعمیرات',

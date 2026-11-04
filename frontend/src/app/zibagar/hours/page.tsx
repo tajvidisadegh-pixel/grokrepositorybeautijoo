@@ -186,7 +186,7 @@ export default function ZibagarHoursPage() {
       const wd = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tehran', weekday: 'long' }).format(new Date(b.startAt)).toLowerCase();
       const draft = dayDrafts[wd];
       const when = formatDate(b.startAt, { style: 'long', weekday: true }) + ' ' + formatTime24(b.startAt);
-      const name = b.customer?.profile?.displayName || 'مشتری';
+      const name = b.customer?.profile?.displayName || 'کاربر';
       if (!draft || !draft.active) {
         out.push({ id: b.id, when, reason: `رزرو ${name} در روز غیرفعال` });
         continue;
@@ -257,7 +257,7 @@ export default function ZibagarHoursPage() {
         return t < be && se > bs;
       });
       if (booked) {
-        out.push({ start, end, status: 'booked', name: booked.customer?.profile?.displayName || 'مشتری' });
+        out.push({ start, end, status: 'booked', name: booked.customer?.profile?.displayName || 'کاربر' });
         continue;
       }
       const blk = dayOffs.find((item) => {

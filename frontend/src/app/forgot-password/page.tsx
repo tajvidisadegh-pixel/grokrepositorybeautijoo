@@ -122,7 +122,7 @@ function ForgotPasswordForm() {
                     : 'text-gray hover:text-foreground'
                 }`}
               >
-                مشتری
+                کاربر
               </button>
               <button
                 type="button"

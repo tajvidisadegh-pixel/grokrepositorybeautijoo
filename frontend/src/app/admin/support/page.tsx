@@ -37,7 +37,7 @@ const STATUS_LABEL: Record<string, string> = { open: 'باز', answered: 'پاس
 
 function accountTypeFa(t?: string | null) {
   if (t === 'professional') return 'زیباگر';
-  if (t === 'customer') return 'مشتری';
+  if (t === 'customer') return 'کاربر';
   if (t === 'admin' || t === 'SUPER_ADMIN') return 'ادمین';
   return t || 'کاربر';
 }

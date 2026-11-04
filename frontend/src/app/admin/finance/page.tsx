@@ -252,7 +252,7 @@ export default function AdminFinancePage() {
                   <div className="flex flex-wrap gap-3">
                     <span className="font-mono text-gray-500">{item.id.slice(0, 8)}...</span>
                     <span className="font-semibold text-rose-700">{formatPrice(item.amount)}</span>
-                    <span className="text-gray-600">مشتری: {item.customerName}</span>
+                    <span className="text-gray-600">کاربر: {item.customerName}</span>
                     {item.professionalTitle && (
                       <span className="text-gray-500 hidden sm:inline">زیباگر: {item.professionalTitle}</span>
                     )}

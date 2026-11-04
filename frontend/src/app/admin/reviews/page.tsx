@@ -93,7 +93,7 @@ export default function AdminReviewsPage() {
       <div>
         <h1 className="text-2xl font-bold">نظرات و امتیازها</h1>
       <p className="text-xs text-gray">مودراسیون: انتشار/پنهان و حذف با ثبت دلیل در لاگ audit انجام می‌شود.</p>
-        <p className="mt-1 text-sm text-gray">تأیید، مخفی‌سازی یا حذف نظرات مشتریان</p>
+        <p className="mt-1 text-sm text-gray">تأیید، مخفی‌سازی یا حذف نظرات کاربران</p>
       </div>
 
       {msg && (
@@ -134,7 +134,7 @@ export default function AdminReviewsPage() {
         <ul className="space-y-3">
           {items.map((r) => {
             const customerName =
-              r.customer?.profile?.displayName || r.customer?.phone || 'مشتری';
+              r.customer?.profile?.displayName || r.customer?.phone || 'کاربر';
             const proTitle = r.professional?.title || '—';
             return (
               <li key={r.id}>

@@ -36,7 +36,7 @@ type InboxTicket = {
 };
 
 const TARGETS: { key: TargetKey; label: string; help: string }[] = [
-  { key: 'customers', label: 'مشتریان', help: 'کاربران با نقش مشتری' },
+  { key: 'customers', label: 'کاربران', help: 'کاربران عادی (نوبت‌گیرنده)' },
   { key: 'professionals', label: 'زیباگرها', help: 'کاربران با نقش زیباگر' },
   { key: 'has_paid', label: 'دارای پرداخت', help: 'حداقل یک پرداخت موفق' },
   { key: 'never_notified', label: 'بدون اعلان قبلی', help: 'هنوز اعلان درون‌برنامه‌ای نگرفته‌اند' },
@@ -92,7 +92,7 @@ function ticketStatusFa(s: string) {
 
 function accountTypeFa(t?: string | null) {
   if (t === 'professional') return 'زیباگر';
-  if (t === 'customer') return 'مشتری';
+  if (t === 'customer') return 'کاربر';
   return 'کاربر';
 }
 

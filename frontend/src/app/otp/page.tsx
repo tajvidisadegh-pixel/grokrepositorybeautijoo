@@ -143,7 +143,7 @@ function OtpForm() {
               }`}
               onClick={() => setAccountType('customer')}
             >
-              مشتری
+              کاربر
             </button>
             <button
               type="button"

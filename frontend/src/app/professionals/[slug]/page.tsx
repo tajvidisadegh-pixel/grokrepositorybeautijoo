@@ -329,12 +329,12 @@ export default async function ProfessionalProfilePage({ params }: Props) {
           {Array.isArray((pro as { reviews?: Array<{ id: string; rating: number; comment?: string | null; createdAt?: string; reply?: string | null; customer?: { profile?: { displayName?: string | null } | null } | null }> }).reviews) &&
             ((pro as { reviews?: unknown[] }).reviews?.length ?? 0) > 0 && (
             <section className="mt-8 rounded-2xl border border-border bg-white p-5 shadow-sm">
-              <h2 className="mb-4 text-lg font-bold text-blue">نظرات مشتریان</h2>
+              <h2 className="mb-4 text-lg font-bold text-blue">نظرات کاربران</h2>
               <ul className="space-y-4">
                 {((pro as { reviews: Array<{ id: string; rating: number; comment?: string | null; createdAt?: string; reply?: string | null; customer?: { profile?: { displayName?: string | null } | null } | null }> }).reviews).map((r) => (
                   <li key={r.id} className="border-b border-border pb-4 last:border-0 last:pb-0">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="font-medium text-blue">{r.customer?.profile?.displayName || 'مشتری'}</span>
+                      <span className="font-medium text-blue">{r.customer?.profile?.displayName || 'کاربر'}</span>
                       <span className="tabular-nums text-amber-600" aria-label={`امتیاز ${r.rating}`}>{'★'.repeat(Math.max(0, Math.min(5, r.rating)))}{'☆'.repeat(Math.max(0, 5 - Math.min(5, r.rating)))}</span>
                       {r.createdAt && (
                         <span className="text-xs text-gray">{new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Tehran' }).format(new Date(r.createdAt))}</span>

@@ -357,7 +357,7 @@ export default function ZibagarServicesPage() {
         <div className="rounded-2xl border border-dashed border-border bg-white px-6 py-10 text-center">
           <p className="text-base font-medium text-navy">منوی شما خالی است</p>
           <p className="mt-2 text-sm leading-6 text-gray">
-            با دکمه بالا اولین خدمت را اضافه کنید تا مشتری بتواند رزرو کند.
+            با دکمه بالا اولین خدمت را اضافه کنید تا کاربر بتواند رزرو کند.
           </p>
         </div>
       ) : (
@@ -684,7 +684,7 @@ export default function ZibagarServicesPage() {
         {sheet?.kind === 'delete' && (
           <div className="space-y-4 pb-2">
             <p className="text-sm leading-6 text-gray">
-              «{sheet.ps.service?.name || 'این خدمت'}» از منوی شما حذف می‌شود. مشتری دیگر نمی‌تواند آن را رزرو کند.
+              «{sheet.ps.service?.name || 'این خدمت'}» از منوی شما حذف می‌شود. کاربر دیگر نمی‌تواند آن را رزرو کند.
             </p>
             {error && (
               <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>

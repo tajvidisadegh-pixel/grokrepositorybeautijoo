@@ -227,7 +227,7 @@ export default function ZibagarBookingsPage() {
       }
       await transitionBooking(id, action, reason);
       const labels: Record<string, string> = {
-        'no-show': 'عدم حضور مشتری ثبت شد.',
+        'no-show': 'عدم حضور کاربر ثبت شد.',
         confirm: 'تأیید دستی لازم نیست.',
         reject: 'رد نوبت مجاز نیست — از پشتیبانی تیکت بزنید.',
         cancel: 'رزرو لغو شد.',
@@ -449,7 +449,7 @@ async function submitReport(id: string) {
                         <li key={b.id} className="rounded-lg bg-white/80 px-1.5 py-1 text-[11px] shadow-sm">
                           <span className="font-medium">{timeFa(b.startAt)}</span>
                           <span className="mx-1 text-gray">·</span>
-                          <span>{b.customer?.profile?.displayName || b.customer?.phone || 'مشتری'}</span>
+                          <span>{b.customer?.profile?.displayName || b.customer?.phone || 'کاربر'}</span>
                           <div className="mt-0.5 text-[10px] text-coral">{persianBookingStatus(effectiveBookingStatus(b))}</div>
                         </li>
                       ))
@@ -479,7 +479,7 @@ async function submitReport(id: string) {
               <ul className="space-y-3">
                 {list.map((b) => {
                   const customer =
-                    b.customer?.profile?.displayName || b.customer?.phone || 'مشتری';
+                    b.customer?.profile?.displayName || b.customer?.phone || 'کاربر';
                   const phone = b.customer?.phone || null;
                   const services =
                     (b as BookingListItem & { items?: { service?: { name?: string } }[] }).items
@@ -590,7 +590,7 @@ async function submitReport(id: string) {
                                   variant="outline"
                                   loading={busy === `${b.id}:no-show`}
                                   onClick={() => {
-                                    if (typeof window !== 'undefined' && !window.confirm('مشتری حضور نداشته؟ ثبت عدم حضور؟')) return;
+                                    if (typeof window !== 'undefined' && !window.confirm('کاربر حضور نداشته؟ ثبت عدم حضور؟')) return;
                                     void act(b.id, 'no-show');
                                   }}
                                 >

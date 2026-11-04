@@ -247,7 +247,7 @@ export default function AdminBookingsPage() {
             <thead className="bg-gray-light/60 text-right">
               <tr>
                 <th className="p-3">کد</th>
-                <th className="p-3">مشتری</th>
+                <th className="p-3">کاربر</th>
                 <th className="p-3">زیباگر</th>
                 <th className="p-3">زمان</th>
                 <th className="p-3">مبلغ</th>
@@ -294,11 +294,11 @@ export default function AdminBookingsPage() {
                 </div>
 
                 <Card className="space-y-2 p-4 text-sm">
-                  <h3 className="font-semibold">مشتری</h3>
+                  <h3 className="font-semibold">کاربر</h3>
                   <p>{detail.customer?.profile?.displayName || '—'}</p>
                   <p dir="ltr">{detail.customer?.phone || '—'}</p>
                   {detail.customer?.id && (
-                    <Link href={`/admin/users`} className="text-xs text-coral underline">مشاهده مشتریان</Link>
+                    <Link href={`/admin/users`} className="text-xs text-coral underline">مشاهده کاربران</Link>
                   )}
                 </Card>
 

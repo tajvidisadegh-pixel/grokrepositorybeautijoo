@@ -51,7 +51,7 @@ function serviceName(b: BookingListItem) {
 }
 
 function customerName(b: BookingListItem) {
-  return b.customer?.profile?.displayName || b.customer?.phone || 'مشتری';
+  return b.customer?.profile?.displayName || b.customer?.phone || 'کاربر';
 }
 
 function customerKey(b: BookingListItem) {
@@ -553,7 +553,7 @@ export default function ZibagarDashboard() {
         <p className="text-sm text-gray">
           {weekBookingCount.toLocaleString('fa-IR')} نوبت
           {uniqueCustomersWeek > 0 && (
-            <> · {uniqueCustomersWeek.toLocaleString('fa-IR')} مشتری</>
+            <> · {uniqueCustomersWeek.toLocaleString('fa-IR')} کاربر</>
           )}
           {periods?.week?.earned != null && <> · {formatPrice(periods.week.earned)} درآمد</>}
         </p>
