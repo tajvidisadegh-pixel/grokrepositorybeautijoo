@@ -1,28 +1,8 @@
-name: Trigger backend deploy sync (#80.8)
-
+name: noop-trigger-deploy-sync-80
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/trigger-deploy-sync-80.yml'
-
-permissions:
-  actions: write
-  contents: read
-
 jobs:
-  dispatch:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Sync backend deployment branch with main
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'sync-backend-deploy-branch.yml',
-              ref: 'main',
-              inputs: { ref: 'main' },
-            });
-            console.log('Dispatched sync-backend-deploy-branch for main');
+      - run: echo retired
