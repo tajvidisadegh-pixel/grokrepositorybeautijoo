@@ -964,31 +964,16 @@ export class ProfessionalsService {
     return { items: users.map((u) => ({ id: u.id, phone: u.phone, displayName: u.profile?.displayName ?? null })) };
   }
 
-  async blockCustomer(userId: string, customerId: string) {
+  async blockCustomer(_userId: string, _customerId: string) {
     // #72 — professionals cannot block customers
-    throw new BadRequestException('مسدود کردن کاربر توسط زیباگر مجاز نیست. در صورت مشکل از پشتیبانی تیکت ثبت کنید.');
-    const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
-    if (customerId === userId) throw new BadRequestException('نمی‌توانید خودتان را مسدود کنید');
-    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
-    const prev = Array.isArray(links._blockedCustomerIds) ? (links._blockedCustomerIds as string[]) : [];
-    if (!prev.includes(customerId)) {
-      links._blockedCustomerIds = [...prev, customerId];
-      await this.prisma.professional.update({ where: { id: pro.id }, data: { socialLinks: links as object } });
-    }
-    return { ok: true };
+    throw new BadRequestException(
+      'مسدود کردن کاربر توسط زیباگر مجاز نیست. در صورت مشکل از پشتیبانی تیکت ثبت کنید.',
+    );
   }
 
-  async unblockCustomer(userId: string, customerId: string) {
+  async unblockCustomer(_userId: string, _customerId: string) {
     // #72
     throw new BadRequestException('رفع مسدودی از این مسیر در دسترس نیست');
-    const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!pro) throw new NotFoundException('پروفایل زیباگر یافت نشد');
-    const links = { ...((pro.socialLinks as Record<string, unknown>) || {}) } as Record<string, unknown>;
-    const prev = Array.isArray(links._blockedCustomerIds) ? (links._blockedCustomerIds as string[]) : [];
-    links._blockedCustomerIds = prev.filter((id) => id !== customerId);
-    await this.prisma.professional.update({ where: { id: pro.id }, data: { socialLinks: links as object } });
-    return { ok: true };
   }
 
 
