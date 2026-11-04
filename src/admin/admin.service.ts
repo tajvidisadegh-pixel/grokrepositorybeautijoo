@@ -1502,12 +1502,15 @@ export class AdminService {
   ) {
     const row = await this.prisma.payoutRequest.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('درخواست تسویه یافت نشد');
-    const data: { status: string; processedAt?: Date; adminNote?: string | null } = {
-      status,
-      processedAt: new Date(),
-    };
-    if (note != null) data.adminNote = note;
-    const updated = await this.prisma.payoutRequest.update({ where: { id }, data: data as never });
+    const updated = await this.prisma.payoutRequest.update({
+      where: { id },
+      data: {
+        status,
+        resolvedAt: new Date(),
+        resolvedBy: adminUserId,
+        adminNote: note != null ? note : undefined,
+      },
+    });
     await this.audit(
       adminUserId,
       'finance.payout_update',
