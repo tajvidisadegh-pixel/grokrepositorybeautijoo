@@ -52,6 +52,20 @@ class UpsertAttributeOptionDto {
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
+
+class CreateTemplateDto {
+  @IsString() @MinLength(1) name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() categoryId?: string;
+  @IsOptional() payload?: unknown;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+class ApplyTemplateDto {
+  @IsString() templateId!: string;
+}
+
 function assertAtLeastOneMode(flags: CatalogPricingFlags) {
   if (!flags.allowFixed && !flags.allowVariable && !flags.allowDeposit) {
     throw new BadRequestException('حداقل یک حالت قیمت‌گذاری باید فعال باشد');
@@ -245,4 +259,127 @@ export class AdminCatalogPricingController {
     });
     return { id: optionId, deleted: true, hard: false };
   }
+
+  @Get('attribute-templates')
+  @ApiOperation({ summary: 'List attribute templates (#80.2)' })
+  async listTemplates() {
+    return this.prisma.serviceAttributeTemplate.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  @Post('attribute-templates')
+  @ApiOperation({ summary: 'Create attribute template (#80.2)' })
+  async createTemplate(@Body() dto: CreateTemplateDto) {
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name required');
+    const payload = Array.isArray(dto.payload) ? dto.payload : [];
+    return this.prisma.serviceAttributeTemplate.create({
+      data: {
+        name,
+        description: dto.description?.trim() || null,
+        categoryId: dto.categoryId || null,
+        payload: payload as object,
+        sortOrder: dto.sortOrder ?? 0,
+        isActive: dto.isActive ?? true,
+      },
+    });
+  }
+
+  @Post('catalog-services/:id/apply-template')
+  @ApiOperation({ summary: 'Copy template groups/options onto catalog service (#80.2)' })
+  async applyTemplate(@Param('id') serviceId: string, @Body() dto: ApplyTemplateDto) {
+    const service = await this.prisma.service.findUnique({ where: { id: serviceId } });
+    if (!service) throw new NotFoundException('service not found');
+    const tpl = await this.prisma.serviceAttributeTemplate.findUnique({ where: { id: dto.templateId } });
+    if (!tpl || !tpl.isActive) throw new NotFoundException('template not found');
+
+    const groups = (Array.isArray(tpl.payload) ? tpl.payload : []) as Array<{
+      name?: string;
+      required?: boolean;
+      sortOrder?: number;
+      options?: Array<{
+        label?: string;
+        suggestedPriceDelta?: number;
+        suggestedDurationDeltaMin?: number;
+        forcesDeposit?: boolean;
+        sortOrder?: number;
+      }>;
+    }>;
+
+    this.cache.invalidateCatalog();
+    const created = [];
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      const gName = (g.name || '').trim();
+      if (!gName) continue;
+      const group = await this.prisma.serviceAttributeGroup.create({
+        data: {
+          serviceId,
+          name: gName,
+          required: g.required !== false,
+          sortOrder: g.sortOrder ?? i,
+          isActive: true,
+          options: {
+            create: (g.options || [])
+              .filter((o) => (o.label || '').trim())
+              .map((o, j) => ({
+                label: (o.label || '').trim(),
+                suggestedPriceDelta: o.suggestedPriceDelta ?? 0,
+                suggestedDurationDeltaMin: o.suggestedDurationDeltaMin ?? 0,
+                forcesDeposit: o.forcesDeposit ?? false,
+                sortOrder: o.sortOrder ?? j,
+                isActive: true,
+              })),
+          },
+        },
+        include: { options: true },
+      });
+      created.push(group);
+    }
+    return { serviceId, templateId: tpl.id, groupsCreated: created.length, groups: created };
+  }
+
+  @Post('catalog-services/:id/save-as-template')
+  @ApiOperation({ summary: 'Save current service attribute structure as template (#80.2)' })
+  async saveAsTemplate(@Param('id') serviceId: string, @Body() dto: CreateTemplateDto) {
+    const service = await this.prisma.service.findUnique({
+      where: { id: serviceId },
+      include: {
+        attributeGroups: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            options: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+          },
+        },
+      },
+    });
+    if (!service) throw new NotFoundException('service not found');
+    const name = (dto.name || `${service.name} — قالب`).trim();
+    const payload = service.attributeGroups.map((g) => ({
+      name: g.name,
+      required: g.required,
+      sortOrder: g.sortOrder,
+      options: g.options.map((o) => ({
+        label: o.label,
+        suggestedPriceDelta: o.suggestedPriceDelta,
+        suggestedDurationDeltaMin: o.suggestedDurationDeltaMin,
+        forcesDeposit: o.forcesDeposit,
+        sortOrder: o.sortOrder,
+      })),
+    }));
+    return this.prisma.serviceAttributeTemplate.create({
+      data: {
+        name,
+        description: dto.description?.trim() || null,
+        categoryId: service.categoryId || null,
+        payload,
+        sortOrder: dto.sortOrder ?? 0,
+        isActive: true,
+      },
+    });
+  }
+
 }
