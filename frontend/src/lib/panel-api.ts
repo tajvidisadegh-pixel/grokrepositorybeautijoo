@@ -689,3 +689,42 @@ export async function requestChangePhone(newPhone: string) {
 export async function verifyChangePhone(newPhone: string, code: string) {
   return apiClient.post<{ message: string; phone: string }>('/auth/change-phone/verify', { newPhone, code });
 }
+
+/** #80.3 Price quote requests */
+export type PriceQuoteRequest = {
+  id: string;
+  status: string;
+  note?: string | null;
+  photoUrls?: string[];
+  quotedPrice?: number | null;
+  quotedDurationMin?: number | null;
+  responseNote?: string | null;
+  respondedAt?: string | null;
+  createdAt: string;
+  professional?: { id: string; slug?: string; displayName?: string | null };
+  professionalService?: { id: string; service?: { name?: string } } | null;
+};
+
+export async function createPriceQuote(body: {
+  professionalId: string;
+  professionalServiceId?: string;
+  note?: string;
+  photoUrls?: string[];
+}) {
+  return apiClient.post<PriceQuoteRequest>('/quotes', body);
+}
+
+export async function fetchMyPriceQuotes() {
+  return apiClient.get<PriceQuoteRequest[]>('/quotes/mine');
+}
+
+export async function fetchProPriceQuotes() {
+  return apiClient.get<PriceQuoteRequest[]>('/professionals/me/quotes');
+}
+
+export async function respondPriceQuote(
+  id: string,
+  body: { status: 'quoted' | 'declined'; quotedPrice?: number; quotedDurationMin?: number; responseNote?: string },
+) {
+  return apiClient.patch<PriceQuoteRequest>(`/professionals/me/quotes/${id}`, body);
+}

@@ -126,6 +126,7 @@ model User {
   notifications        Notification[]
   auditLogs            AuditLog[]      @relation("AuditActor")
   supportTickets       SupportTicket[]
+  priceQuoteRequests  PriceQuoteRequest[]
   supportMessages      SupportTicketMessage[]
   @@unique([phone, accountType])
   @@index([phone])
@@ -259,6 +260,7 @@ model Professional {
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   locations            ProfessionalLocation[]
   professionalServices ProfessionalService[]
+  priceQuoteRequests  PriceQuoteRequest[]
   workingHours         WorkingHour[]
   timeOffs             TimeOff[]
   manualReservations   ManualReservation[]
@@ -375,6 +377,7 @@ model ProfessionalService {
   durationRules ServiceDurationRule[]
   mediaAssets  MediaAsset[]
   bookingItems BookingItem[]
+  priceQuoteRequests PriceQuoteRequest[]
   @@unique([professionalId, serviceId])
   @@index([professionalId, isActive])
   @@index([serviceId])
@@ -736,6 +739,33 @@ model ServiceAttributeTemplate {
   @@index([isActive])
   @@index([categoryId])
   @@map("service_attribute_templates")
+}
+
+
+model PriceQuoteRequest {
+  id                    String    @id @default(uuid()) @db.Uuid
+  customerId            String    @map("customer_id") @db.Uuid
+  professionalId        String    @map("professional_id") @db.Uuid
+  professionalServiceId String?   @map("professional_service_id") @db.Uuid
+  note                  String?   @db.Text
+  photoUrls             Json      @default("[]") @map("photo_urls")
+  status                String    @default("pending") @db.VarChar(20)
+  quotedPrice           Int?      @map("quoted_price")
+  quotedDurationMin     Int?      @map("quoted_duration_min")
+  responseNote          String?   @map("response_note") @db.Text
+  respondedAt           DateTime? @map("responded_at") @db.Timestamptz
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  customer            User                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  professional        Professional         @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professionalService ProfessionalService? @relation(fields: [professionalServiceId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([professionalId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("price_quote_requests")
 }
 
 model CatalogAddOn {

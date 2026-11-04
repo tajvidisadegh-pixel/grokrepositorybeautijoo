@@ -25,6 +25,7 @@ import { RemindersModule } from './reminders/reminders.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { JobsModule } from './jobs/jobs.module';
 import { SupportModule } from './support/support.module';
+import { QuotesModule } from './quotes/quotes.module';
 import { CacheModule } from './cache/cache.module';
 import { CorrelationIdMiddleware } from './observability/correlation-id.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -58,6 +59,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CleanupModule,
     RemindersModule,
     SupportModule,
+    QuotesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
