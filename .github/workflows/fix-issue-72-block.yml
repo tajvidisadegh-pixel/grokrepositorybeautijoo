@@ -1,0 +1,26 @@
+name: Fix issue 72 block disable
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-issue-72-block.yml'
+      - 'scripts/fix_issue_72_block.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_issue_72_block.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/professionals/professionals.service.ts frontend/src/app/zibagar/bookings/page.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "fix(#72): block/unblock APIs throw; remove pro block button"
+          git push origin HEAD:main
