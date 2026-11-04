@@ -1,0 +1,26 @@
+name: Apply public pricing display 80.7
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-public-pricing-display-80.yml'
+      - 'scripts/patch_public_pricing_display_80.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_public_pricing_display_80.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/types/public.ts frontend/src/components/professionals/service-offer-card.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "feat(#80.7): show variable and deposit pricing on public profile"
+          git push origin HEAD:main
