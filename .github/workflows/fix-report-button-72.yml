@@ -1,0 +1,22 @@
+name: Fix report button 72
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-report-button-72.yml'
+      - 'scripts/fix_report_button_72.py'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_report_button_72.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/bookings/page.tsx
+          if git diff --cached --quiet; then echo no change; exit 0; fi
+          git commit -m "fix(#72): restore گزارش به سوپرادمین button JSX"
+          git push origin HEAD:main
