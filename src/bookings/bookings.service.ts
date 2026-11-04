@@ -593,12 +593,15 @@ export class BookingsService {
       if (!allowed.includes(b.status)) {
         throw new BadRequestException('این رزرو قابل ثبت عدم حضور نیست');
       }
+      // #76 — no_show is not cancel; do not set cancelledAt/cancelReason
       return this.prisma.booking.update({
         where: { id },
         data: {
           status: BookingStatus.no_show,
-          cancelReason: reason || 'no_show',
-          cancelledAt: new Date(),
+          noShowAt: new Date(),
+          noShowReason: reason?.trim() || null,
+          cancelReason: null,
+          cancelledAt: null,
         },
       });
     }
