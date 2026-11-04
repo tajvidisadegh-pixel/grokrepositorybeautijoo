@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { SmsProvider } from './sms.provider';
 
 /**
@@ -20,14 +20,12 @@ export class MockSmsProvider implements SmsProvider {
   }
 
   async sendOtp(phone: string, code: string): Promise<void> {
-    MockSmsProvider.lastCodeByPhone.set(phone, code);
     if (this.isProd) {
-      this.logger.warn(
-        `[MOCK SMS OTP] to=${mask(phone)} (code suppressed in production mock)`,
-      );
-    } else {
-      this.logger.log(`[MOCK SMS OTP] to=${phone} code=${code}`);
+      this.logger.error('[MOCK SMS OTP] blocked in production');
+      throw new ForbiddenException('Mock SMS در محیط production مجاز نیست');
     }
+    MockSmsProvider.lastCodeByPhone.set(phone, code);
+    this.logger.log(`[MOCK SMS OTP] to=${phone} code=${code}`);
   }
 
   async sendNotification(phone: string, message: string): Promise<void> {
