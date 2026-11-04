@@ -1,22 +1,8 @@
-name: Fix issue 74 totals wire
+name: noop-fix-issue-74-totals
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/fix-issue-74-totals.yml'
-      - 'scripts/fix_issue_74_totals_wire.py'
-permissions:
-  contents: write
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/fix_issue_74_totals_wire.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/components/booking/booking-wizard.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "fix(#74): wire multi totals into slots and price UI"
-          git push origin HEAD:main
+      - run: echo retired
