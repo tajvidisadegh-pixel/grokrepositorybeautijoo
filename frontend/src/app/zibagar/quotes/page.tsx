@@ -41,7 +41,7 @@ export default function ZibagarQuotesPage() {
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4" dir="rtl">
       <h1 className="text-lg font-bold text-navy">درخواست‌های قیمت</h1>
-      <p className="text-sm text-gray">مشتری می‌تواند با توضیح و عکس، قیمت تقریبی بپرسد. پاسخ شما رزرو قطعی نیست.</p>
+      <p className="text-sm text-gray">کاربر می‌تواند با توضیح و عکس، قیمت تقریبی بپرسد. پاسخ شما رزرو قطعی نیست.</p>
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {items.length === 0 && <p className="text-sm text-gray">درخواستی نیست.</p>}
       <ul className="space-y-3">
