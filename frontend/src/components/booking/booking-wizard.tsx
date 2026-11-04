@@ -290,11 +290,11 @@ export function BookingWizard({
       const match = (selected.durationRules || []).find((d) => d.label === rule.label);
       if (match) setDurationRuleId(match.id);
     }
-    setStep('datetime');
+    goToDatetime();
   }
 
   function goDatetime() {
-    if (selected) setStep('datetime');
+    goToDatetime();
   }
   function goSummary() {
     if (selected && date && slotStart) setStep('summary');
@@ -406,12 +406,12 @@ export function BookingWizard({
         if (!g.required) continue;
         const ok = (g.options || []).some((o) => selectedOptionIds.includes(o.id));
         if (!ok) {
-          setError(`لطفاً «${g.name}» را انتخاب کنید`);
+          setSubmitError(`لطفاً «${g.name}» را انتخاب کنید`);
           return;
         }
       }
     }
-    setError(null);
+    setSubmitError(null);
     setStep('datetime');
   }
 
