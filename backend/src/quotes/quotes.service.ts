@@ -20,7 +20,10 @@ export class QuotesService {
     photoUrls?: string[];
   }) {
     const pro = await this.prisma.professional.findFirst({
-      where: { id: data.professionalId, isActive: true },
+      where: {
+        id: data.professionalId,
+        status: { not: 'draft' },
+      },
     });
     if (!pro) throw new NotFoundException('زیباگر یافت نشد');
 
@@ -122,7 +125,7 @@ export class QuotesService {
 
   private include() {
     return {
-      professional: { select: { id: true, slug: true, displayName: true } },
+      professional: { select: { id: true, slug: true, title: true } },
       professionalService: {
         select: {
           id: true,
