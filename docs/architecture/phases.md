@@ -1,4 +1,10 @@
-# Implementation Phases
+> **منسوخ به‌عنوان «وضعیت فعلی»** — این چک‌لیست فاز پیاده‌سازی قدیمی است.
+>
+> وضعیت زندهٔ محصول و استقرار: **[../CURRENT_STATUS.md](../CURRENT_STATUS.md)**
+
+---
+
+# Implementation Phases (historical checklist)
 
 0. Architecture plan (done)
 1. Repository structure & tooling

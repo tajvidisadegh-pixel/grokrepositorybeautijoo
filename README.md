@@ -2,6 +2,10 @@
 
 پلتفرم مارکت‌پلیس و رزرو نوبت برای زیباگران (Beauty Professionals) — فارسی و RTL.
 
+**وضعیت فعلی پروژه (منبع واحد):** [docs/CURRENT_STATUS.md](./docs/CURRENT_STATUS.md)
+
+سایت: https://beautijoo.ir
+
 ## ساختار پروژه
 
 ```
@@ -61,3 +65,4 @@ Deploy دوباره از **`main`** (کامیت‌هایی که Dockerfile ری�
 
 1. [docs/BRANCH_AND_DEPLOY.md](./docs/BRANCH_AND_DEPLOY.md)
 2. [DEPLOY_LIARA.md](./DEPLOY_LIARA.md)
+3. [docs/CURRENT_STATUS.md](./docs/CURRENT_STATUS.md)
