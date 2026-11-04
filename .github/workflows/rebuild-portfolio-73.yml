@@ -1,24 +1,8 @@
-name: Rebuild portfolio 73 minimal
+name: noop-rebuild-portfolio-73
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/rebuild-portfolio-73.yml'
-      - 'scripts/rebuild_portfolio_73_minimal.py'
-permissions:
-  contents: write
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: python3 scripts/rebuild_portfolio_73_minimal.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/portfolio/page.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "feat(#73): multi-select upload loop + denser grid (minimal)"
-          git push origin HEAD:main
+      - run: echo retired
