@@ -309,7 +309,7 @@ export class PaymentsService {
     if (booking && (booking.status === 'pending' || booking.status === 'expired')) {
       await this.prisma.booking.update({
         where: { id: payment.bookingId },
-        data: { status: 'confirmed', confirmedAt: new Date() },
+        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
       });
     }
 

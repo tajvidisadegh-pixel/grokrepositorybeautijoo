@@ -517,30 +517,34 @@ export class BookingsService {
     const isPro = pro?.id === b.professionalId;
     const isCustomer = b.customerId === userId;
 
+    // #71 — پرداخت = نوبت قطعی؛ زیباگر confirm/reject ندارد
     if (action === 'confirm' || action === 'reject') {
       if (!isPro) throw new ForbiddenException();
-      if (action === 'confirm' && b.status !== BookingStatus.pending) {
-        throw new BadRequestException('فقط رزرو در انتظار قابل تأیید است');
-      }
-      const allowedForReject: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
-      if (action === 'reject' && !allowedForReject.includes(b.status)) {
-        throw new BadRequestException('این رزرو قابل رد نیست');
-      }
-      const status = action === 'confirm' ? BookingStatus.confirmed : BookingStatus.rejected;
-      return this.prisma.booking.update({
-        where: { id },
-        data: {
-          status,
-          confirmedAt: action === 'confirm' ? new Date() : undefined,
-          rejectedReason: action === 'reject' ? reason ?? null : undefined,
-        },
-      });
+      throw new BadRequestException(
+        action === 'confirm'
+          ? 'تأیید دستی لازم نیست. پس از پرداخت موفق، نوبت به‌صورت خودکار قطعی است.'
+          : 'رد نوبت توسط زیباگر مجاز نیست. در صورت مشکل از پشتیبانی تیکت ثبت کنید.',
+      );
     }
 
     if (action === 'cancel') {
       if (!isCustomer && !isPro) throw new ForbiddenException();
+      const paid =
+        b.payment?.status === 'paid' ||
+        (b.payment as { status?: string } | null)?.status === 'paid';
+      // Pro cannot cancel a paid booking — must open support ticket (#71 / #72)
+      if (isPro && !isCustomer && paid) {
+        throw new BadRequestException(
+          'لغو نوبت پرداخت‌شده توسط زیباگر مجاز نیست. لطفاً از پشتیبانی تیکت ثبت کنید.',
+        );
+      }
+      // Unpaid pending: either side may cancel (slot release)
+      if (isPro && !isCustomer && b.status === BookingStatus.pending && !paid) {
+        // allow pro to clear unpaid hold
+      }
       const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
       if (!allowed.includes(b.status)) throw new BadRequestException('این رزرو قابل لغو نیست');
+      // Customer cancel of confirmed/paid remains (policy may refund later)
       return this.prisma.booking.update({
         where: { id },
         data: {

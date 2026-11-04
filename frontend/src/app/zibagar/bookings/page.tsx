@@ -25,7 +25,7 @@ import { JalaliDateInput } from '@/components/ui/jalali-date-input';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'همه وضعیت‌ها' },
-  { value: 'confirmed', label: 'تأییدشده' },
+  { value: 'confirmed', label: 'قطعی' },
   { value: 'pending', label: 'در انتظار' },
   { value: 'completed', label: 'تکمیل‌شده' },
   { value: 'rejected', label: 'ردشده' },
@@ -226,8 +226,8 @@ export default function ZibagarBookingsPage() {
       await transitionBooking(id, action, reason);
       const labels: Record<string, string> = {
         'no-show': 'عدم حضور مشتری ثبت شد.',
-        confirm: 'رزرو با موفقیت تأیید شد.',
-        reject: 'رزرو رد شد.',
+        confirm: 'تأیید دستی لازم نیست.',
+        reject: 'رد نوبت مجاز نیست — از پشتیبانی تیکت بزنید.',
         cancel: 'رزرو لغو شد.',
         complete: 'رزرو به عنوان انجام‌شده ثبت شد.',
       };
@@ -560,25 +560,6 @@ async function submitReport(id: string) {
                         {b.notes && (
                           <p className="text-xs text-gray">یادداشت: {b.notes}</p>
                         )}
-
-                        <div className="flex flex-wrap gap-2">
-                          {b.status === 'pending' && (
-                            <>
-                              <Button
-                                className="min-h-11 min-w-[7rem] flex-1 sm:flex-none"
-                                loading={busy === `${b.id}:confirm`}
-                                onClick={() => act(b.id, 'confirm')}
-                              >
-                                تأیید
-                              </Button>
-                              <Button
-                                className="min-h-11 min-w-[7rem] flex-1 sm:flex-none"
-                                variant="secondary"
-                                loading={busy === `${b.id}:reject`}
-                                onClick={() => act(b.id, 'reject')}
-                              >
-                                رد
-                              </Button>
                             </>
                           )}
                           {(b.status === 'pending' || b.status === 'confirmed') && (
@@ -591,17 +572,6 @@ async function submitReport(id: string) {
                                   setRescheduleDate('');
                                   setRescheduleSlots([]);
                                 }}
-                              >
-                                تغییر زمان
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                loading={busy === `${b.id}:reject`}
-                                onClick={() => act(b.id, 'reject')}
-                              >
-                                رد
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -617,7 +587,13 @@ async function submitReport(id: string) {
                               >
                                 تکمیل
                               </Button>
-                              {b.status === 'confirmed' && (
+                              {(b.status === 'confirmed' || (b.payment && (b.payment as { status?: string }).status === 'paid')) && (
+                              <p className="w-full text-xs text-gray">
+                                نوبت قطعی است. در صورت مشکل از{' '}
+                                <a href="/zibagar/support" className="text-coral underline">پشتیبانی تیکت</a> ثبت کنید.
+                              </p>
+                            )}
+                            {b.status === 'confirmed' && (
                                 <Button
                                   size="sm"
                                   variant="outline"
