@@ -656,7 +656,9 @@ async function submitReport(id: string) {
                               setReportText('');
                               setReportMsg(null);
                             }}
-                          ) : null}
+                          >
+                            گزارش به سوپرادمین
+                          </Button>
                         </div>
 
                         {reportFor === b.id && (
