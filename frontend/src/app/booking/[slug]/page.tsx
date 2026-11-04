@@ -45,6 +45,7 @@ type AttrGroupLite = {
     label: string;
     suggestedPriceDelta?: number;
     suggestedDurationDeltaMin?: number;
+    forcesDeposit?: boolean;
   }>;
 };
 
@@ -103,6 +104,7 @@ export default async function BookingPage({ params, searchParams }: Props) {
         label: o.label,
         suggestedPriceDelta: o.suggestedPriceDelta ?? 0,
         suggestedDurationDeltaMin: o.suggestedDurationDeltaMin ?? 0,
+        forcesDeposit: !!(o as { forcesDeposit?: boolean }).forcesDeposit,
       })),
     })),
     addOns: (ps.addOns || []).map((a) => ({

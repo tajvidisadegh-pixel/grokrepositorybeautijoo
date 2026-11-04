@@ -36,6 +36,7 @@ type AttrOption = {
   label: string;
   suggestedPriceDelta: number;
   suggestedDurationDeltaMin: number;
+  forcesDeposit?: boolean;
 };
 type AttrGroup = {
   id: string;
@@ -235,7 +236,24 @@ export function BookingWizard({
       .reduce((s, a) => s + (a.extraDurationMin || 0), 0);
   }, [selected, selectedAddOnIds]);
 
-  const displayPrice = basePrice + optionExtras.price + addOnExtraPrice;
+
+  const forcesDepositActive = useMemo(() => {
+    if (!selected || mode !== 'variable') return false;
+    for (const g of selected.attributeGroups || []) {
+      for (const o of g.options || []) {
+        if (selectedOptionIds.includes(o.id) && o.forcesDeposit) return true;
+      }
+    }
+    return false;
+  }, [selected, mode, selectedOptionIds]);
+
+  const isDepositPath = mode === 'deposit' || forcesDepositActive;
+
+  const displayPriceRaw = basePrice + optionExtras.price + addOnExtraPrice;
+  const displayPrice =
+    forcesDepositActive && selected?.depositAmount != null && selected.depositAmount >= 0
+      ? selected.depositAmount
+      : displayPriceRaw;
   const serviceDuration = baseDuration + optionExtras.duration + addOnExtraDuration;
   const totalDuration = selected ? serviceDuration + selected.bufferMin : 30;
 
@@ -579,13 +597,26 @@ export function BookingWizard({
               </div>
             )}
 
-            {selected && mode === 'deposit' && (
+            {selected && isDepositPath && (
               <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                 مبلغ قابل پرداخت الان به‌صورت بیعانه است
                 {selected.depositAmount != null
                   ? ` (${formatPrice(selected.depositAmount)})`
                   : ''}
                 . باقی مبلغ طبق توافق با زیباگر تسویه می‌شود.
+              </div>
+            )}
+
+            {selected && forcesDepositActive && (
+              <div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+                <p className="font-semibold">این انتخاب مسیر بیعانه را فعال کرد</p>
+                <p className="mt-1 text-xs leading-5">
+                  به‌خاطر گزینه‌ای که انتخاب کردید، مبلغ قابل پرداخت الان فقط بیعانه است
+                  {selected.depositAmount != null
+                    ? ` (${formatPrice(selected.depositAmount)})`
+                    : ''}
+                  . قیمت نهایی پس از بررسی حضوری/قبل از شروع کار مشخص می‌شود.
+                </p>
               </div>
             )}
 {selected && (selected.addOns || []).length > 0 && (
@@ -826,10 +857,10 @@ export function BookingWizard({
                 </div>
               ))}
             <div className="flex justify-between gap-2 border-t border-border pt-2 text-base font-bold">
-              <span>مبلغ نهایی قابل پرداخت</span>
+              <span>{isDepositPath ? 'مبلغ بیعانه قابل پرداخت' : 'مبلغ نهایی قابل پرداخت'}</span>
               <span className="text-coral">{formatPrice(displayPrice)}</span>
             </div>
-            <p className="text-xs text-gray">مبلغ نهایی همین است؛ هزینه پنهان، مالیات جدا یا کارمزد اضافه در درگاه ندارید.</p>
+            <p className="text-xs text-gray">{isDepositPath ? 'الان فقط بیعانه پرداخت می‌شود؛ زمان نوبت قطعی است و مانده پس از بررسی توافق می‌شود.' : 'مبلغ نهایی همین است؛ هزینه پنهان، مالیات جدا یا کارمزد اضافه در درگاه ندارید.'}</p>
             <CancelPolicyNotice className="mb-0" />
           </div>
           <div>
