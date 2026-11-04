@@ -35,6 +35,40 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
+
+type AttrGroupLite = {
+  id: string;
+  name: string;
+  required?: boolean;
+  options?: Array<{
+    id: string;
+    label: string;
+    suggestedPriceDelta?: number;
+    suggestedDurationDeltaMin?: number;
+  }>;
+};
+
+type ProServiceRow = {
+  id: string;
+  durationMin: number;
+  bufferMin?: number | null;
+  price: number;
+  pricingMode?: string | null;
+  depositAmount?: number | null;
+  estimateMinPrice?: number | null;
+  estimateMaxPrice?: number | null;
+  optionDeltas?: Record<string, { priceDelta?: number; durationDeltaMin?: number; active?: boolean }> | null;
+  service: {
+    id: string;
+    name: string;
+    category?: { name?: string } | null;
+    attributeGroups?: AttrGroupLite[];
+  };
+  addOns?: Array<{ id: string; name: string; price: number; extraDurationMin?: number }>;
+  priceRules?: Array<{ id: string; label: string; price: number }>;
+  durationRules?: Array<{ id: string; label: string; durationMin: number }>;
+};
+
 export default async function BookingPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -47,7 +81,7 @@ export default async function BookingPage({ params, searchParams }: Props) {
     throw e;
   }
 
-  const services = (pro.professionalServices || []).map((ps) => ({
+  const services = ((pro.professionalServices || []) as ProServiceRow[]).map((ps) => ({
     professionalServiceId: ps.id,
     serviceId: ps.service.id,
     name: ps.service.name,
