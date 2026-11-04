@@ -116,7 +116,7 @@ export default function ZibagarPortfolioPage() {
   async function onUploadMany(fileList: FileList | File[]) {
     const files = Array.from(fileList || []).filter(Boolean);
     if (!files.length) return;
-    let remaining = Math.max(0, MAX_PORTFOLIO - items.length);
+    const remaining = Math.max(0, MAX_PORTFOLIO - items.length);
     if (remaining <= 0) {
       setMsg(
         'سقف رایگان نمونه‌کار پر است. برای آپلود بیشتر از ۱۰۰ مورد می‌توانید نسخه ویژه را تهیه کنید.',
@@ -132,7 +132,8 @@ export default function ZibagarPortfolioPage() {
     let ok = 0;
     let fail = 0;
     for (let i = 0; i < queue.length; i++) {
-      const file = queue[i]!;
+      const file = queue[i];
+      if (!file) continue;
       setUploadProgress(0);
       setMsg(`آپلود ${i + 1} از ${queue.length}…`);
       try {
