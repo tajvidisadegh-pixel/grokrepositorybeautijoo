@@ -25,6 +25,10 @@ type Service = {
   isActive?: boolean;
   categoryId?: string;
   category?: { id: string; name: string; slug: string } | null;
+  allowFixed?: boolean;
+  allowVariable?: boolean;
+  allowDeposit?: boolean;
+  defaultPricingMode?: string;
 };
 
 export default function AdminServiceCategoriesPage() {
@@ -480,6 +484,17 @@ export default function AdminServiceCategoriesPage() {
                       <p className="text-xs text-gray-400">
                         {s.category?.name || 'بدون دسته'} · {s.slug}
                       </p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {(s.allowFixed !== false) && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">ثابت</span>
+                        )}
+                        {s.allowVariable && (
+                          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700">متغیر</span>
+                        )}
+                        {s.allowDeposit && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">بیعانه</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button

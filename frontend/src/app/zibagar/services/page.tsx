@@ -71,12 +71,27 @@ function flattenCats(nodes: CatNode[], out: CatNode[] = []): CatNode[] {
 }
 
 function displayPrice(ps: ProfessionalServiceItem): number | null {
+  const mode = String(ps.pricingMode || 'fixed').toLowerCase();
+  if (mode === 'deposit') {
+    if (ps.depositAmount != null && ps.depositAmount >= 0) return ps.depositAmount;
+    return null;
+  }
+  if (mode === 'variable') {
+    if (ps.estimateMinPrice != null && ps.estimateMinPrice >= MIN_PRICE) return ps.estimateMinPrice;
+  }
   const fromRules = (ps.priceRules || [])
     .filter((r) => r.price >= MIN_PRICE)
     .map((r) => r.price);
   if (fromRules.length) return Math.min(...fromRules);
   if ((ps.price ?? 0) >= MIN_PRICE) return ps.price;
   return null;
+}
+
+function modeLabel(modeRaw?: string | null): string {
+  const m = String(modeRaw || 'fixed').toLowerCase();
+  if (m === 'variable') return 'گزینه‌ها';
+  if (m === 'deposit') return 'بیعانه';
+  return 'ثابت';
 }
 
 function findServiceByName(list: FlatSvc[], name: string): FlatSvc | null {
@@ -359,11 +374,30 @@ export default function ZibagarServicesPage() {
                   className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-white p-4 text-right shadow-sm transition active:bg-gray-50"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-navy">{name}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-semibold text-navy">{name}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          String(ps.pricingMode || 'fixed').toLowerCase() === 'deposit'
+                            ? 'bg-amber-50 text-amber-800'
+                            : String(ps.pricingMode || 'fixed').toLowerCase() === 'variable'
+                              ? 'bg-indigo-50 text-indigo-700'
+                              : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {modeLabel(ps.pricingMode)}
+                      </span>
+                    </div>
                     {cat && <p className="mt-0.5 text-xs text-gray">{cat}</p>}
                     <p className="mt-1.5 text-sm">
                       {from != null ? (
-                        <span className="font-bold text-coral">{formatPrice(from)}</span>
+                        <span className="font-bold text-coral">
+                          {String(ps.pricingMode || 'fixed').toLowerCase() === 'variable'
+                            ? `از ${formatPrice(from)}`
+                            : String(ps.pricingMode || 'fixed').toLowerCase() === 'deposit'
+                              ? `بیعانه ${formatPrice(from)}`
+                              : formatPrice(from)}
+                        </span>
                       ) : (
                         <span className="font-medium text-amber-600">قیمت بگذار</span>
                       )}
