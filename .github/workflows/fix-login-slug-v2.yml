@@ -1,0 +1,9 @@
+# Retired.
+name: fix-login-slug-v2
+on:
+  workflow_dispatch:
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "retired; nothing to do"
