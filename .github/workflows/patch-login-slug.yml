@@ -1,0 +1,155 @@
+name: patch-login-slug
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-login-slug.yml'
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+      - name: Restore emptied sources and patch
+        run: |
+          set -euo pipefail
+          restore() {
+            local f="$1"
+            local sz
+            sz=$(wc -c < "$f" 2>/dev/null || echo 0)
+            if [ "${sz:-0}" -lt 200 ]; then
+              echo "restoring $f from d48f490"
+              git show "d48f490:$f" > "$f"
+            fi
+          }
+          restore frontend/src/lib/api.ts
+          restore backend/src/auth/auth.service.ts
+          # public-slug may already be good from earlier commit
+          if [ "$(wc -c < backend/src/common/public-slug.ts)" -lt 200 ]; then
+            git show "d48f490:backend/src/common/public-slug.ts" > backend/src/common/public-slug.ts
+          fi
+          python3 << 'PY'
+          from pathlib import Path
+
+          p = Path('frontend/src/lib/api.ts')
+          text = p.read_text(encoding='utf-8')
+          if "Login/register/OTP 401 must show real server message" not in text:
+              old = """  if (!res.ok) {
+    if (
+      res.status === 401 &&
+      typeof window !== 'undefined' &&
+      !opts.skipRefresh &&
+      !path.includes('/auth/')
+    ) {
+      handleSessionExpired();
+    }
+    const msg = extractMessage(data, res.statusText);
+    const correlationId =
+      typeof data === 'object' && data && 'correlationId' in data
+        ? String((data as { correlationId: string }).correlationId)
+        : undefined;
+    throw new ApiError(
+      res.status,
+      res.status === 401
+        ? 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'
+        : msg,
+      data,
+      correlationId,
+    );
+  }"""
+              new = """  if (!res.ok) {
+    const isAuthPath = path.includes('/auth/');
+    if (
+      res.status === 401 &&
+      typeof window !== 'undefined' &&
+      !opts.skipRefresh &&
+      !isAuthPath
+    ) {
+      handleSessionExpired();
+    }
+    const msg = extractMessage(data, res.statusText);
+    const correlationId =
+      typeof data === 'object' && data && 'correlationId' in data
+        ? String((data as { correlationId: string }).correlationId)
+        : undefined;
+    // Login/register/OTP 401 must show real server message (wrong password etc.), not "session expired"
+    const message =
+      res.status === 401 && !isAuthPath
+        ? 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'
+        : msg || (res.status === 401 ? 'ورود ناموفق بود. شماره یا رمز را بررسی کنید.' : res.statusText);
+    throw new ApiError(
+      res.status,
+      message,
+      data,
+      correlationId,
+    );
+  }"""
+              if old not in text:
+                  raise SystemExit('api.ts pattern not found')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+              print('api patched')
+          else:
+              print('api already ok')
+
+          p = Path('backend/src/common/public-slug.ts')
+          text = p.read_text(encoding='utf-8')
+          if 'embedsPhoneDigits' not in text:
+              needle = """/** Valid public slug: 3–80 chars, Latin, not pure number, not UUID, not phone-like. */
+export function isValidPublicSlug(slug: string): boolean {
+  const s = String(slug || '').trim();
+  if (s.length < 3 || s.length > 80) return false;
+  if (isUuidLike(s)) return false;
+  if (/^\\d+$/.test(s)) return false;
+  if (isPhoneLike(s)) return false;
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
+}"""
+              insert = """/** True if slug embeds a phone-like digit run (e.g. pro-0912…-x). */
+export function embedsPhoneDigits(value: string): boolean {
+  const s = String(value || '');
+  if (/09\\d{9}/.test(s)) return true;
+  const compact = s.replace(/-/g, '');
+  if (/\\d{10,}/.test(compact)) return true;
+  return false;
+}
+
+/** Valid public slug: 3–80 chars, Latin, not pure number, not UUID, not phone-like. */
+export function isValidPublicSlug(slug: string): boolean {
+  const s = String(slug || '').trim();
+  if (s.length < 3 || s.length > 80) return false;
+  if (isUuidLike(s)) return false;
+  if (/^\\d+$/.test(s)) return false;
+  if (isPhoneLike(s)) return false;
+  if (embedsPhoneDigits(s)) return false;
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
+}"""
+              if needle not in text:
+                  raise SystemExit('public-slug pattern not found')
+              p.write_text(text.replace(needle, insert), encoding='utf-8')
+              print('public-slug patched')
+          else:
+              print('public-slug already ok')
+
+          p = Path('backend/src/auth/auth.service.ts')
+          text = p.read_text(encoding='utf-8')
+          old = 'slug: `pro-${dto.phone}-${Date.now().toString(36)}`,'
+          new = 'slug: `pro-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,'
+          if old in text:
+              p.write_text(text.replace(old, new), encoding='utf-8')
+              print('auth slug patched', text.count(old))
+          elif 'Math.random().toString(36).slice(2, 8)' in text:
+              print('auth slug already ok')
+          else:
+              raise SystemExit('auth slug pattern missing')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/api.ts backend/src/common/public-slug.ts backend/src/auth/auth.service.ts
+          git status
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "fix(auth): real login 401 messages; remove phone from professional public slug"
+          git push
