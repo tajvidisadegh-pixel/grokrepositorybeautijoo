@@ -4,18 +4,19 @@ import { Logo } from '@/components/brand/logo';
 const SUPPORT_PHONE =
   process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || '09153885879';
 
+/** Minimal public footer — grouped links, short height on mobile. */
 export function Footer() {
   return (
     <footer className="mt-auto bg-blue text-white">
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4 sm:py-12">
-        <div className="sm:col-span-2 lg:col-span-1">
-          <div className="mb-3">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start sm:justify-between sm:py-9">
+        <div className="max-w-xs">
+          <div className="mb-2">
             <Logo onDark href={null} />
           </div>
-          <p className="text-sm leading-7 text-white/75">
-            پلتفرم رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای — آسان، سریع و مطمئن.
+          <p className="text-sm leading-6 text-white/75">
+            رزرو آنلاین خدمات زیبایی با زیباگران حرفه‌ای.
           </p>
-          <p className="mt-3 text-sm text-white/75">
+          <p className="mt-2 text-sm text-white/75">
             پشتیبانی:{' '}
             <a
               href={`tel:${SUPPORT_PHONE.replace(/\s/g, '')}`}
@@ -26,101 +27,74 @@ export function Footer() {
             </a>
           </p>
         </div>
-        <div>
-          <h3 className="mb-3 text-sm font-bold text-white">دسترسی سریع</h3>
-          <ul className="space-y-2.5 text-sm text-white/75">
-            <li>
-              <Link href="/professionals" className="transition-colors hover:text-coral-light">
-                زیباگران
-              </Link>
-            </li>
-            <li>
-              <Link href="/search" className="transition-colors hover:text-coral-light">
-                جستجو
-              </Link>
-            </li>
-            <li>
-              <Link href="/services" className="transition-colors hover:text-coral-light">
-                خدمات
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="mb-3 text-sm font-bold text-white">حساب کاربری</h3>
-          <ul className="space-y-2.5 text-sm text-white/75">
-            <li>
-              <Link href="/login" className="transition-colors hover:text-coral-light">
-                ورود
-              </Link>
-            </li>
-            <li>
-              <Link href="/register" className="transition-colors hover:text-coral-light">
-                ثبت‌نام
-              </Link>
-            </li>
-            <li>
-              <Link href="/panel" className="transition-colors hover:text-coral-light">
-                پنل کاربر
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="mb-3 text-sm font-bold text-white">قوانین و پشتیبانی</h3>
-          <ul className="space-y-2.5 text-sm text-white/75">
-            <li>
-              <Link href="/about" className="transition-colors hover:text-coral-light">
-                درباره ما
-              </Link>
-            </li>
-            <li>
-              <Link href="/faq" className="transition-colors hover:text-coral-light">
-                سوالات متداول
-              </Link>
-            </li>
-            <li>
-              <Link href="/contact" className="transition-colors hover:text-coral-light">
-                تماس با پشتیبانی
-              </Link>
-            </li>
-            <li>
-              <Link href="/complaint" className="transition-colors hover:text-coral-light">
-                ثبت شکایت
-              </Link>
-            </li>
-            <li>
-              <Link href="/accessibility" className="transition-colors hover:text-coral-light">
-                دسترس‌پذیری
-              </Link>
-            </li>
-            <li>
-              <Link href="/terms" className="transition-colors hover:text-coral-light">
-                شرایط استفاده
-              </Link>
-            </li>
-            <li>
-              <Link href="/refund" className="transition-colors hover:text-coral-light">
-                کنسلی و بازپرداخت
-              </Link>
-            </li>
-            <li>
-              <Link href="/privacy" className="transition-colors hover:text-coral-light">
-                حریم خصوصی
-              </Link>
-            </li>
-            <li>
-              <Link href="/cookies" className="transition-colors hover:text-coral-light">
-                سیاست کوکی
-              </Link>
-            </li>
-          </ul>
-        </div>
+
+        <nav
+          aria-label="لینک‌های پاورقی"
+          className="grid grid-cols-2 gap-x-8 gap-y-5 text-sm sm:grid-cols-3"
+        >
+          <div>
+            <h3 className="mb-2 text-xs font-bold tracking-wide text-white/90">سایت</h3>
+            <ul className="space-y-2 text-white/75">
+              <li>
+                <Link href="/professionals" className="hover:text-coral-light">
+                  زیباگران
+                </Link>
+              </li>
+              <li>
+                <Link href="/search" className="hover:text-coral-light">
+                  جستجو
+                </Link>
+              </li>
+              <li>
+                <Link href="/about" className="hover:text-coral-light">
+                  درباره ما
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-xs font-bold tracking-wide text-white/90">حساب و پشتیبانی</h3>
+            <ul className="space-y-2 text-white/75">
+              <li>
+                <Link href="/login" className="hover:text-coral-light">
+                  ورود / ثبت‌نام
+                </Link>
+              </li>
+              <li>
+                <Link href="/panel" className="hover:text-coral-light">
+                  پنل من
+                </Link>
+              </li>
+              <li>
+                <Link href="/contact" className="hover:text-coral-light">
+                  تماس و پشتیبانی
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div className="col-span-2 sm:col-span-1">
+            <h3 className="mb-2 text-xs font-bold tracking-wide text-white/90">قوانین</h3>
+            <ul className="space-y-2 text-white/75">
+              <li>
+                <Link href="/terms" className="hover:text-coral-light">
+                  شرایط و کنسلی
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="hover:text-coral-light">
+                  حریم خصوصی و کوکی
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </nav>
       </div>
 
-      {/* نماد اعتماد الکترونیکی (اینماد) — کد رسمی */}
-      <div className="border-t border-white/10 bg-blue-dark/30 px-4 py-5">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 sm:flex-row sm:gap-6">
+      {/* نماد اعتماد الکترونیکی (اینماد) */}
+      <div className="border-t border-white/10 bg-blue-dark/30 px-4 py-4">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-3 sm:flex-row">
           <a
             referrerPolicy="origin"
             target="_blank"
@@ -132,17 +106,17 @@ export function Footer() {
               referrerPolicy="origin"
               src="https://trustseal.enamad.ir/logo.aspx?id=7847181&Code=oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G"
               alt="نماد اعتماد الکترونیکی"
-              style={{ cursor: 'pointer', width: 125, height: 'auto' }}
+              style={{ cursor: 'pointer', width: 100, height: 'auto' }}
               {...({ code: 'oIq4x36ixuAEvijxIK4X4tgqhy5A0S4G' } as React.ImgHTMLAttributes<HTMLImageElement>)}
             />
           </a>
         </div>
       </div>
 
-      <div className="border-t border-white/10 bg-blue-dark/40 py-4 text-center text-xs text-white/60">
+      <div className="border-t border-white/10 bg-blue-dark/40 py-3 text-center text-xs text-white/60">
         ©{' '}
         {new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date())}{' '}
-        Beautijoo — بیوتی‌جو · همه حقوق محفوظ است
+        Beautijoo — بیوتی‌جو
       </div>
     </footer>
   );
