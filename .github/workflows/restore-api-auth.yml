@@ -1,1 +1,9 @@
-PLACEHOLDER
+# Retired — api.ts login message fix already on main.
+name: restore-api-auth
+on:
+  workflow_dispatch:
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "retired; nothing to do"
