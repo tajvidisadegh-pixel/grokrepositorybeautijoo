@@ -252,23 +252,40 @@ export default function ZibagarServicesPage() {
 
   async function savePriceEdit() {
     if (!sheet || sheet.kind !== 'price') return;
+    const pricing = pricingPayload(editPricing);
+    const mode = String(pricing.pricingMode || 'fixed').toLowerCase();
     const priceNum = Number(String(editPrice).replace(/[^\d]/g, ''));
-    if (!Number.isFinite(priceNum) || priceNum < MIN_PRICE) {
-      setError(`حداقل قیمت ${MIN_PRICE.toLocaleString('fa-IR')} تومان است`);
-      return;
+
+    // #80 — validation depends on mode (fixed needs base price; deposit needs depositAmount)
+    if (mode === 'fixed') {
+      if (!Number.isFinite(priceNum) || priceNum < MIN_PRICE) {
+        setError(`حداقل قیمت ${MIN_PRICE.toLocaleString('fa-IR')} تومان است`);
+        return;
+      }
+    } else if (mode === 'deposit') {
+      if (!(pricing.depositAmount != null && pricing.depositAmount > 0)) {
+        setError('مبلغ بیعانه را وارد کنید');
+        return;
+      }
+      // base/list price optional; keep a sensible floor for display
+      if (!Number.isFinite(priceNum) || priceNum < 0) {
+        setError('قیمت پایه نامعتبر است');
+        return;
+      }
+    } else if (mode === 'variable') {
+      // base price required so customer "from" price works
+      if (!Number.isFinite(priceNum) || priceNum < MIN_PRICE) {
+        setError(`برای قیمت با گزینه، قیمت پایه حداقل ${MIN_PRICE.toLocaleString('fa-IR')} تومان باشد`);
+        return;
+      }
     }
+
     const dur = Math.max(5, Number(editDuration) || 60);
     setBusy(true);
     setError(null);
     try {
-      const pricing = pricingPayload(editPricing);
-      if (pricing.pricingMode === 'deposit' && !(pricing.depositAmount != null && pricing.depositAmount >= 0)) {
-        setError('مبلغ بیعانه را وارد کنید');
-        setBusy(false);
-        return;
-      }
       await patchMyService(sheet.ps.id, {
-        price: priceNum,
+        price: Number.isFinite(priceNum) ? priceNum : 0,
         durationMin: dur,
         description: editDescription.trim() || undefined,
         isActive: true,
@@ -529,7 +546,7 @@ export default function ZibagarServicesPage() {
               <p className="text-base font-semibold text-navy">{pickedVar.name}</p>
 
               <div>
-                <label className="mb-1.5 block text-sm text-gray">قیمت (تومان)</label>
+                <label className="mb-1.5 block text-sm text-gray">قیمت پایه (تومان)</label>
                 <Input
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -667,7 +684,7 @@ export default function ZibagarServicesPage() {
             </div>
             <Button
               className="h-14 w-full rounded-2xl text-base font-semibold"
-              disabled={busy || !editPrice || Number(editPrice) < MIN_PRICE}
+              disabled={busy}
               onClick={() => void savePriceEdit()}
             >
               {busy ? 'در حال ذخیره…' : 'ذخیره'}

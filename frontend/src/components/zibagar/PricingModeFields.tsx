@@ -97,6 +97,7 @@ export function PricingModeFields({ allowed, state, onChange, groups, disabled }
       {showModePicker && (
         <>
           <p className="text-sm font-medium text-[#0B2C4A]">حالت قیمت‌گذاری</p>
+      <p className="text-[11px] text-gray-500">فقط حالت‌هایی که برای این خدمت باز شده‌اند.</p>
           <div className="flex flex-wrap gap-2">
             {allowed.map((m) => (
           <button

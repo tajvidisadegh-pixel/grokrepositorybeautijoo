@@ -39,6 +39,7 @@ export default function AdminServiceCategoriesPage() {
   const [serviceName, setServiceName] = useState('');
   const [serviceCategoryId, setServiceCategoryId] = useState('');
   const [query, setQuery] = useState('');
+  const [pricingFilter, setPricingFilter] = useState<'all' | 'fixed' | 'variable' | 'deposit'>('all');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
