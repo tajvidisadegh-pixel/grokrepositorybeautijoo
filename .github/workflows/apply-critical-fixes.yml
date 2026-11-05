@@ -1,48 +1,8 @@
-name: Apply critical product fixes
+name: noop-apply-critical-fixes
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/apply-critical-fixes.yml'
-      - 'scripts/patch_critical_pricing_and_sync.py'
-permissions:
-  contents: write
 jobs:
-  apply:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 scripts/patch_critical_pricing_and_sync.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/app/zibagar/services/page.tsx \
-            frontend/src/components/zibagar/PricingModeFields.tsx \
-            frontend/src/app/admin/service-categories/page.tsx
-          if git diff --cached --quiet; then echo no change; exit 0; fi
-          git commit -m "fix(#80): deposit/variable save validation + admin pricing filter"
-          git push origin HEAD:main
-  sync-backend-export:
-    needs: apply
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Sync backend/ to beautijoo-backend-export
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin beautijoo-backend-export main || true
-          # If export branch exists, merge main into it for backend path
-          if git rev-parse --verify origin/beautijoo-backend-export >/dev/null 2>&1; then
-            git checkout -B beautijoo-backend-export origin/beautijoo-backend-export
-            git checkout origin/main -- backend prisma 2>/dev/null || git checkout origin/main -- backend
-            git add backend || true
-            git add prisma 2>/dev/null || true
-            if git diff --cached --quiet; then echo backend export already current; exit 0; fi
-            git commit -m "chore: sync backend from main for deploy (#80/#75-77)" || true
-            git push origin beautijoo-backend-export
-          else
-            echo "no beautijoo-backend-export branch"
-          fi
+      - run: echo retired
