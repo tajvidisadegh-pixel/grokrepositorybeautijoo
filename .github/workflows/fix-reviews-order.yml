@@ -1,61 +1,9 @@
 name: fix-reviews-order
+# one-shot completed
 on:
-  push:
-    paths:
-      - '.github/workflows/fix-reviews-order.yml'
   workflow_dispatch:
 jobs:
-  fix:
+  noop:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 5
-      - name: Restore from parent if emptied, then move reviews below services
-        run: |
-          python3 << 'PY'
-          from pathlib import Path
-          import subprocess
-          fp = Path('frontend/src/app/professionals/[slug]/page.tsx')
-          text = fp.read_text(encoding='utf-8') if fp.exists() else ''
-          if len(text) < 500:
-              # recover from commit before empty push
-              text = subprocess.check_output(
-                  ['git', 'show', '9d98b23:frontend/src/app/professionals/[slug]/page.tsx'],
-                  text=True,
-              )
-          marker_reviews_start = "          {Array.isArray((pro as { reviews?"
-          marker_services = '          <section className="rounded-3xl border border-border/90 bg-white p-6 shadow-sm">\n            <h2 className="text-lg font-bold text-foreground">خدمات و قیمت'
-          idx_rev = text.find(marker_reviews_start)
-          idx_svc = text.find(marker_services)
-          if idx_rev < 0 or idx_svc < 0:
-              raise SystemExit(f'markers missing rev={idx_rev} svc={idx_svc}')
-          # already ordered?
-          if idx_svc < idx_rev:
-              print('already services before reviews')
-              fp.write_text(text, encoding='utf-8')
-          else:
-              end_marker = '          </section>\n        </div>\n\n        <aside'
-              idx_end = text.find(end_marker, idx_svc)
-              if idx_end < 0:
-                  raise SystemExit('end marker missing')
-              reviews_block = text[idx_rev:idx_svc]
-              services_block_full = text[idx_svc:idx_end + len('          </section>\n')]
-              before = text[:idx_rev]
-              after = text[idx_end + len('          </section>\n'):]
-              new_text = before + services_block_full + '\n' + reviews_block.rstrip() + '\n\n' + after
-              if new_text.find('خدمات و قیمت') > new_text.find('نظرات کاربران'):
-                  raise SystemExit('order still wrong')
-              fp.write_text(new_text, encoding='utf-8')
-              print('moved ok', len(new_text))
-          PY
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "frontend/src/app/professionals/[slug]/page.tsx"
-          if git diff --cached --quiet; then echo nochange; exit 0; fi
-          git commit -m "fix(profile): move reviews below services on professional page"
-          git push
+      - run: echo disabled
