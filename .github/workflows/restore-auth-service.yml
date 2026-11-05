@@ -1,8 +1,40 @@
-name: noop-restore-auth-service
+name: restore-auth-service
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-auth-service.yml'
 jobs:
-  noop:
+  restore:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - run: echo retired
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 80
+      - name: Restore and patch auth.service.ts
+        run: |
+          set -e
+          git show d48f490:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
+          python3 -c "
+          from pathlib import Path
+          p = Path('backend/src/auth/auth.service.ts')
+          t = p.read_text(encoding='utf-8')
+          old = 'slug: \`pro-${dto.phone}-${Date.now().toString(36)}\`,'
+          new = 'slug: \`pro-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}\`,'
+          if old not in t and 'Math.random().toString(36).slice(2, 8)' not in t:
+              raise SystemExit('pattern missing')
+          if old in t:
+              t = t.replace(old, new)
+              p.write_text(t, encoding='utf-8')
+          print('size', p.stat().st_size)
+          "
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "fix(auth): restore auth.service.ts; public slug without phone"
+          git push
