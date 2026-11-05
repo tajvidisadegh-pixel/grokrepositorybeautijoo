@@ -22,10 +22,8 @@ function RegisterForm() {
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<RegisterRole>(
-    asParam === 'professional' ? 'professional' : 'customer',
-  );
+  /** نقش از لینک می‌آید (?as=professional)؛ در فرم ساده انتخاب نقش نشان داده نمی‌شود */
+  const role: RegisterRole = asParam === 'professional' ? 'professional' : 'customer';
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,7 +74,6 @@ function RegisterForm() {
     await sendOtp();
   }
 
-  /** After OTP: complete registration immediately (no password step — issue #43). */
   async function onCodeSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -90,7 +87,7 @@ function RegisterForm() {
         phone.trim(),
         undefined,
         code.trim(),
-        displayName.trim() || undefined,
+        undefined,
         role,
       );
       const isPro = me.roles?.includes('professional') ?? false;
@@ -121,34 +118,6 @@ function RegisterForm() {
         {step === 'phone' && (
           <form onSubmit={onPhoneSubmit} className="space-y-4">
             <div>
-              <p className="mb-2 text-sm font-medium">ثبت‌نام به‌عنوان</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole('customer')}
-                  className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                    role === 'customer'
-                      ? 'border-coral bg-coral-soft text-coral'
-                      : 'border-border text-gray hover:bg-gray-light'
-                  }`}
-                >
-                  می‌خواهم نوبت بگیرم
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('professional')}
-                  className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                    role === 'professional'
-                      ? 'border-coral bg-coral-soft text-coral'
-                      : 'border-border text-gray hover:bg-gray-light'
-                  }`}
-                >
-                  زیباگر هستم و نوبت می‌دهم
-                </button>
-              </div>
-              <p className="mt-2 text-center text-xs text-gray">بعداً می‌توانید فقط با همین شماره وارد شوید؛ نوع حساب را اینجا مشخص کنید.</p>
-            </div>
-            <div>
               <label className="mb-1.5 block text-sm font-medium">شماره موبایل</label>
               <Input
                 type="tel"
@@ -160,32 +129,14 @@ function RegisterForm() {
                 dir="ltr"
                 className="text-left"
                 autoComplete="tel"
+                autoFocus
               />
-              <p className="mt-1.5 text-xs leading-5 text-gray">
-                کد تأیید با پیامک به همین شماره ارسال می‌شود. معمولاً کمتر از یک دقیقه طول می‌کشد.
-              </p>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">
-                نام نمایشی <span className="font-normal text-gray">(اختیاری)</span>
-              </label>
-              <Input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={
-                  role === 'professional' ? 'مثلاً متخصص پوست و مو' : 'مثلاً مریم رضایی'
-                }
-                autoComplete="name"
-              />
-              <p className="mt-1 text-xs text-gray">
-                می‌توانید بعداً در پروفایل هم تغییر دهید.
-              </p>
             </div>
             {error && (
               <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
             <Button type="submit" className="w-full" loading={loading}>
-              دریافت کد تأیید
+              دریافت کد
             </Button>
           </form>
         )}
