@@ -17,19 +17,23 @@ jobs:
         run: |
           set -e
           git show d48f490:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
-          python3 -c "
+          python3 <<'PY'
           from pathlib import Path
           p = Path('backend/src/auth/auth.service.ts')
           t = p.read_text(encoding='utf-8')
-          old = 'slug: \`pro-${dto.phone}-${Date.now().toString(36)}\`,'
-          new = 'slug: \`pro-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}\`,'
+          old = 'slug: `pro-${dto.phone}-${Date.now().toString(36)}`,'
+          new = 'slug: `pro-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,'
           if old not in t and 'Math.random().toString(36).slice(2, 8)' not in t:
               raise SystemExit('pattern missing')
           if old in t:
               t = t.replace(old, new)
               p.write_text(t, encoding='utf-8')
+              print('patched', t.count(new))
+          else:
+              print('already patched')
           print('size', p.stat().st_size)
-          "
+          assert p.stat().st_size > 10000
+          PY
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
