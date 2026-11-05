@@ -84,17 +84,21 @@ type Props = {
 };
 
 export function PricingModeFields({ allowed, state, onChange, groups, disabled }: Props) {
+  // #80 pure fixed: no extra UI at all
   if (allowed.length === 1 && allowed[0] === 'fixed') {
     return null;
   }
 
   const activeGroups = (groups || []).filter((g) => g.isActive !== false);
+  const showModePicker = allowed.length > 1;
 
   return (
     <div className="space-y-3 rounded-2xl border border-border bg-[#F7FBFF] p-3" dir="rtl">
-      <p className="text-sm font-medium text-[#0B2C4A]">حالت قیمت‌گذاری</p>
-      <div className="flex flex-wrap gap-2">
-        {allowed.map((m) => (
+      {showModePicker && (
+        <>
+          <p className="text-sm font-medium text-[#0B2C4A]">حالت قیمت‌گذاری</p>
+          <div className="flex flex-wrap gap-2">
+            {allowed.map((m) => (
           <button
             key={m}
             type="button"
@@ -109,7 +113,9 @@ export function PricingModeFields({ allowed, state, onChange, groups, disabled }
             {MODE_LABEL[m]}
           </button>
         ))}
-      </div>
+          </div>
+        </>
+      )}
 
       {state.mode === 'deposit' && (
         <div>
