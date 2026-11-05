@@ -485,14 +485,15 @@ export default function AdminServiceCategoriesPage() {
                         {s.category?.name || 'بدون دسته'} · {s.slug}
                       </p>
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {(s.allowFixed !== false) && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">ثابت</span>
-                        )}
+                        {/* #80: only show badges when non-fixed modes exist; pure fixed = no label clutter */}
                         {s.allowVariable && (
                           <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700">متغیر</span>
                         )}
                         {s.allowDeposit && (
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">بیعانه</span>
+                        )}
+                        {(s.allowVariable || s.allowDeposit) && (s.allowFixed !== false) && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">+ثابت</span>
                         )}
                       </div>
                     </div>

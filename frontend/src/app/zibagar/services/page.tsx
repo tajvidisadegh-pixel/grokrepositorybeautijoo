@@ -385,7 +385,7 @@ export default function ZibagarServicesPage() {
                               : 'bg-slate-100 text-slate-700'
                         }`}
                       >
-                        {modeLabel(ps.pricingMode)}
+                        {String(ps.pricingMode || 'fixed').toLowerCase() !== 'fixed' ? modeLabel(ps.pricingMode) : null}
                       </span>
                     </div>
                     {cat && <p className="mt-0.5 text-xs text-gray">{cat}</p>}
