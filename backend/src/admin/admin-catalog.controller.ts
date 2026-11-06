@@ -1,0 +1,400 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  NotFoundException,
+  BadRequestException,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Min, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { PrismaService } from '../prisma/prisma.service';
+import { AppCacheService } from '../cache/app-cache.service';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+
+function slugify(input: string): string {
+  const base = input
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\u0600-\u06FF-]+/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return base || `node-${Date.now()}`;
+}
+
+class CreateCategoryDto {
+  @IsString() @MinLength(1) name!: string;
+  @IsOptional() @IsUUID() parentId?: string | null;
+  @IsOptional() @IsString() slug?: string;
+  @IsOptional() @IsString() description?: string;
+}
+
+class UpdateCategoryDto {
+  @IsOptional() @IsString() @MinLength(1) name?: string;
+  @IsOptional() @IsUUID() parentId?: string | null;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsString() description?: string;
+  /** Accepted so frontend sortOrder patch is not rejected by forbidNonWhitelisted (#26). */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+  /** Popular mark uses icon === 'popular' (#68). */
+  @IsOptional() @IsString() icon?: string | null;
+}
+
+class CreateCatalogServiceDto {
+  @IsString() @MinLength(1) name!: string;
+  @IsUUID() categoryId!: string;
+  @IsOptional() @IsString() slug?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsUUID() parentId?: string | null;
+}
+
+class CreateVariantDto {
+  @IsString() @MinLength(1) name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() slug?: string;
+}
+
+class UpdateCatalogServiceDto {
+  @IsOptional() @IsString() @MinLength(1) name?: string;
+  @IsOptional() @IsUUID() categoryId?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsString() description?: string;
+}
+
+
+class CreateCatalogAddOnDto {
+  @IsString() @MinLength(1) name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultPrice?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultExtraDurationMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+}
+
+class UpdateCatalogAddOnDto {
+  @IsOptional() @IsString() @MinLength(1) name?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultPrice?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) defaultExtraDurationMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+@ApiTags('admin-catalog')
+@ApiBearerAuth()
+@RequirePermissions('admin.catalog.manage')
+@Controller('admin')
+export class AdminCatalogController {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: AppCacheService,
+  ) {}
+
+  private async audit(
+    actorId: string | undefined,
+    action: string,
+    entityType: string,
+    entityId: string | null,
+    before: unknown,
+    after: unknown,
+  ) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId || null,
+          action,
+          entityType,
+          entityId,
+          before: before as object,
+          after: after as object,
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
+  }
+
+
+  @Get('service-categories')
+  @ApiOperation({ summary: 'List all service categories (including inactive)' })
+  listCategories() {
+    return this.prisma.serviceCategory.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: {
+        parent: { select: { id: true, name: true } },
+        _count: { select: { services: true, children: true } },
+      },
+    });
+  }
+
+  @Post('service-categories')
+  async createCategory(@Body() dto: CreateCategoryDto) {
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name required');
+    if (dto.parentId) {
+      const parent = await this.prisma.serviceCategory.findUnique({ where: { id: dto.parentId } });
+      if (!parent) throw new NotFoundException('parent not found');
+    }
+    let slug = (dto.slug?.trim() || slugify(name)).slice(0, 140);
+    const existing = await this.prisma.serviceCategory.findUnique({ where: { slug } });
+    if (existing) slug = `${slug}-${Date.now().toString(36)}`.slice(0, 140);
+    this.cache.invalidateCatalog();
+    return this.prisma.serviceCategory.create({
+      data: {
+        name,
+        slug,
+        parentId: dto.parentId || null,
+        description: dto.description?.trim() || null,
+        isActive: true,
+      },
+      include: {
+        parent: { select: { id: true, name: true } },
+        _count: { select: { services: true, children: true } },
+      },
+    });
+  }
+
+  @Patch('service-categories/:id')
+  async updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('category not found');
+    if (dto.parentId !== undefined && dto.parentId !== null) {
+      if (dto.parentId === id) throw new BadRequestException('invalid parent');
+      const parent = await this.prisma.serviceCategory.findUnique({ where: { id: dto.parentId } });
+      if (!parent) throw new NotFoundException('parent not found');
+    }
+    this.cache.invalidateCatalog();
+    return this.prisma.serviceCategory.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.parentId !== undefined ? { parentId: dto.parentId } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.description !== undefined ? { description: dto.description.trim() || null } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.icon !== undefined ? { icon: dto.icon ? String(dto.icon).trim() || null : null } : {}),
+      },
+      include: {
+        parent: { select: { id: true, name: true } },
+        _count: { select: { services: true, children: true } },
+      },
+    });
+  }
+
+  /** Soft-delete: deactivate category (and optionally leave children/services). Matches UI «غیرفعال». Issue #26. */
+  @Delete('service-categories/:id')
+  @ApiOperation({ summary: 'Soft-delete category (isActive=false) — seed will not reactivate' })
+  async deleteCategory(@Param('id') id: string) {
+    const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('category not found');
+    this.cache.invalidateCatalog();
+    const updated = await this.prisma.serviceCategory.update({
+      where: { id },
+      data: { isActive: false },
+      include: {
+        parent: { select: { id: true, name: true } },
+        _count: { select: { services: true, children: true } },
+      },
+    });
+    return { id, deleted: true, hard: false, isActive: updated.isActive };
+  }
+
+  @Get('catalog-services')
+  listCatalogServices() {
+    return this.prisma.service.findMany({
+      orderBy: { name: 'asc' },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+  }
+
+  @Post('catalog-services')
+  async createCatalogService(@Body() dto: CreateCatalogServiceDto) {
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name required');
+    const category = await this.prisma.serviceCategory.findUnique({ where: { id: dto.categoryId } });
+    if (!category) throw new NotFoundException('category not found');
+    let slug = (dto.slug?.trim() || slugify(name)).slice(0, 160);
+    const existing = await this.prisma.service.findUnique({ where: { slug } });
+    if (existing) slug = `${slug}-${Date.now().toString(36)}`.slice(0, 160);
+    this.cache.invalidateCatalog();
+    return this.prisma.service.create({
+      data: {
+        name,
+        slug,
+        categoryId: dto.categoryId,
+        description: dto.description?.trim() || null,
+        isActive: true,
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+  }
+
+  @Patch('catalog-services/:id')
+  async updateCatalogService(@Param('id') id: string, @Body() dto: UpdateCatalogServiceDto) {
+    const row = await this.prisma.service.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('service not found');
+    if (dto.categoryId) {
+      const category = await this.prisma.serviceCategory.findUnique({ where: { id: dto.categoryId } });
+      if (!category) throw new NotFoundException('category not found');
+    }
+    this.cache.invalidateCatalog();
+    return this.prisma.service.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.description !== undefined ? { description: dto.description.trim() || null } : {}),
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+  }
+
+  /** Soft-delete specialty — do not wipe professionalService rows (#26). */
+  @Delete('catalog-services/:id')
+  @ApiOperation({ summary: 'Soft-delete catalog service (isActive=false)' })
+  async deleteCatalogService(
+    @Param('id') id: string,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    const row = await this.prisma.service.findUnique({
+      where: { id },
+      include: { _count: { select: { professionalServices: true, variants: true } } },
+    });
+    if (!row) throw new NotFoundException('service not found');
+    const dependentOffers = row._count.professionalServices;
+    const variantCount = row._count.variants;
+    this.cache.invalidateCatalog();
+    const updated = await this.prisma.service.update({
+      where: { id },
+      data: { isActive: false },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+    await this.audit(
+      actorId,
+      'catalog.service.deactivate',
+      'service',
+      id,
+      { isActive: row.isActive, name: row.name },
+      { isActive: false, dependentOffers, variantCount },
+    );
+    return {
+      id,
+      deleted: true,
+      hard: false,
+      isActive: updated.isActive,
+      dependentOffers,
+      variantCount,
+      warning:
+        dependentOffers > 0
+          ? `${dependentOffers} پیشنهاد فعال زیباگر به این خدمت وابسته است؛ حذف سخت انجام نشد و فقط غیرفعال شد.`
+          : undefined,
+    };
+  }
+  // --- Catalog Add-Ons (#30) ---
+  @Get('catalog-addons')
+  @ApiOperation({ summary: 'List all catalog add-on templates (admin)' })
+  listCatalogAddOns() {
+    return this.prisma.catalogAddOn.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  @Post('catalog-addons')
+  async createCatalogAddOn(@Body() dto: CreateCatalogAddOnDto) {
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name required');
+    return this.prisma.catalogAddOn.create({
+      data: {
+        name,
+        description: dto.description?.trim() || null,
+        defaultPrice: dto.defaultPrice ?? 0,
+        defaultExtraDurationMin: dto.defaultExtraDurationMin ?? 0,
+        sortOrder: dto.sortOrder ?? 0,
+        isActive: true,
+      },
+    });
+  }
+
+  @Patch('catalog-addons/:id')
+  async updateCatalogAddOn(@Param('id') id: string, @Body() dto: UpdateCatalogAddOnDto) {
+    const row = await this.prisma.catalogAddOn.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('catalog add-on not found');
+    return this.prisma.catalogAddOn.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description.trim() || null } : {}),
+        ...(dto.defaultPrice !== undefined ? { defaultPrice: dto.defaultPrice } : {}),
+        ...(dto.defaultExtraDurationMin !== undefined
+          ? { defaultExtraDurationMin: dto.defaultExtraDurationMin }
+          : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
+  }
+
+  @Delete('catalog-addons/:id')
+  async deleteCatalogAddOn(@Param('id') id: string) {
+    const row = await this.prisma.catalogAddOn.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('catalog add-on not found');
+    return this.prisma.catalogAddOn.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+
+  @Get('catalog-services/:id/variants')
+  @ApiOperation({ summary: 'List variants (sub-services) of a catalog service (#80.2)' })
+  async listVariants(@Param('id') id: string) {
+    const parent = await this.prisma.service.findUnique({ where: { id } });
+    if (!parent) throw new NotFoundException('service not found');
+    return this.prisma.service.findMany({
+      where: { parentId: id },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+  }
+
+  @Post('catalog-services/:id/variants')
+  @ApiOperation({ summary: 'Create a variant under a catalog service (#80.2)' })
+  async createVariant(@Param('id') id: string, @Body() dto: CreateVariantDto, @CurrentUser('id') actorId?: string) {
+    const parent = await this.prisma.service.findUnique({ where: { id } });
+    if (!parent) throw new NotFoundException('service not found');
+    if (parent.parentId) {
+      throw new BadRequestException('نمی‌توان زیرِ یک واریانت، واریانت ساخت');
+    }
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name required');
+    let slug = (dto.slug || slugify(`${parent.slug}-${name}`)).trim();
+    const clash = await this.prisma.service.findUnique({ where: { slug } });
+    if (clash) slug = `${slug}-${Date.now().toString(36)}`;
+    this.cache.invalidateCatalog();
+    const created = await this.prisma.service.create({
+      data: {
+        name,
+        slug,
+        categoryId: parent.categoryId,
+        description: dto.description?.trim() || null,
+        parentId: parent.id,
+        allowFixed: parent.allowFixed,
+        allowVariable: parent.allowVariable,
+        allowDeposit: parent.allowDeposit,
+        defaultPricingMode: parent.defaultPricingMode,
+        isActive: true,
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+    await this.audit(actorId, 'catalog.variant.create', 'service', created.id, null, { parentId: parent.id, name: created.name });
+    return created;
+  }
+
+}
