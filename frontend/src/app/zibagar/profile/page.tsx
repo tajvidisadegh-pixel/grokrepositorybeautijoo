@@ -41,6 +41,7 @@ export default function ZibagarProfilePage() {
   const [socialBusy, setSocialBusy] = useState(false);
   const [socialMsg, setSocialMsg] = useState<string | null>(null);
   const [socialDirty, setSocialDirty] = useState(false);
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!socialDirty) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -129,29 +130,16 @@ export default function ZibagarProfilePage() {
   const hours = pro?.workingHours || [];
   const locations = pro?.locations || [];
 
+  const publicPath = pro?.slug ? `/professionals/${pro.slug}` : '';
+  const publicUrl =
+    typeof window !== 'undefined' && publicPath
+      ? `${window.location.origin}${publicPath}`
+      : publicPath;
+
   async function saveSocialLinks() {
     // #72 — social links disabled for professionals
     setSocialMsg('ثبت لینک شبکه‌های اجتماعی مجاز نیست');
     return;
-
-    setSocialBusy(true);
-    setSocialMsg(null);
-    setSocialDirty(false);
-    setError(null);
-    try {
-      const payload: SocialLinks = {};
-      for (const k of ['instagram', 'telegram', 'website', 'phone', 'whatsapp'] as const) {
-        const v = (socialForm[k] || '').trim();
-        if (v) payload[k] = v;
-      }
-      const updated = await updateMyProfessional({ socialLinks: payload });
-      setPro(updated);
-      setSocialMsg('لینک‌ها ذخیره شد');
-    } catch (e) {
-      setError(friendlyApiError(e));
-    } finally {
-      setSocialBusy(false);
-    }
   }
 
   return (
@@ -250,17 +238,18 @@ export default function ZibagarProfilePage() {
           <h2 className="font-bold">پیش‌نمایش اشتراک</h2>
           <p className="text-xs text-gray">لینک رزرو را کپی کنید و در استوری/بیو بگذارید.</p>
           <p className="rounded-xl bg-gray-light px-3 py-2 text-xs break-all" dir="ltr">
-            {typeof window !== 'undefined' ? window.location.origin : ''}/p/{pro.slug}
+            {publicUrl}
           </p>
           <button
             type="button"
             className="text-sm text-coral underline"
             onClick={() => {
-              const url = `${window.location.origin}/p/${pro.slug}`;
-              void navigator.clipboard?.writeText(url);
+              void navigator.clipboard?.writeText(publicUrl);
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 2000);
             }}
           >
-            کپی لینک رزرو
+            {copied ? 'کپی شد' : 'کپی لینک رزرو'}
           </button>
         </Card>
       )}

@@ -1,9 +1,8 @@
-# Retired — fixes already applied on main.
-name: patch-login-slug
+name: noop-patch-login-slug
 on:
   workflow_dispatch:
 jobs:
   noop:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "retired; nothing to do"
+      - run: echo retired

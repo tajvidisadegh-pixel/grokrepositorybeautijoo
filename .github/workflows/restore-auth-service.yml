@@ -1,9 +1,8 @@
-# Retired — auth.service restored and slug fixed on main.
-name: restore-auth-service
+name: noop-restore-auth-service
 on:
   workflow_dispatch:
 jobs:
   noop:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "retired; nothing to do"
+      - run: echo retired
