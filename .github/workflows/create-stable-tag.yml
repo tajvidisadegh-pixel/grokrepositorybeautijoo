@@ -1,0 +1,31 @@
+name: Create stable lock tag
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/create-stable-tag.yml
+permissions:
+  contents: write
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag stable-2026-11-06
+        run: |
+          set -euo pipefail
+          # Lock point: commit before this docs/workflow churn if needed — use e778494 (pricing controller restored)
+          TARGET=e778494a3ff75122cc70f76e4070172dbccab435
+          git fetch origin "$TARGET" || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "refs/tags/stable-2026-11-06" >/dev/null 2>&1; then
+            echo "tag already exists"
+            git rev-parse stable-2026-11-06
+            exit 0
+          fi
+          git tag -a "stable-2026-11-06" "$TARGET" -m "Stable lock 2026-11-06 — do not regress auth/SMS/payment boot/admin pricing"
+          git push origin "stable-2026-11-06"
+          echo "created stable-2026-11-06 -> $TARGET"
