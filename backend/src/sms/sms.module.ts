@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SMS_PROVIDER, SmsProvider } from './sms.provider';
 import { MockSmsProvider } from './mock-sms.provider';
 import { SmsIrProvider } from './sms-ir.provider';
+import { DisabledSmsProvider } from './disabled-sms.provider';
 
 const logger = new Logger('SmsModule');
 
@@ -40,18 +41,14 @@ function createSmsProvider(config: ConfigService): SmsProvider {
       'https://api.sms.ir'
     ).trim();
 
-    if (!apiKey) {
-      throw new Error(
-        'FATAL: SMS_PROVIDER=smsir requires SMSIR_API_KEY (set in environment / Liara, never in source).',
+    if (!apiKey || !Number.isFinite(templateId) || templateId <= 0) {
+      // Do not crash the whole API process — site must stay up (#prod outage fix)
+      logger.error(
+        'SMS_PROVIDER=smsir but SMSIR_API_KEY / SMSIR_OTP_TEMPLATE_ID missing. Using disabled SMS.',
       );
-    }
-    if (!Number.isFinite(templateId) || templateId <= 0) {
-      throw new Error(
-        'FATAL: SMS_PROVIDER=smsir requires SMSIR_OTP_TEMPLATE_ID (numeric template id from SMS.ir panel).',
-      );
+      return new DisabledSmsProvider();
     }
 
-    // Searchable boot line — never log the API key value or OTP codes.
     logger.log(
       `SMS_BOOT provider=smsir template=${templateId} param=${otpParamName} apiKeySet=yes line=${lineNumber ? 'set' : 'unset'} baseUrl=${baseUrl}`,
     );
@@ -64,21 +61,23 @@ function createSmsProvider(config: ConfigService): SmsProvider {
     });
   }
 
-  // #77 — mock SMS never boots in production (no ALLOW_MOCK_SMS escape)
-  if (raw === 'mock' || raw === '' || raw === 'none') {
+  // #77 — never use mock success path in production; use disabled instead of process crash
+  if (raw === 'mock' || raw === '' || raw === 'none' || raw === 'disabled' || raw === 'off') {
     if (isProd) {
-      throw new Error(
-        'FATAL: SMS_PROVIDER=mock (or empty) is forbidden in production. ' +
-          'Set SMS_PROVIDER=smsir with SMSIR_API_KEY and SMSIR_OTP_TEMPLATE_ID.',
+      logger.error(
+        'SMS_BOOT provider=disabled (production: mock/empty forbidden). Set SMS_PROVIDER=smsir + keys.',
       );
+      return new DisabledSmsProvider();
     }
     logger.log('SMS_BOOT provider=mock (development)');
     return new MockSmsProvider();
   }
 
-  throw new Error(
-    `FATAL: Unknown SMS_PROVIDER="${raw}". Supported: mock, smsir.`,
-  );
+  if (isProd) {
+    logger.error(`SMS_BOOT unknown provider="${raw}" — using disabled`);
+    return new DisabledSmsProvider();
+  }
+  throw new Error(`FATAL: Unknown SMS_PROVIDER="${raw}". Supported: mock, smsir, disabled.`);
 }
 
 @Global()
@@ -90,6 +89,7 @@ function createSmsProvider(config: ConfigService): SmsProvider {
       inject: [ConfigService],
     },
     MockSmsProvider,
+    DisabledSmsProvider,
   ],
   exports: [SMS_PROVIDER],
 })
