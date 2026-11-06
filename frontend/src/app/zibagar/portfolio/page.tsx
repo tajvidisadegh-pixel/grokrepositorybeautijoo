@@ -76,6 +76,7 @@ export default function ZibagarPortfolioPage() {
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editServiceId, setEditServiceId] = useState('');
   const [editPrice, setEditPrice] = useState('');
@@ -170,18 +171,19 @@ export default function ZibagarPortfolioPage() {
   }
 
   async function onDelete(id: string) {
-    if (!confirm('حذف این مورد؟')) return;
     setBusy(true);
     setMsg(null);
     try {
       await apiClient.delete(`/professionals/me/media/${id}`);
       setMsg('حذف شد.');
+      setDeleteId(null);
       if (editId === id) setEditId(null);
       await load();
     } catch (e) {
       setMsg(friendlyApiError(e));
     } finally {
       setBusy(false);
+      setDeleteId(null);
     }
   }
 
@@ -391,7 +393,7 @@ export default function ZibagarPortfolioPage() {
                         size="sm"
                         variant="outline"
                         loading={busy}
-                        onClick={() => onDelete(m.id)}
+                        onClick={() => setDeleteId(m.id)}
                       >
                         حذف
                       </Button>
@@ -402,6 +404,33 @@ export default function ZibagarPortfolioPage() {
             );
           })}
         </ul>
+      )}
+
+      {deleteId && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !busy && setDeleteId(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-portfolio-title"
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-portfolio-title" className="text-lg font-bold">حذف نمونه‌کار</h2>
+            <p className="mt-2 text-sm text-gray">از حذف این نمونه‌کار مطمئن هستید؟ این عمل قابل بازگشت نیست.</p>
+            <div className="mt-5 flex gap-2">
+              <Button size="sm" variant="danger" loading={busy} onClick={() => void onDelete(deleteId)}>
+                بله، حذف شود
+              </Button>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setDeleteId(null)}>
+                انصراف
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {editId && (
