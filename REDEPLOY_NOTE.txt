@@ -1,0 +1,3 @@
+Production boot fix applied: SMS/payment no longer FATAL-crash Nest.
+Redeploy this branch on Liara after pull.
+Date: 2026-11-06
