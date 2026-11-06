@@ -13,214 +13,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore and patch controller + FE
+      - name: Restore controller from history
         run: |
           set -euo pipefail
-          # Restore good controller (before PLACEHOLDER)
+          git log --oneline -- backend/src/admin/admin-catalog-pricing.controller.ts | head -20
+          # last known good blob before PLACEHOLDER
           git show bfa3d524f4892d52009c8b8a38dcf22a1e91eada:backend/src/admin/admin-catalog-pricing.controller.ts > backend/src/admin/admin-catalog-pricing.controller.ts
-          python3 <<'PY'
-          from pathlib import Path
-          p = Path('backend/src/admin/admin-catalog-pricing.controller.ts')
-          t = p.read_text()
-          if 'PLACEHOLDER' in t:
-              raise SystemExit('still placeholder')
-          old = """    const updated = await this.prisma.service.update({
-      where: { id },
-      data: {
-        allowFixed: next.allowFixed,
-        allowVariable: next.allowVariable,
-        allowDeposit: next.allowDeposit,
-        defaultPricingMode: normalizePricingMode(next.defaultPricingMode),
-      },
-      include: this.serviceInclude(),
-    });
-  }"""
-          new = """    const updated = await this.prisma.service.update({
-      where: { id },
-      data: {
-        allowFixed: next.allowFixed,
-        allowVariable: next.allowVariable,
-        allowDeposit: next.allowDeposit,
-        defaultPricingMode: normalizePricingMode(next.defaultPricingMode),
-      },
-      include: this.serviceInclude(),
-    });
-    await this.audit(
-      actorId,
-      'catalog.pricing_flags.update',
-      'service',
-      id,
-      {
-        allowFixed: row.allowFixed,
-        allowVariable: row.allowVariable,
-        allowDeposit: row.allowDeposit,
-        defaultPricingMode: row.defaultPricingMode,
-      },
-      {
-        allowFixed: updated.allowFixed,
-        allowVariable: updated.allowVariable,
-        allowDeposit: updated.allowDeposit,
-        defaultPricingMode: updated.defaultPricingMode,
-      },
-    );
-    return updated;
-  }"""
-          if 'return updated;' not in t:
-              if old not in t:
-                  raise SystemExit('pattern missing in restored file')
-              t = t.replace(old, new, 1)
-              p.write_text(t)
-              print('return added')
-          else:
-              print('return already present')
-
-          # FE panel
-          p = Path('frontend/src/components/admin/ServicePricingPanel.tsx')
-          t = p.read_text()
-          old = '''          {loading || !data ? (
-            <p className="text-sm text-gray-500">در حال بارگذاری…</p>
-          ) : (
-            <div className="space-y-6">
-              {/* 1 — allowed modes */}
-              <section className="space-y-3">'''
-          new = '''          {loading ? (
-            <p className="text-sm text-gray-500">در حال بارگذاری…</p>
-          ) : !data ? (
-            <div className="space-y-3 py-6 text-center">
-              <p className="text-sm text-red-600">{error || 'بارگذاری تنظیمات قیمت ممکن نشد.'}</p>
-              <button type="button" className="rounded-xl bg-[#2D6CDF] px-4 py-2 text-sm text-white" onClick={() => void load()}>
-                تلاش دوباره
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* 1 — allowed modes */}
-              <section className="space-y-3">'''
-          if old in t:
-              t = t.replace(old, new, 1)
-              print('panel UI')
-          import re
-          m = re.search(r'const row = await apiClient\.patch<PricingPayload>\([\s\S]*?onSaved\?\.\(\);', t)
-          if m and "'id' in row" not in m.group(0):
-              repl = '''const row = await apiClient.patch<PricingPayload>(
-        `/admin/catalog-services/${serviceId}/pricing-flags`,
-        {
-          allowFixed,
-          allowVariable,
-          allowDeposit,
-          defaultPricingMode: defaultMode,
-        },
-      );
-      if (row && typeof row === 'object' && 'id' in row) {
-        setData(row);
-        setAllowFixed(row.allowFixed !== false);
-        setAllowVariable(!!row.allowVariable);
-        setAllowDeposit(!!row.allowDeposit);
-        setDefaultMode(row.defaultPricingMode || 'fixed');
-      } else {
-        await load();
-      }
-      setMsg('حالت‌های قیمت ذخیره شد');
-      onSaved?.();'''
-              t = t[:m.start()] + repl + t[m.end():]
-              print('saveFlags')
-          p.write_text(t)
-
-          # admin page
-          p = Path('frontend/src/app/admin/service-categories/page.tsx')
-          t = p.read_text()
-          if "pricingFilter" not in t:
-              t = t.replace(
-                  "const [query, setQuery] = useState('');",
-                  "const [query, setQuery] = useState('');\n  const [pricingFilter, setPricingFilter] = useState<'all' | 'fixed' | 'variable' | 'deposit'>('all');",
-                  1,
-              )
-          old = '''  const filteredServices = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return services;
-    return services.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.category?.name || '').toLowerCase().includes(q),
-    );
-  }, [services, query]);
-'''
-          new = '''  const filteredServices = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return services.filter((s) => {
-      if (pricingFilter === 'variable' && !s.allowVariable) return false;
-      if (pricingFilter === 'deposit' && !s.allowDeposit) return false;
-      if (pricingFilter === 'fixed' && (s.allowVariable || s.allowDeposit)) return false;
-      if (!q) return true;
-      return (
-        s.name.toLowerCase().includes(q) ||
-        (s.category?.name || '').toLowerCase().includes(q) ||
-        (s.slug || '').toLowerCase().includes(q)
-      );
-    });
-  }, [services, query, pricingFilter]);
-'''
-          if old in t:
-              t = t.replace(old, new, 1)
-              print('filter logic')
-          old = '''        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-[#0B2C4A]">تخصص‌ها</h2>
-          <Input
-            className="max-w-xs"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="جستجوی تخصص..."
-          />
-        </div>'''
-          new = '''        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-[#0B2C4A]">تخصص‌ها</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <select value={pricingFilter} onChange={(e) => setPricingFilter(e.target.value as typeof pricingFilter)} className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm" aria-label="فیلتر قیمت">
-              <option value="all">همه حالت‌های قیمت</option>
-              <option value="fixed">فقط ثابت</option>
-              <option value="variable">دارای متغیر</option>
-              <option value="deposit">دارای بیعانه</option>
-            </select>
-            <Input className="max-w-xs" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="جستجوی تخصص..." />
-          </div>
-        </div>'''
-          if old in t:
-              t = t.replace(old, new, 1)
-              print('filter UI')
-          old = '''                      <button
-                        disabled={busy}
-                        onClick={() => setPricingSvc({ id: s.id, name: s.name })}
-                        className="text-xs text-[#0B2C4A]"
-                      >
-                        قیمت‌گذاری
-                      </button>'''
-          new = '''                      <button type="button" disabled={busy} onClick={() => setPricingSvc({ id: s.id, name: s.name })} className="rounded-lg bg-[#0B2C4A] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
-                        قیمت‌گذاری
-                      </button>'''
-          if old in t:
-              t = t.replace(old, new, 1)
-              print('button')
-          p.write_text(t)
-          print('all done')
-          PY
-      - name: Commit and push main
+          wc -c backend/src/admin/admin-catalog-pricing.controller.ts
+          grep -n "export class AdminCatalogPricingController" backend/src/admin/admin-catalog-pricing.controller.ts
+          # inject return updated if missing
+          python3 -c "
+from pathlib import Path
+p=Path('backend/src/admin/admin-catalog-pricing.controller.ts')
+t=p.read_text()
+assert 'PLACEHOLDER' not in t
+assert 'export class AdminCatalogPricingController' in t
+needle='include: this.serviceInclude(),\n    });\n  }\n\n  @Get('
+# find pricing-flags update end - more robust
+marker='defaultPricingMode: normalizePricingMode(next.defaultPricingMode),\n      },\n      include: this.serviceInclude(),\n    });'
+if 'return updated' not in t and marker in t:
+    t=t.replace(marker, marker+'\n    return updated;', 1)
+    p.write_text(t)
+    print('added return')
+else:
+    print('return status', 'return updated' in t)
+"
+          grep -n "return updated" backend/src/admin/admin-catalog-pricing.controller.ts || true
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/admin/admin-catalog-pricing.controller.ts frontend/src/components/admin/ServicePricingPanel.tsx frontend/src/app/admin/service-categories/page.tsx
-          git commit -m "fix(#80): restore pricing controller + return body + admin UX" || exit 0
+          git add backend/src/admin/admin-catalog-pricing.controller.ts
+          git status
+          git commit -m "fix(#80): restore AdminCatalogPricingController + return updated" || { echo no commit; exit 0; }
           git push origin HEAD:main
-      - name: Sync export ROOT controller
-        run: |
-          git fetch origin beautijoo-backend-export
-          git worktree add /tmp/be origin/beautijoo-backend-export || true
-          if [ -d /tmp/be ]; then
-            mkdir -p /tmp/be/src/admin
-            cp backend/src/admin/admin-catalog-pricing.controller.ts /tmp/be/src/admin/
-            cd /tmp/be
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/admin/admin-catalog-pricing.controller.ts
-            git commit -m "fix(#80): pricing-flags returns updated service" || exit 0
-            git push origin HEAD:beautijoo-backend-export
-          fi
