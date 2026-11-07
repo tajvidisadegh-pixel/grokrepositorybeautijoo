@@ -45,7 +45,8 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — tighten auth throttle (was 100/10m)
+  @Throttle({ default: { limit: 20, ttl: 600_000 } })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
@@ -57,7 +58,8 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — tighten auth throttle (was 100/10m)
+  @Throttle({ default: { limit: 20, ttl: 600_000 } })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -69,7 +71,8 @@ export class AuthController {
   @Public()
   @Post('otp/request')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — OTP request stricter (SMS cost / abuse)
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.auth.requestOtp(dto);
   }
@@ -77,7 +80,8 @@ export class AuthController {
   @Public()
   @Post('otp/verify')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — tighten auth throttle (was 100/10m)
+  @Throttle({ default: { limit: 30, ttl: 600_000 } })
   async verifyOtp(
     @Body() dto: VerifyOtpDto,
     @Res({ passthrough: true }) res: Response,
@@ -169,7 +173,8 @@ export class AuthController {
   @Public()
   @Post('password/forgot')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — password reset request stricter
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto);
   }
@@ -178,7 +183,8 @@ export class AuthController {
   @Public()
   @Post('password/reset')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — tighten auth throttle (was 100/10m)
+  @Throttle({ default: { limit: 20, ttl: 600_000 } })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto);
   }
@@ -186,7 +192,8 @@ export class AuthController {
   @ApiBearerAuth()
   @Post('change-password')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — tighten auth throttle (was 100/10m)
+  @Throttle({ default: { limit: 20, ttl: 600_000 } })
   changePassword(
     @CurrentUser('id') userId: string,
     @Body() dto: ChangePasswordDto,
@@ -221,7 +228,8 @@ export class AuthController {
   
   @Post('change-phone/request')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — change-phone OTP stricter
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   requestChangePhone(
     @CurrentUser('id') userId: string,
     @Body() body: { newPhone?: string },
@@ -231,7 +239,8 @@ export class AuthController {
 
   @Post('change-phone/verify')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — tighten auth throttle (was 100/10m)
+  @Throttle({ default: { limit: 20, ttl: 600_000 } })
   verifyChangePhone(
     @CurrentUser('id') userId: string,
     @Body() body: { newPhone?: string; code?: string },
@@ -241,7 +250,8 @@ export class AuthController {
 
   @Post('delete-account')
   @HttpCode(200)
-  @Throttle({ default: { limit: 100, ttl: 600_000 } })
+  // #82.13 — tighten auth throttle (was 100/10m)
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   async deleteAccount(
     @CurrentUser('id') userId: string,
     @Body() dto: DeleteAccountDto,
