@@ -1,9 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/logo';
 
-const SUPPORT_PHONE =
-  process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || '09153885879';
-
 const FOOTER_LINKS = [
   { href: '/professionals', label: 'زیباگران' },
   { href: '/search', label: 'جستجو' },
@@ -25,13 +22,6 @@ export function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:py-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Logo onDark href={null} className="scale-90 origin-right" />
-          <a
-            href={`tel:${SUPPORT_PHONE.replace(/\s/g, '')}`}
-            className="text-xs text-white/80 transition-colors hover:text-coral-light"
-            dir="ltr"
-          >
-            {SUPPORT_PHONE}
-          </a>
         </div>
 
         <nav aria-label="لینک‌های پاورقی" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/75">
