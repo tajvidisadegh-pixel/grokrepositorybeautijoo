@@ -1,0 +1,97 @@
+name: Restore payments NOW
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/restore-pay-now.yml
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore and patch
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/bb73ef6e50fa0cceaef5ce274a566d2b212e6a6f/backend/src/payments/payments.service.ts" \
+            -o backend/src/payments/payments.service.ts
+          test -s backend/src/payments/payments.service.ts
+          grep -q "export class PaymentsService" backend/src/payments/payments.service.ts
+          python3 -c "
+from pathlib import Path
+p=Path('backend/src/payments/payments.service.ts')
+t=p.read_text()
+assert 'PLACEHOLDER' not in t
+old='''    if (booking.status === BookingStatus.pending || booking.status === BookingStatus.expired) {
+      await this.prisma.booking.update({
+        where: { id: bookingId },
+        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
+      });
+    }
+    return {
+      offline: true,'''
+new='''    if (booking.status === BookingStatus.pending) {
+      await this.prisma.booking.update({
+        where: { id: bookingId },
+        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
+      });
+    }
+    return {
+      offline: true,'''
+if old in t:
+    t=t.replace(old,new,1)
+    p.write_text(t)
+    print('ts fixed')
+else:
+    print('pattern missing or already fixed')
+    print('has offline return', 'offline: true' in t)
+"
+          # portfolio fix
+          python3 -c "
+from pathlib import Path
+p=Path('frontend/src/app/zibagar/portfolio/page.tsx')
+t=p.read_text()
+old='''          items={items.map((m) => ({
+            src: m.publicUrl || '',
+            alt: m.title || 'portfolio',
+            isVideo: isVideo(m.mimeType, m.publicUrl),
+          }))}'''
+new='''          items={items.map((m) => ({
+            id: m.id,
+            url: m.publicUrl || '',
+            mimeType: m.mimeType || undefined,
+            caption: m.title || undefined,
+          }))}'''
+if old in t:
+    p.write_text(t.replace(old,new,1))
+    print('portfolio fixed')
+elif 'id: m.id' in t:
+    print('portfolio ok')
+else:
+    print('portfolio pattern missing')
+"
+          wc -c backend/src/payments/payments.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/payments/payments.service.ts frontend/src/app/zibagar/portfolio/page.tsx
+          git status
+          git commit -m "fix(ci): restore payments.service + portfolio LightboxItem types" || exit 0
+          git push origin HEAD:main
+      - name: Export
+        run: |
+          git fetch origin beautijoo-backend-export
+          rm -rf /tmp/be
+          git worktree add /tmp/be origin/beautijoo-backend-export
+          mkdir -p /tmp/be/src/payments
+          cp backend/src/payments/payments.service.ts /tmp/be/src/payments/
+          cd /tmp/be
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/payments/payments.service.ts
+          git commit -m "fix: restore payments offline + TS2367" || exit 0
+          git push origin HEAD:beautijoo-backend-export
