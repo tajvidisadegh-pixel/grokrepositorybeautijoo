@@ -1,0 +1,223 @@
+name: restore-bookings-then-buffer-82-10
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-bookings-then-buffer-82-10.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore base then apply #82.10 bufferMin
+        run: |
+          set -e
+          git show 5fd76545f4516bd5187816ac7251febec453a026:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          python3 << 'PY'
+from pathlib import Path
+path = Path('backend/src/bookings/bookings.service.ts')
+text = path.read_text()
+helpers = '''
+  /**
+   * #82.10 — Trailing buffer (minutes) from professional services on booking items.
+   * Default 0 keeps prior behavior when buffer is unset.
+   */
+  private maxBufferMin(
+    items: Array<{
+      bufferMin?: number | null;
+      professionalService?: { bufferMin?: number | null } | null;
+    }>,
+  ): number {
+    let max = 0;
+    for (const it of items) {
+      const fromPs = it.professionalService?.bufferMin;
+      const direct = it.bufferMin;
+      const v = typeof fromPs === 'number' ? fromPs : typeof direct === 'number' ? direct : 0;
+      if (v > max) max = v;
+    }
+    return Math.max(0, max);
+  }
+
+  /** Two bookings conflict when either starts inside the other's service + trailing buffer. */
+  private bookingRangesConflict(
+    aStart: Date,
+    aEnd: Date,
+    aBufferMin: number,
+    bStart: Date,
+    bEnd: Date,
+    bBufferMin: number,
+  ): boolean {
+    const aBusyEnd = aEnd.getTime() + Math.max(0, aBufferMin) * 60_000;
+    const bBusyEnd = bEnd.getTime() + Math.max(0, bBufferMin) * 60_000;
+    return aStart.getTime() < bBusyEnd && bStart.getTime() < aBusyEnd;
+  }
+
+'''
+marker = "  ) {}\n\n  async create("
+assert marker in text, 'constructor marker missing'
+text = text.replace(marker, "  ) {}\n" + helpers + "  async create(", 1)
+old_end = """    const endAt = new Date(startAt.getTime() + totalDuration * 60_000);
+
+    const dateStr = tehranDateStr(startAt);
+    const startHHMM = tehranHHMM(startAt);
+    const avail = await this.availability.getSlots(data.professionalId, dateStr, totalDuration);"""
+new_end = """    const endAt = new Date(startAt.getTime() + totalDuration * 60_000);
+    // #82.10 — trailing buffer from selected professional services (0 = legacy behavior)
+    const newBufferMin = orderedServices.reduce(
+      (m, ps) => Math.max(m, ps.bufferMin ?? 0),
+      0,
+    );
+
+    const dateStr = tehranDateStr(startAt);
+    const startHHMM = tehranHHMM(startAt);
+    const avail = await this.availability.getSlots(
+      data.professionalId,
+      dateStr,
+      totalDuration,
+      newBufferMin,
+    );"""
+assert old_end in text, 'create endAt block missing'
+text = text.replace(old_end, new_end, 1)
+old_overlap = """          const overlappingBookings = await tx.booking.count({
+            where: {
+              professionalId: data.professionalId,
+              status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+              startAt: { lt: endAt },
+              endAt: { gt: startAt },
+            },
+          });
+          if (overlappingBookings > 0) {
+            throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+          }"""
+new_overlap = """          // #82.10 — overlap respects trailing bufferMin on both sides
+          const padMin = Math.max(newBufferMin, 180);
+          const padMs = padMin * 60_000;
+          const candidates = await tx.booking.findMany({
+            where: {
+              professionalId: data.professionalId,
+              status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+              startAt: { lt: new Date(endAt.getTime() + padMs) },
+              endAt: { gt: new Date(startAt.getTime() - padMs) },
+            },
+            include: {
+              items: {
+                select: {
+                  professionalService: { select: { bufferMin: true } },
+                },
+              },
+            },
+          });
+          for (const e of candidates) {
+            const eBuf = this.maxBufferMin(e.items);
+            if (
+              this.bookingRangesConflict(
+                startAt,
+                endAt,
+                newBufferMin,
+                e.startAt,
+                e.endAt,
+                eBuf,
+              )
+            ) {
+              throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+            }
+          }"""
+assert old_overlap in text, 'create overlap missing'
+text = text.replace(old_overlap, new_overlap, 1)
+old_reschedule = """  async reschedule(id: string, userId: string, startAtIso: string) {
+    const b = await this.prisma.booking.findUnique({ where: { id } });
+    if (!b) throw new NotFoundException();
+    if (b.customerId !== userId) throw new ForbiddenException();
+    const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+    if (!allowed.includes(b.status)) throw new BadRequestException('قابل جابجایی نیست');
+    const startAt = new Date(startAtIso);
+    if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
+      throw new BadRequestException('زمان نامعتبر');
+    }
+    const durationMs = b.endAt.getTime() - b.startAt.getTime();
+    const endAt = new Date(startAt.getTime() + durationMs);
+    const overlap = await this.prisma.booking.count({
+      where: {
+        professionalId: b.professionalId,
+        id: { not: id },
+        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+    });
+    if (overlap > 0) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+    return this.prisma.booking.update({ where: { id }, data: { startAt, endAt } });
+  }"""
+new_reschedule = """  async reschedule(id: string, userId: string, startAtIso: string) {
+    const b = await this.prisma.booking.findUnique({
+      where: { id },
+      include: {
+        items: {
+          select: {
+            professionalService: { select: { bufferMin: true } },
+          },
+        },
+      },
+    });
+    if (!b) throw new NotFoundException();
+    if (b.customerId !== userId) throw new ForbiddenException();
+    const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+    if (!allowed.includes(b.status)) throw new BadRequestException('قابل جابجایی نیست');
+    const startAt = new Date(startAtIso);
+    if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
+      throw new BadRequestException('زمان نامعتبر');
+    }
+    const durationMs = b.endAt.getTime() - b.startAt.getTime();
+    const endAt = new Date(startAt.getTime() + durationMs);
+    // #82.10 — respect trailing bufferMin when moving a booking
+    const newBufferMin = this.maxBufferMin(b.items);
+    const padMs = Math.max(newBufferMin, 180) * 60_000;
+    const candidates = await this.prisma.booking.findMany({
+      where: {
+        professionalId: b.professionalId,
+        id: { not: id },
+        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+        startAt: { lt: new Date(endAt.getTime() + padMs) },
+        endAt: { gt: new Date(startAt.getTime() - padMs) },
+      },
+      include: {
+        items: {
+          select: {
+            professionalService: { select: { bufferMin: true } },
+          },
+        },
+      },
+    });
+    for (const e of candidates) {
+      const eBuf = this.maxBufferMin(e.items);
+      if (
+        this.bookingRangesConflict(
+          startAt,
+          endAt,
+          newBufferMin,
+          e.startAt,
+          e.endAt,
+          eBuf,
+        )
+      ) {
+        throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+      }
+    }
+    return this.prisma.booking.update({ where: { id }, data: { startAt, endAt } });
+  }"""
+assert old_reschedule in text, 'reschedule missing'
+text = text.replace(old_reschedule, new_reschedule, 1)
+path.write_text(text)
+print('patched', path.stat().st_size)
+print('maxBufferMin', text.count('maxBufferMin'))
+PY
+          grep -c maxBufferMin backend/src/bookings/bookings.service.ts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git commit -m "fix(#82.10): apply professionalService.bufferMin in booking overlap (create/reschedule)"
+          git push
