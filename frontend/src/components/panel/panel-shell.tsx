@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { RequireAuth } from '@/components/auth/require-auth';
 import { fetchUnreadCount } from '@/lib/panel-api';
+import { NotificationBell } from '@/components/layout/notification-bell';
 
 export type PanelNavItem = {
   href: string;
@@ -172,7 +173,7 @@ export function PanelShell({ title, items, roles, children }: Props) {
         <div className="flex flex-col gap-6 md:flex-row md:gap-8">
           {/* Desktop sidebar */}
           <aside className="hidden w-full shrink-0 md:block md:w-56">
-            {title ? <h2 className="mb-4 text-lg font-bold text-foreground">{title}</h2> : null}
+            <div className="mb-4 flex items-center justify-between gap-2">{title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}<NotificationBell /></div>
             <nav className="flex flex-col gap-1">
               {items.map((item) => (
                 <NavLink
@@ -188,15 +189,18 @@ export function PanelShell({ title, items, roles, children }: Props) {
           {/* Mobile header + expandable full menu */}
           <div className="md:hidden">
             <div className="mb-3 flex items-center justify-between gap-2">
-              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : null}
-              <button
+              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}
+              <div className="flex items-center gap-1">
+                <NotificationBell />
+                <button
                 type="button"
                 className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-gray"
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-expanded={moreOpen}
               >
                 {moreOpen ? 'بستن منو' : 'همه بخش‌ها'}
-              </button>
+                </button>
+              </div>
             </div>
             {moreOpen && (
               <nav className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-white p-2">

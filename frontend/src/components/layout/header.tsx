@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Search, Menu, X } from 'lucide-react';
+import { NotificationBell } from '@/components/layout/notification-bell';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
@@ -60,6 +61,8 @@ export function Header() {
           >
             <Search className="size-5" aria-hidden />
           </Link>
+
+          <NotificationBell />
 
           {isAuthenticated ? (
             <div className="hidden items-center gap-2 sm:flex">
