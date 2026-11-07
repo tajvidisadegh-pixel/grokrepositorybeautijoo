@@ -242,8 +242,9 @@ export class AuthService {
     const purpose = `${purposeBase}:${accountType}`;
     const ttl = this.config.get<number>('otpTtlSeconds') || 300;
     const cooldown = this.config.get<number>('otpCooldownSeconds') || 60;
-    const maxPerHour = this.config.get<number>('otpMaxPerHour') || 100;
-    const maxPerDay = this.config.get<number>('otpMaxPerDay') || 100;
+    // #82.13 — defaults align with configuration.ts / .env.example (was || 100)
+    const maxPerHour = this.config.get<number>('otpMaxPerHour') || 3;
+    const maxPerDay = this.config.get<number>('otpMaxPerDay') || 8;
 
     const recent = await this.prisma.otpCode.findFirst({
       where: {

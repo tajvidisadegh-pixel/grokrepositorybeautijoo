@@ -45,6 +45,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!isImpersonating) {
       const cached = userAuthCache.get(payload.sub);
       if (cached) {
+        // #82.15 — lightweight status re-check so suspended/inactive users
+        // lose access within one request even if still in the in-memory TTL cache.
+        // Avoids full roles/permissions reload on every hit.
+        const row = await this.prisma.user.findUnique({
+          where: { id: payload.sub },
+          select: { status: true },
+        });
+        if (!row || row.status !== 'active') {
+          userAuthCache.invalidate(payload.sub);
+          throw new UnauthorizedException();
+        }
         return cached;
       }
     }

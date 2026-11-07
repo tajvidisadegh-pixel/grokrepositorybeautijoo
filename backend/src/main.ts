@@ -44,14 +44,17 @@ async function bootstrap() {
       );
     }
 
+    // #82.14 — no directory listing; public portfolio media only
     app.useStaticAssets(uploadsAbs, {
       prefix: '/uploads/',
+      index: false,
       setHeaders: (res) => {
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
       },
     });
-    logger.log(`Static /uploads → ${uploadsAbs}`);
+    logger.log(`Static /uploads → ${uploadsAbs} (#82.14 public media only)`);
   } else {
     logger.log(
       `STORAGE_PROVIDER=${storageKind} — static /uploads disabled (object storage serves files)`,
@@ -121,17 +124,22 @@ async function bootstrap() {
     if (!isProd) {
       SwaggerModule.setup('api/docs', app, document);
       logger.log('Swagger UI enabled at /api/docs (non-production)');
+      // #82.14 — OpenAPI JSON only outside production
+      const http = app.getHttpAdapter().getInstance();
+      if (http && typeof http.get === 'function') {
+        http.get(
+          '/api/v1/openapi.json',
+          (_req: unknown, res: { type: (t: string) => void; json: (b: unknown) => void }) => {
+            res.type('application/json');
+            res.json(document);
+          },
+        );
+        logger.log(
+          `OpenAPI JSON at /api/v1/openapi.json (api=${API_VERSION_LABEL}, app=${APP_VERSION})`,
+        );
+      }
     } else {
-      logger.log('Swagger UI disabled in production');
-    }
-    // Public OpenAPI JSON in all environments (codegen / external clients)
-    const http = app.getHttpAdapter().getInstance();
-    if (http && typeof http.get === 'function') {
-      http.get('/api/v1/openapi.json', (_req: unknown, res: { type: (t: string) => void; json: (b: unknown) => void }) => {
-        res.type('application/json');
-        res.json(document);
-      });
-      logger.log(`OpenAPI JSON at /api/v1/openapi.json (api=${API_VERSION_LABEL}, app=${APP_VERSION})`);
+      logger.log('Swagger UI and OpenAPI JSON disabled in production (#82.14)');
     }
   }
 
