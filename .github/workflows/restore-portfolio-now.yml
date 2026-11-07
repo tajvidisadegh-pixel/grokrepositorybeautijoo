@@ -1,0 +1,54 @@
+name: Restore portfolio NOW
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/restore-portfolio-now.yml
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore from last good commit and fix types
+        run: |
+          set -euo pipefail
+          # last known good before TOO_LARGE corruption
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/f646098de8e5bfbfdbc3ca17902509877a7c54a2/frontend/src/app/zibagar/portfolio/page.tsx" \
+            -o frontend/src/app/zibagar/portfolio/page.tsx
+          grep -q "ZibagarPortfolioPage" frontend/src/app/zibagar/portfolio/page.tsx
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/zibagar/portfolio/page.tsx')
+          t = p.read_text()
+          assert 'TOO_LARGE' not in t and 'export default function ZibagarPortfolioPage' in t
+          old = """          items={items.map((m) => ({
+            src: m.publicUrl || '',
+            alt: m.title || 'portfolio',
+            isVideo: isVideo(m.mimeType, m.publicUrl),
+          }))}"""
+          new = """          items={items.map((m) => ({
+            id: m.id,
+            url: m.publicUrl || '',
+            mimeType: m.mimeType || undefined,
+            caption: m.title || undefined,
+          }))}"""
+          if old in t:
+              t = t.replace(old, new, 1)
+              p.write_text(t)
+              print('lightbox fixed')
+          else:
+              print('pattern missing')
+              raise SystemExit(1)
+          print('size', p.stat().st_size)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/portfolio/page.tsx
+          git commit -m "fix: restore portfolio page + LightboxItem types" || exit 0
+          git push origin HEAD:main
