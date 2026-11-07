@@ -1,4 +1,4 @@
-# buffer82 / #82.11 staging
+# staging notes
 
-Temporary notes for #82.10 bufferMin and #82.11 bookings_no_overlap_active docs.
-Runtime unaffected.
+#82.10 bufferMin overlap + #82.11 bookings_no_overlap_active docs.
+Payments restored from 5fd7654 after accidental PLACEHOLDER.
