@@ -3,23 +3,28 @@
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { fetchUnreadCount } from '@/lib/panel-api';
 
 const POLL_MS = 45_000;
 
 /**
- * Header bell with unread badge + smart polling (18.14).
- * Listens to focus / visibility / beautijoo:unread-changed.
+ * Header bell with unread badge + smart polling.
+ * Always sits at the top of the page (site header / panel chrome).
  */
-export function NotificationBell() {
+export function NotificationBell({ className = '' }: { className?: string }) {
   const { isAuthenticated, loading, hasRole } = useAuth();
+  const pathname = usePathname() || '';
   const [count, setCount] = useState(0);
 
-  const href =
-    hasRole('professional') && !hasRole('customer')
-      ? '/zibagar/notifications'
-      : '/panel/notifications';
+  const href = (() => {
+    if (pathname.startsWith('/zibagar')) return '/zibagar/notifications';
+    if (pathname.startsWith('/panel')) return '/panel/notifications';
+    if (pathname.startsWith('/admin')) return '/admin/notifications';
+    if (hasRole('professional')) return '/zibagar/notifications';
+    return '/panel/notifications';
+  })();
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
@@ -65,7 +70,10 @@ export function NotificationBell() {
   return (
     <Link
       href={href}
-      className="relative flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral"
+      className={
+        className ||
+        'relative flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral'
+      }
       aria-label={
         count > 0
           ? `${count.toLocaleString('fa-IR')} اعلان خوانده‌نشده`
@@ -78,7 +86,7 @@ export function NotificationBell() {
           className="absolute end-1.5 top-1.5 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-coral px-1 text-[10px] font-bold leading-none text-white"
           aria-hidden
         >
-          {count > 99 ? '99+' : count}
+          {count > 99 ? '99+' : count.toLocaleString('fa-IR')}
         </span>
       )}
     </Link>
