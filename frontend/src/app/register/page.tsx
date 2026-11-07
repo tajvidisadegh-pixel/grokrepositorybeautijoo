@@ -22,8 +22,9 @@ function RegisterForm() {
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  /** نقش از لینک می‌آید (?as=professional)؛ در فرم ساده انتخاب نقش نشان داده نمی‌شود */
-  const role: RegisterRole = asParam === 'professional' ? 'professional' : 'customer';
+  const [role, setRole] = useState<RegisterRole>(
+    asParam === 'professional' ? 'professional' : 'customer',
+  );
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,10 +37,11 @@ function RegisterForm() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
+  // اگر همان نقش را دارد برو پنل؛ مشتری می‌تواند نقش زیباگر را هم بسازد
   if (isAuthenticated) {
-    if (hasRole('professional')) {
-      router.replace('/zibagar/profile/complete');
-    } else {
+    if (role === 'professional' && hasRole('professional')) {
+      router.replace('/zibagar');
+    } else if (role === 'customer' && !hasRole('professional')) {
       router.replace('/panel');
     }
   }
@@ -115,6 +117,33 @@ function RegisterForm() {
       </div>
 
       <Card>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setRole('customer')}
+            className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${
+              role === 'customer'
+                ? 'border-coral bg-coral/10 text-coral'
+                : 'border-border text-gray hover:border-coral/40'
+            }`}
+          >
+            نوبت می‌گیرم
+          </button>
+          <button
+            type="button"
+            onClick={() => setRole('professional')}
+            className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${
+              role === 'professional'
+                ? 'border-coral bg-coral/10 text-coral'
+                : 'border-border text-gray hover:border-coral/40'
+            }`}
+          >
+            زیباگر هستم
+          </button>
+        </div>
+        <p className="mb-3 text-xs text-gray">
+          یک شماره می‌تواند هم حساب نوبت‌گیر و هم حساب زیباگر داشته باشد.
+        </p>
         {step === 'phone' && (
           <form onSubmit={onPhoneSubmit} className="space-y-4">
             <div>
