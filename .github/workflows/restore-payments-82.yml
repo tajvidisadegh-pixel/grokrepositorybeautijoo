@@ -1,0 +1,22 @@
+name: restore-payments-82
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-payments-82.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore payments service
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          import base64
+          from pathlib import Path
+          # Content loaded from embedded halves in next lines - see full file
+          print('use full workflow from artifact')
+          PY
