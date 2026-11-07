@@ -1,0 +1,537 @@
+name: Fix issue 82 items 5-9
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/fix-82-5-9.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patches
+        run: |
+          set -euxo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          # ---- payments callback #82.5 ----
+          pp = Path('backend/src/payments/payments.service.ts')
+          t = pp.read_text()
+          if 'rejectReason: \'booking_cancelled\'' in t or 'rejectReason: "booking_cancelled"' in t or "rejectReason: 'booking_cancelled'" in t:
+              print('payments already patched')
+          else:
+              old = '''    const verified = await this.provider.verify(providerRef, payment.amount);
+    if (!verified.success) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: PaymentStatus.failed },
+      });
+      await this.releaseUnpaidPendingBooking(
+        payment.bookingId,
+        'payment_verify_failed',
+      );
+      return { status: 'failed', bookingId: payment.bookingId };
+    }
+
+    const rateRow = await this.prisma.platformSetting.findUnique({
+      where: { key: PLATFORM_COMMISSION_RATE_KEY },
+    });
+    const rate =
+      rateRow?.value != null && Number.isFinite(Number(rateRow.value))
+        ? Number(rateRow.value)
+        : DEFAULT_PLATFORM_COMMISSION_RATE;
+    const { commissionAmount, professionalNetAmount } = calculateCommission(
+      payment.amount,
+      rate,
+    );
+
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: PaymentStatus.paid,
+        paidAt: new Date(),
+        platformCommissionAmount: commissionAmount,
+        professionalNetAmount: professionalNetAmount,
+        metadata: {
+          ...(typeof payment.metadata === 'object' && payment.metadata !== null
+            ? (payment.metadata as object)
+            : {}),
+          gatewayRefId: verified.refId ?? null,
+        },
+      },
+    });
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: payment.bookingId },
+    });
+    if (booking && (booking.status === 'pending' || booking.status === 'expired')) {
+      await this.prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
+      });
+    }
+
+    return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };
+  }'''
+              new = Path('/dev/null')  # placeholder replaced below
+              assert old in t, 'payments callback old block missing'
+              # load new from heredoc file written next
+              print('will replace payments')
+              open('/tmp/old_pay.txt','w').write(old)
+              open('/tmp/pay_src.txt','w').write(t)
+
+          print('payments size', len(t))
+          PY
+          # Use prebuilt files from repo scripts if present; else apply via curl from commit
+          python3 <<'PY'
+          from pathlib import Path
+          # Inline minimal surgical replace using markers unique to unpatched file
+          pp = Path('backend/src/payments/payments.service.ts')
+          t = pp.read_text()
+          if "rejectReason: 'booking_cancelled'" in t:
+              print('skip payments')
+          else:
+              needle = "    const booking = await this.prisma.booking.findUnique({\n      where: { id: payment.bookingId },\n    });\n    if (booking && (booking.status === 'pending' || booking.status === 'expired')) {\n      await this.prisma.booking.update({\n        where: { id: payment.bookingId },\n        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },\n      });\n    }\n\n    return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };"
+              # Insert guards BEFORE rateRow calculation — find verified success end
+              insert_at = t.find("    const rateRow = await this.prisma.platformSetting.findUnique({\n      where: { key: PLATFORM_COMMISSION_RATE_KEY },\n    });")
+              assert insert_at > 0, 'rateRow marker missing'
+              # Only insert if after verify success path
+              guard = '''
+    // #82.5 — reject paid confirm on cancelled booking; re-check slot for expired/pending
+    const bookingRow =
+      payment.booking ||
+      (await this.prisma.booking.findUnique({ where: { id: payment.bookingId } }));
+    if (!bookingRow) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.failed,
+          metadata: {
+            ...(typeof payment.metadata === 'object' && payment.metadata !== null
+              ? (payment.metadata as object)
+              : {}),
+            gatewayRefId: null,
+            rejectReason: 'booking_missing',
+          },
+        },
+      });
+      return { status: 'failed', bookingId: payment.bookingId, reason: 'booking_missing' };
+    }
+    if (bookingRow.status === BookingStatus.cancelled) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.failed,
+          metadata: {
+            ...(typeof payment.metadata === 'object' && payment.metadata !== null
+              ? (payment.metadata as object)
+              : {}),
+            rejectReason: 'booking_cancelled',
+            verifiedButRejected: true,
+          },
+        },
+      });
+      try {
+        if (payment.providerRef) {
+          await this.provider.refund({
+            providerRef: payment.providerRef,
+            amount: payment.amount,
+            reason: 'رزرو قبل از تأیید پرداخت لغو شده بود',
+          });
+        }
+      } catch { /* non-blocking */ }
+      return { status: 'failed', bookingId: payment.bookingId, reason: 'booking_cancelled' };
+    }
+    if (
+      bookingRow.status === BookingStatus.expired ||
+      bookingRow.status === BookingStatus.pending
+    ) {
+      const overlap = await this.prisma.booking.count({
+        where: {
+          professionalId: bookingRow.professionalId,
+          id: { not: bookingRow.id },
+          status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+          startAt: { lt: bookingRow.endAt },
+          endAt: { gt: bookingRow.startAt },
+        },
+      });
+      const timeOff = await this.prisma.timeOff.count({
+        where: {
+          professionalId: bookingRow.professionalId,
+          startAt: { lt: bookingRow.endAt },
+          endAt: { gt: bookingRow.startAt },
+        },
+      });
+      const manual = await this.prisma.manualReservation.count({
+        where: {
+          professionalId: bookingRow.professionalId,
+          startAt: { lt: bookingRow.endAt },
+          endAt: { gt: bookingRow.startAt },
+        },
+      });
+      if (overlap > 0 || timeOff > 0 || manual > 0) {
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: PaymentStatus.failed,
+            metadata: {
+              ...(typeof payment.metadata === 'object' && payment.metadata !== null
+                ? (payment.metadata as object)
+                : {}),
+              rejectReason: 'slot_unavailable',
+              verifiedButRejected: true,
+            },
+          },
+        });
+        try {
+          if (payment.providerRef) {
+            await this.provider.refund({
+              providerRef: payment.providerRef,
+              amount: payment.amount,
+              reason: 'بازه زمانی دیگر در دسترس نبود',
+            });
+          }
+        } catch { /* non-blocking */ }
+        return { status: 'failed', bookingId: payment.bookingId, reason: 'slot_unavailable' };
+      }
+    }
+
+'''
+              t = t[:insert_at] + guard + t[insert_at:]
+              # Replace non-transactional paid+confirm with transactional using bookingRow
+              old_tail = '''    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: PaymentStatus.paid,
+        paidAt: new Date(),
+        platformCommissionAmount: commissionAmount,
+        professionalNetAmount: professionalNetAmount,
+        metadata: {
+          ...(typeof payment.metadata === 'object' && payment.metadata !== null
+            ? (payment.metadata as object)
+            : {}),
+          gatewayRefId: verified.refId ?? null,
+        },
+      },
+    });
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: payment.bookingId },
+    });
+    if (booking && (booking.status === 'pending' || booking.status === 'expired')) {
+      await this.prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
+      });
+    }
+
+    return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };'''
+              new_tail = '''    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.paid,
+          paidAt: new Date(),
+          platformCommissionAmount: commissionAmount,
+          professionalNetAmount: professionalNetAmount,
+          metadata: {
+            ...(typeof payment.metadata === 'object' && payment.metadata !== null
+              ? (payment.metadata as object)
+              : {}),
+            gatewayRefId: verified.refId ?? null,
+          },
+        },
+      });
+      if (
+        bookingRow.status === BookingStatus.pending ||
+        bookingRow.status === BookingStatus.expired
+      ) {
+        await tx.booking.update({
+          where: { id: payment.bookingId },
+          data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
+        });
+      }
+    });
+
+    return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };'''
+              assert old_tail in t, 'tail missing after insert'
+              t = t.replace(old_tail, new_tail, 1)
+              pp.write_text(t)
+              print('payments patched', pp.stat().st_size)
+
+          # ---- bookings ----
+          bp = Path('backend/src/bookings/bookings.service.ts')
+          bt = bp.read_text()
+          if 'PaymentStatus' not in bt.split('from \'@prisma/client\'')[0] and 'PaymentStatus,' not in bt:
+              bt = bt.replace(
+                  "import { BookingStatus, NotificationType, Prisma } from '@prisma/client';",
+                  "import { BookingStatus, NotificationType, PaymentStatus, Prisma } from '@prisma/client';",
+              )
+          if '#82.7' not in bt:
+              old_c = """      const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+      if (!allowed.includes(b.status)) throw new BadRequestException('این رزرو قابل لغو نیست');
+      // Customer cancel of confirmed/paid remains (policy may refund later)
+      return this.prisma.booking.update({
+        where: { id },
+        data: {
+          status: BookingStatus.cancelled,
+          cancelReason: reason ?? null,
+          cancelledAt: new Date(),
+        },
+      });
+    }"""
+              new_c = """      const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+      if (!allowed.includes(b.status)) throw new BadRequestException('این رزرو قابل لغو نیست');
+
+      // #82.7 — customer cancel of paid booking must refund
+      if (paid && isCustomer && b.payment?.id) {
+        if (b.payment.providerRef) {
+          return await this.payments.refund(
+            b.payment.id,
+            reason ?? 'لغو توسط مشتری',
+            userId,
+          );
+        }
+        await this.prisma.$transaction(async (tx) => {
+          await tx.payment.update({
+            where: { id: b.payment!.id },
+            data: {
+              status: PaymentStatus.refunded,
+              metadata: {
+                ...(typeof b.payment!.metadata === 'object' && b.payment!.metadata !== null
+                  ? (b.payment!.metadata as object)
+                  : {}),
+                refund: {
+                  reason: reason ?? 'لغو توسط مشتری',
+                  refundedAt: new Date().toISOString(),
+                  offline: true,
+                },
+              },
+            },
+          });
+          await tx.booking.update({
+            where: { id },
+            data: {
+              status: BookingStatus.cancelled,
+              cancelReason: reason ?? 'لغو توسط مشتری',
+              cancelledAt: new Date(),
+            },
+          });
+        });
+        return { message: 'رزرو لغو و مبلغ به‌صورت آفلاین استرداد شد', offlineRefund: true };
+      }
+
+      return this.prisma.booking.update({
+        where: { id },
+        data: {
+          status: BookingStatus.cancelled,
+          cancelReason: reason ?? null,
+          cancelledAt: new Date(),
+        },
+      });
+    }"""
+              assert old_c in bt, 'cancel block missing'
+              bt = bt.replace(old_c, new_c, 1)
+              print('cancel patched')
+
+          if '#82.6' not in bt:
+              old_r = """  async reschedule(id: string, userId: string, startAtIso: string) {
+    const b = await this.prisma.booking.findUnique({ where: { id } });
+    if (!b) throw new NotFoundException();
+    if (b.customerId !== userId) throw new ForbiddenException();
+    const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+    if (!allowed.includes(b.status)) throw new BadRequestException('قابل جابجایی نیست');
+    const startAt = new Date(startAtIso);
+    if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
+      throw new BadRequestException('زمان نامعتبر');
+    }
+    const durationMs = b.endAt.getTime() - b.startAt.getTime();
+    const endAt = new Date(startAt.getTime() + durationMs);
+    const overlap = await this.prisma.booking.count({
+      where: {
+        professionalId: b.professionalId,
+        id: { not: id },
+        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+    });
+    if (overlap > 0) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+    return this.prisma.booking.update({ where: { id }, data: { startAt, endAt } });
+  }"""
+              new_r = Path('backend/src/bookings/bookings.service.ts').read_text()  # noop
+              new_r = """  async reschedule(id: string, userId: string, startAtIso: string) {
+    const b = await this.prisma.booking.findUnique({ where: { id } });
+    if (!b) throw new NotFoundException();
+    if (b.customerId !== userId) throw new ForbiddenException();
+    const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+    if (!allowed.includes(b.status)) throw new BadRequestException('قابل جابجایی نیست');
+    const startAt = new Date(startAtIso);
+    if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
+      throw new BadRequestException('زمان نامعتبر');
+    }
+    // #82.6 lead time
+    {
+      const minLead = parseInt(process.env.BOOKING_MIN_LEAD_HOURS || '4', 10);
+      const hours = Number.isFinite(minLead) && minLead >= 0 ? minLead : 4;
+      if (startAt.getTime() - Date.now() < hours * 3600_000) {
+        throw new BadRequestException(
+          hours === 0 ? 'زمان شروع نامعتبر است' : `حداقل ${hours} ساعت قبل از نوبت باید رزرو کنید.`,
+        );
+      }
+    }
+    const durationMs = b.endAt.getTime() - b.startAt.getTime();
+    const durationMin = Math.max(1, Math.round(durationMs / 60_000));
+    const endAt = new Date(startAt.getTime() + durationMs);
+    const dateStr = tehranDateStr(startAt);
+    const startHHMM = tehranHHMM(startAt);
+    const avail = await this.availability.getSlots(b.professionalId, dateStr, durationMin);
+    const normalizeHhmm = (s: string) => {
+      const m = /^(\d{1,2}):(\d{2})/.exec(String(s).trim());
+      if (!m) return s;
+      return `${m[1].padStart(2, '0')}:${m[2]}`;
+    };
+    const want = normalizeHhmm(startHHMM);
+    const slotOk = avail.slots.some(
+      (s: { start: string; end: string; available?: boolean }) =>
+        normalizeHhmm(s.start) === want && s.available !== false,
+    );
+    if (!slotOk) throw new ConflictException('این بازه زمانی در دسترس نیست');
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRawUnsafe(
+          `SELECT id FROM professionals WHERE id = $1::uuid FOR UPDATE`,
+          b.professionalId,
+        );
+        const overlap = await tx.booking.count({
+          where: {
+            professionalId: b.professionalId,
+            id: { not: id },
+            status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+            startAt: { lt: endAt },
+            endAt: { gt: startAt },
+          },
+        });
+        if (overlap > 0) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+        const timeOff = await tx.timeOff.count({
+          where: {
+            professionalId: b.professionalId,
+            startAt: { lt: endAt },
+            endAt: { gt: startAt },
+          },
+        });
+        if (timeOff > 0) throw new ConflictException('در این بازه مرخصی/تعطیلی ثبت شده است');
+        const manual = await tx.manualReservation.count({
+          where: {
+            professionalId: b.professionalId,
+            startAt: { lt: endAt },
+            endAt: { gt: startAt },
+          },
+        });
+        if (manual > 0) throw new ConflictException('این بازه با رزرو دستی تداخل دارد');
+        return tx.booking.update({ where: { id }, data: { startAt, endAt } });
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+        maxWait: 5_000,
+        timeout: 15_000,
+      },
+    );
+  }"""
+              assert old_r in bt, 'reschedule missing'
+              bt = bt.replace(old_r, new_r, 1)
+              print('reschedule patched')
+
+          if '#82.8' not in bt:
+              old_n = """      await this.notifications.notify({
+        userId: pro.userId,
+        type: NotificationType.booking_request,
+        title: 'درخواست رزرو (در انتظار پرداخت)',
+        body: 'یک مشتری نوبت رزرو کرده و در حال پرداخت است. تا تأیید پرداخت، نوبت قطعی نیست.',
+        data: {
+          bookingId: booking.id,
+          customerId,
+          professionalId: data.professionalId,
+          href: `/zibagar/bookings?focus=${booking.id}`,
+        },
+        sms: true,
+      });
+      await this.notifications.notify({
+        userId: customerId,
+        type: NotificationType.booking_request,
+        title: 'رزرو در انتظار پرداخت',
+        body: 'رزرو شما ثبت شد. پس از پرداخت موفق، نوبت قطعی می‌شود.',
+        data: { bookingId: booking.id, professionalId: data.professionalId },
+        sms: false,
+      });
+      return booking;"""
+              new_n = """      // #82.8 — notify must not fail request after booking commit
+      try {
+        await this.notifications.notify({
+          userId: pro.userId,
+          type: NotificationType.booking_request,
+          title: 'درخواست رزرو (در انتظار پرداخت)',
+          body: 'یک مشتری نوبت رزرو کرده و در حال پرداخت است. تا تأیید پرداخت، نوبت قطعی نیست.',
+          data: {
+            bookingId: booking.id,
+            customerId,
+            professionalId: data.professionalId,
+            href: `/zibagar/bookings?focus=${booking.id}`,
+          },
+          sms: true,
+        });
+      } catch (err) {
+        this.logger.warn(`notify pro failed booking=${booking.id}: ${(err as Error)?.message || err}`);
+      }
+      try {
+        await this.notifications.notify({
+          userId: customerId,
+          type: NotificationType.booking_request,
+          title: 'رزرو در انتظار پرداخت',
+          body: 'رزرو شما ثبت شد. پس از پرداخت موفق، نوبت قطعی می‌شود.',
+          data: { bookingId: booking.id, professionalId: data.professionalId },
+          sms: false,
+        });
+      } catch (err) {
+        this.logger.warn(`notify customer failed booking=${booking.id}: ${(err as Error)?.message || err}`);
+      }
+      return booking;"""
+              assert old_n in bt, 'notify missing'
+              bt = bt.replace(old_n, new_n, 1)
+              print('notify patched')
+
+          bp.write_text(bt)
+          print('bookings', bp.stat().st_size)
+
+          # #82.9 docs
+          Path('docs/SECURITY_ISSUE_82_9.md').write_text('''# Issue #82.9 — Repository exposure & secret hygiene\n\n## Owner actions\n1. Make the repository **private** (GitHub Settings).\n2. Scan history: `gitleaks detect --source .` or `trufflehog git file://. --only-verified`.\n3. Rotate any leaked credentials immediately.\n\nCode fixes for #82.5–#82.8 do not replace making the repo private.\n''')
+          print('security doc')
+          PY
+      - name: Commit and push
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/payments/payments.service.ts backend/src/bookings/bookings.service.ts docs/SECURITY_ISSUE_82_9.md
+          git status
+          git commit -m "fix(#82.5-9): callback guards, reschedule locks, paid cancel refund, safe notify" || exit 0
+          git pull --rebase origin main || true
+          git push origin HEAD:main
+          # sync export
+          git fetch origin beautijoo-backend-export || exit 0
+          rm -rf /tmp/be
+          git worktree add /tmp/be origin/beautijoo-backend-export || exit 0
+          mkdir -p /tmp/be/src/payments /tmp/be/src/bookings
+          cp backend/src/payments/payments.service.ts /tmp/be/src/payments/
+          cp backend/src/bookings/bookings.service.ts /tmp/be/src/bookings/
+          cd /tmp/be
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/payments/payments.service.ts src/bookings/bookings.service.ts
+          git commit -m "fix(#82.5-9): payment callback + booking safety" || true
+          git push origin HEAD:beautijoo-backend-export || true
