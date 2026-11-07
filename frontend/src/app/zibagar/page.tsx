@@ -252,7 +252,8 @@ export default function ZibagarDashboard() {
           <h2 className="font-bold">شروع سریع (۳۰ ثانیه)</h2>
           <ol className="list-decimal space-y-1 pr-5 text-sm text-gray">
             <li><Link href="/zibagar/services" className="text-coral underline">خدمت بساز</Link></li>
-            <li><Link href="/zibagar/hours" className="text-coral underline">ساعات بگذار</Link></li>
+            <li><Link href="/zibagar/hours" className="text-coral underline">ساعات کاری بگذار</Link></li>
+            <li><Link href="/zibagar/portfolio" className="text-coral underline">گالری نمونه‌کار آپلود کن</Link></li>
             <li><Link href="/zibagar/profile" className="text-coral underline">منتشر کن</Link></li>
           </ol>
           <button

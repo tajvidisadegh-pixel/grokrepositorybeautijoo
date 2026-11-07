@@ -194,11 +194,23 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
-    const user = await this.prisma.user.findFirst({
-      where: { phone: dto.phone, accountType },
+    const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';
+    const candidates = await this.prisma.user.findMany({
+      where: { phone: dto.phone },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
+    let user =
+      candidates.find((u) => u.accountType === accountType) ||
+      candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted)) ||
+      null;
     if (!user || !user.passwordHash) {
+      if (candidates.length > 0) {
+        const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
+        const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
+        throw new UnauthorizedException(
+          'برای این شماره حساب ' + want + ' با رمز پیدا نشد. اگر حساب ' + other + ' دارید نوع ورود را عوض کنید یا ثبت‌نام نقش جدید انجام دهید.',
+        );
+      }
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
     }
     if (user.status !== UserStatus.active) {
@@ -335,10 +347,15 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    let user = await this.prisma.user.findFirst({
-      where: { phone: dto.phone, accountType },
+    const roleWantedOtp = accountType === AccountType.professional ? 'professional' : 'customer';
+    const otpCandidates = await this.prisma.user.findMany({
+      where: { phone: dto.phone },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
+    let user =
+      otpCandidates.find((u) => u.accountType === accountType) ||
+      otpCandidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWantedOtp)) ||
+      null;
 
     if (!user) {
       const roleName = accountType === AccountType.professional ? 'professional' : 'customer';
