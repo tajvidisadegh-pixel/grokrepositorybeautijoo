@@ -416,6 +416,10 @@ export function BookingWizard({
           (typeof window !== 'undefined' ? window.location.origin : '');
         const callbackUrl = `${appUrl}/payment/callback`;
         const pay = await initiatePayment(created.id, callbackUrl);
+        if (pay.offline || pay.status === 'paid' || (!pay.redirectUrl && pay.bookingId)) {
+          router.push(`/booking/confirmation/${created.id}`);
+          return;
+        }
         if (pay.redirectUrl) {
           window.location.href = pay.redirectUrl;
           return;
