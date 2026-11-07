@@ -254,7 +254,7 @@ export class PaymentsService {
     if (booking.status === BookingStatus.expired || booking.status === BookingStatus.cancelled) {
       throw new BadRequestException('این رزرو دیگر قابل پرداخت نیست');
     }
-    if (booking.payment?.status === PaymentStatus.paid || booking.payment?.status === 'paid') {
+    if (booking.payment?.status === PaymentStatus.paid) {
       throw new ConflictException('قبلاً پرداخت شده');
     }
 
