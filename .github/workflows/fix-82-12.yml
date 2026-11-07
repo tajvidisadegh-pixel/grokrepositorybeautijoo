@@ -1,0 +1,55 @@
+name: fix-82-12
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply 82.12
+        run: |
+          set -e
+          echo starting
+          git show f98f9759a54eb7c4e3964f5a5b232464915fa9c6:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          python3 -c "
+          from pathlib import Path
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text()
+          start = t.find(\"    if (action === 'complete') {\")
+          end = t.find(\"    if (action === 'no_show') {\", start)
+          assert start > 0 and end > start
+          new_block = '''    if (action === \'complete\') {
+      if (!isPro) throw new ForbiddenException();
+      // #82.12 — only confirmed (paid) bookings can be completed; never unpaid pending/expired
+      if (b.status !== BookingStatus.confirmed) {
+        throw new BadRequestException(\'complete requires confirmed booking\');
+      }
+      const paid =
+        b.payment?.status === \'paid\' ||
+        (b.payment as { status?: string } | null)?.status === \'paid\';
+      if (!paid) {
+        throw new BadRequestException(\'complete requires paid booking\');
+      }
+      return this.prisma.booking.update({
+        where: { id },
+        data: { status: BookingStatus.completed, completedAt: new Date() },
+      });
+    }
+
+'''
+          p.write_text(t[:start] + new_block + t[end:])
+          print('patched', '#82.12' in p.read_text())
+          "
+          grep -q '#82.12' backend/src/bookings/bookings.service.ts
+          grep -q '#82.12' backend/src/cleanup/cleanup.service.ts || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git commit -m "fix(#82.12): complete only confirmed+paid bookings in transition()" || echo nochange
+          git push
