@@ -1,0 +1,25 @@
+name: assemble-bookings-82-10
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backend/tmp/bookings_chunks/**'
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble and commit
+        run: |
+          set -e
+          cat backend/tmp/bookings_chunks/part_00.txt backend/tmp/bookings_chunks/part_01.txt backend/tmp/bookings_chunks/part_02.txt backend/tmp/bookings_chunks/part_03.txt > backend/src/bookings/bookings.service.ts
+          wc -c backend/src/bookings/bookings.service.ts
+          head -3 backend/src/bookings/bookings.service.ts
+          grep -n "#82.10" backend/src/bookings/bookings.service.ts | head -5
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git commit -m "fix(#82.10): apply bufferMin to booking overlap create/reschedule" || echo nochange
+          git push
