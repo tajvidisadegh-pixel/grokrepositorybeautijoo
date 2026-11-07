@@ -1,0 +1,47 @@
+name: restore-82-5-9
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-82-5-9.yml'
+      - '.github/payloads/fix-82-5-9/**'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble and write services + doc
+        run: |
+          set -euo pipefail
+          mkdir -p backend/src/payments backend/src/bookings docs
+          cat .github/payloads/fix-82-5-9/pay.* | base64 -d > backend/src/payments/payments.service.ts
+          cat .github/payloads/fix-82-5-9/book.* | base64 -d > backend/src/bookings/bookings.service.ts
+          cat > docs/SECURITY_ISSUE_82_9.md << 'EOF'
+          # Issue #82.9 — Repository exposure & secret hygiene
+
+          ## Owner actions (cannot be done from CI alone)
+          1. **Make the repository private** on GitHub (Settings → General → Danger zone), or move secrets out of any public fork.
+          2. Run a history scan on a trusted machine (gitleaks / trufflehog).
+          3. If any secret is found in history: **rotate** the credential immediately, then purge history if required.
+
+          ## App-side hygiene
+          - Never commit `.env`, Liara tokens, SMS API keys, or payment merchant keys.
+          - Production must set real `PAYMENT_PROVIDER` / SMS provider.
+
+          This item is process + owner configuration.
+          EOF
+          grep -q '#82.5' backend/src/payments/payments.service.ts
+          grep -q '#82.6' backend/src/bookings/bookings.service.ts
+          grep -q '#82.7' backend/src/bookings/bookings.service.ts
+          grep -q '#82.8' backend/src/bookings/bookings.service.ts
+          wc -l backend/src/payments/payments.service.ts backend/src/bookings/bookings.service.ts
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/payments/payments.service.ts backend/src/bookings/bookings.service.ts docs/SECURITY_ISSUE_82_9.md
+          if git diff --cached --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(#82.5-9): restore callback guards, reschedule locks, paid cancel refund, safe notify, security doc"
+          git push
