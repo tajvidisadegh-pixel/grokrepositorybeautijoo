@@ -25,8 +25,9 @@ jobs:
           if [ -f package-lock.json ]; then
             echo "lock exists ($(wc -l < package-lock.json) lines)"
           else
-            npm install --package-lock-only
+            npm install --package-lock-only --no-audit --no-fund
             test -f package-lock.json
+            echo "generated ($(wc -l < package-lock.json) lines)"
           fi
           grep -q "npm ci" Dockerfile
           grep -q "USER node" Dockerfile
