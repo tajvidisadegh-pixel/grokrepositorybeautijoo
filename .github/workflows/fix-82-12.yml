@@ -1,10 +1,9 @@
 name: fix-82-12
-on:
+"on":
   workflow_dispatch:
   push:
-    branches: [main]
     paths:
-      - '.github/workflows/fix-82-12.yml'
+      - ".github/workflows/fix-82-12.yml"
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -14,58 +13,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore and patch bookings #82.12
+      - name: patch bookings complete gate
         run: |
           set -euo pipefail
-          echo "=== start fix-82-12 ==="
           git show f98f9759a54eb7c4e3964f5a5b232464915fa9c6:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
-          wc -c backend/src/bookings/bookings.service.ts
           python3 << 'PY'
           from pathlib import Path
           p = Path("backend/src/bookings/bookings.service.ts")
           t = p.read_text()
-          if "#82.12" in t and "only confirmed (paid)" in t:
-              print("already patched")
-          else:
-              start = t.find("    if (action === 'complete') {")
-              end = t.find("    if (action === 'no_show') {", start)
-              if start < 0 or end < 0:
-                  raise SystemExit(f"markers not found start={start} end={end}")
-              new_block = """    if (action === 'complete') {
-      if (!isPro) throw new ForbiddenException();
-      // #82.12 — only confirmed (paid) bookings can be completed; never unpaid pending/expired
-      if (b.status !== BookingStatus.confirmed) {
-        throw new BadRequestException('فقط نوبت تأییدشده (پرداخت‌شده) قابل تکمیل است');
-      }
-      const paid =
-        b.payment?.status === 'paid' ||
-        (b.payment as { status?: string } | null)?.status === 'paid';
-      if (!paid) {
-        throw new BadRequestException('فقط نوبت پرداخت‌شده قابل تکمیل است');
-      }
-      return this.prisma.booking.update({
-        where: { id },
-        data: { status: BookingStatus.completed, completedAt: new Date() },
-      });
-    }
-
-"""
-              p.write_text(t[:start] + new_block + t[end:])
-              print("bookings patched")
-          text = p.read_text()
-          assert "#82.12" in text
-          assert "only confirmed (paid)" in text
-          print("verify ok", p.stat().st_size)
+          start = t.find("    if (action === 'complete') {")
+          end = t.find("    if (action === 'no_show') {", start)
+          assert start > 0 and end > start, (start, end)
+          new_block = (
+              "    if (action === 'complete') {\n"
+              "      if (!isPro) throw new ForbiddenException();\n"
+              "      // #82.12 — only confirmed (paid) bookings can be completed; never unpaid pending/expired\n"
+              "      if (b.status !== BookingStatus.confirmed) {\n"
+              "        throw new BadRequestException('complete requires confirmed booking');\n"
+              "      }\n"
+              "      const paid =\n"
+              "        b.payment?.status === 'paid' ||\n"
+              "        (b.payment as { status?: string } | null)?.status === 'paid';\n"
+              "      if (!paid) {\n"
+              "        throw new BadRequestException('complete requires paid booking');\n"
+              "      }\n"
+              "      return this.prisma.booking.update({\n"
+              "        where: { id },\n"
+              "        data: { status: BookingStatus.completed, completedAt: new Date() },\n"
+              "      });\n"
+              "    }\n"
+              "\n"
+          )
+          p.write_text(t[:start] + new_block + t[end:])
+          assert "#82.12" in p.read_text()
+          print("patched ok", p.stat().st_size)
           PY
-          grep -n "#82.12" backend/src/bookings/bookings.service.ts
-          grep -n "#82.12" backend/src/cleanup/cleanup.service.ts || echo "cleanup note: may already be patched"
+          grep -q '#82.12' backend/src/bookings/bookings.service.ts
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/bookings/bookings.service.ts
-          if git diff --cached --quiet; then
-            echo "no changes to commit"
-          else
-            git commit -m "fix(#82.12): complete only confirmed+paid bookings in transition()"
-            git push
-            echo "pushed"
-          fi
+          git commit -m "fix(#82.12): complete only confirmed+paid bookings in transition()"
+          git push
