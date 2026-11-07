@@ -1,0 +1,67 @@
+name: Offline wizard + export sync
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/offline-wizard-export.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch wizard and config
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text()
+          if 'pay.offline' not in t:
+              old = '        const pay = await initiatePayment(created.id, callbackUrl);\n        if (pay.redirectUrl) {\n'
+              new = (
+                  '        const pay = await initiatePayment(created.id, callbackUrl);\n'
+                  "        if (pay.offline || pay.status === 'paid' || (!pay.redirectUrl && pay.bookingId)) {\n"
+                  '          router.push(`/booking/confirmation/${created.id}`);\n'
+                  '          return;\n'
+                  '        }\n'
+                  '        if (pay.redirectUrl) {\n'
+              )
+              if old not in t:
+                  raise SystemExit('wizard block not found')
+              p.write_text(t.replace(old, new, 1))
+              print('wizard ok')
+          p = Path('backend/src/config/configuration.ts')
+          t = p.read_text()
+          if 'bookingPaymentMode' not in t:
+              needle = "    paymentProvider: process.env.PAYMENT_PROVIDER || '',\n"
+              t = t.replace(needle, needle + "    bookingPaymentMode: (process.env.BOOKING_PAYMENT_MODE || 'auto').toLowerCase(),\n", 1)
+              p.write_text(t)
+              print('config ok')
+          assert 'confirmOfflineBooking' in Path('backend/src/payments/payments.service.ts').read_text()
+          print('payments ok')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/booking/booking-wizard.tsx backend/src/config/configuration.ts
+          git commit -m "feat: booking wizard handles offline confirmation" || exit 0
+          git push origin HEAD:main
+      - name: Sync export
+        run: |
+          git fetch origin beautijoo-backend-export
+          rm -rf /tmp/be
+          git worktree add /tmp/be origin/beautijoo-backend-export
+          mkdir -p /tmp/be/src/payments /tmp/be/src/config
+          cp backend/src/payments/payments.service.ts /tmp/be/src/payments/
+          cp backend/src/config/configuration.ts /tmp/be/src/config/
+          cd /tmp/be
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/payments/payments.service.ts src/config/configuration.ts
+          git commit -m "feat: offline booking without gateway" || exit 0
+          git push origin HEAD:beautijoo-backend-export
