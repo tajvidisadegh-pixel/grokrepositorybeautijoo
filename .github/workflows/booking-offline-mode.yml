@@ -1,0 +1,318 @@
+name: Booking offline payment mode
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/booking-offline-mode.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch backend + frontend
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          # --- configuration.ts ---
+          p = Path('backend/src/config/configuration.ts')
+          t = p.read_text()
+          if 'bookingPaymentMode' not in t:
+              needle = "    paymentProvider: process.env.PAYMENT_PROVIDER || '',\n"
+              insert = (
+                  "    paymentProvider: process.env.PAYMENT_PROVIDER || '',\n"
+                  "    /** gateway | offline | auto (default). auto=offline unless PAYMENT_PROVIDER is a real gateway */\n"
+                  "    bookingPaymentMode: (process.env.BOOKING_PAYMENT_MODE || 'auto').toLowerCase(),\n"
+              )
+              if needle not in t:
+                  raise SystemExit('config needle missing')
+              t = t.replace(needle, insert, 1)
+              p.write_text(t)
+              print('config ok')
+          else:
+              print('config skip')
+
+          # --- payments.service.ts ---
+          p = Path('backend/src/payments/payments.service.ts')
+          t = p.read_text()
+          if 'confirmOfflineBooking' not in t:
+              # insert helpers before initiate
+              marker = '  async initiate(userId: string, bookingId: string, callbackUrl: string) {'
+              if marker not in t:
+                  raise SystemExit('initiate marker missing')
+              helpers = r'''
+  /**
+   * Reversible offline booking (no payment gateway).
+   * - BOOKING_PAYMENT_MODE=offline → always offline
+   * - BOOKING_PAYMENT_MODE=gateway → always online gateway path
+   * - BOOKING_PAYMENT_MODE=auto (default) → offline unless PAYMENT_PROVIDER is a real gateway (e.g. zarinpal)
+   * When you get a gateway license: set PAYMENT_PROVIDER=zarinpal (and keys) → auto switches back to gateway.
+   */
+  private resolveBookingPaymentMode(): 'offline' | 'gateway' {
+    const explicit = (
+      process.env.BOOKING_PAYMENT_MODE ||
+      this.config.get<string>('bookingPaymentMode') ||
+      'auto'
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+    if (explicit === 'offline' || explicit === 'no_gateway' || explicit === 'pay_later') {
+      return 'offline';
+    }
+    if (explicit === 'gateway' || explicit === 'online') {
+      return 'gateway';
+    }
+    const provider = this.providerName();
+    if (provider === 'zarinpal' || provider === 'zibal' || provider === 'idpay') {
+      return 'gateway';
+    }
+    return 'offline';
+  }
+
+  private async confirmOfflineBooking(userId: string, bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { payment: true },
+    });
+    if (!booking) throw new NotFoundException();
+    if (booking.customerId !== userId) throw new ForbiddenException();
+    if (booking.status === BookingStatus.expired || booking.status === BookingStatus.cancelled) {
+      throw new BadRequestException('این رزرو دیگر قابل تأیید نیست');
+    }
+    if (booking.payment?.status === PaymentStatus.paid) {
+      return {
+        offline: true,
+        status: 'paid',
+        bookingId,
+        redirectUrl: null as string | null,
+        providerRef: booking.payment.providerRef ?? 'offline',
+      };
+    }
+
+    const idempotencyKey = booking.payment?.idempotencyKey || randomUUID();
+    if (!booking.payment) {
+      await this.prisma.payment.create({
+        data: {
+          bookingId,
+          amount: booking.totalPrice,
+          status: PaymentStatus.pending,
+          provider: 'offline',
+          idempotencyKey,
+        },
+      });
+    }
+
+    const rateRow = await this.prisma.platformSetting.findUnique({
+      where: { key: 'platform_commission_rate' },
+    }).catch(() => null);
+    const rate =
+      rateRow?.value != null && Number.isFinite(Number(rateRow.value))
+        ? Number(rateRow.value)
+        : 0;
+    const { commissionAmount, professionalNetAmount } = calculateCommission(
+      booking.totalPrice,
+      rate,
+    );
+
+    await this.prisma.payment.update({
+      where: { bookingId },
+      data: {
+        status: PaymentStatus.paid,
+        provider: 'offline',
+        providerRef: `offline-${bookingId.slice(0, 8)}`,
+        paidAt: new Date(),
+        platformCommissionAmount: commissionAmount,
+        professionalNetAmount: professionalNetAmount,
+        metadata: {
+          mode: 'offline',
+          note: 'Confirmed without online gateway (BOOKING_PAYMENT_MODE). Not a bank settlement.',
+        },
+      },
+    });
+
+    if (booking.status === BookingStatus.pending || booking.status === BookingStatus.expired) {
+      await this.prisma.booking.update({
+        where: { id: bookingId },
+        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
+      });
+    }
+
+    return {
+      offline: true,
+      status: 'paid',
+      bookingId,
+      redirectUrl: null as string | null,
+      providerRef: `offline-${bookingId.slice(0, 8)}`,
+    };
+  }
+
+'''
+              t = t.replace(marker, helpers + marker, 1)
+
+              # inject offline branch at start of initiate body (after callback assert)
+              old_init = '''  async initiate(userId: string, bookingId: string, callbackUrl: string) {
+    // #64.5 — lock callback to allowed frontend origins before talking to gateway
+    this.assertAllowedCallbackUrl(callbackUrl);
+    const providerKey = this.providerName();
+    if (providerKey === 'disabled') {
+'''
+              new_init = '''  async initiate(userId: string, bookingId: string, callbackUrl: string) {
+    // Offline / auto-without-gateway: confirm booking without redirect (reversible via env)
+    if (this.resolveBookingPaymentMode() === 'offline') {
+      return this.confirmOfflineBooking(userId, bookingId);
+    }
+
+    // #64.5 — lock callback to allowed frontend origins before talking to gateway
+    this.assertAllowedCallbackUrl(callbackUrl);
+    const providerKey = this.providerName();
+    if (providerKey === 'disabled') {
+'''
+              if old_init not in t:
+                  raise SystemExit('initiate body needle missing')
+              t = t.replace(old_init, new_init, 1)
+              p.write_text(t)
+              print('payments.service ok')
+          else:
+              print('payments.service skip')
+
+          # ensure calculateCommission import exists
+          p = Path('backend/src/payments/payments.service.ts')
+          t = p.read_text()
+          if 'calculateCommission' not in t.split('confirmOfflineBooking')[0] and 'from \'./financial.util\'' not in t and 'from "./financial.util"' not in t:
+              # check import
+              pass
+          if 'financial.util' not in t:
+              # add import after other imports
+              lines = t.splitlines(True)
+              for i, line in enumerate(lines):
+                  if line.startswith('import '):
+                      last = i
+              lines.insert(last + 1, "import { calculateCommission } from './financial.util';\n")
+              p.write_text(''.join(lines))
+              print('import calculateCommission')
+          else:
+              print('financial.util already imported')
+
+          # --- booking-api.ts ---
+          p = Path('frontend/src/lib/booking-api.ts')
+          t = p.read_text()
+          old = '''export function initiatePayment(bookingId: string, callbackUrl: string) {
+  return apiClient.post<{
+    paymentId?: string;
+    redirectUrl?: string;
+    providerRef?: string;
+  }>('/payments/initiate', { bookingId, callbackUrl });
+}'''
+          new = '''export function initiatePayment(bookingId: string, callbackUrl: string) {
+  return apiClient.post<{
+    paymentId?: string;
+    redirectUrl?: string | null;
+    providerRef?: string;
+    /** true when confirmed without online gateway */
+    offline?: boolean;
+    status?: string;
+    bookingId?: string;
+  }>('/payments/initiate', { bookingId, callbackUrl });
+}'''
+          if old in t:
+              p.write_text(t.replace(old, new, 1))
+              print('booking-api ok')
+          else:
+              print('booking-api skip or different')
+
+          # --- booking-wizard.tsx ---
+          p = Path('frontend/src/components/booking/booking-wizard.tsx')
+          t = p.read_text()
+          old = '''        const pay = await initiatePayment(created.id, callbackUrl);
+        if (pay.redirectUrl) {
+          window.location.href = pay.redirectUrl;
+          return;
+        }
+        // #64.2 — no gateway URL: free calendar hold
+        try {
+          await cancelMyBooking(created.id, 'payment_no_redirect');
+        } catch {
+          /* already released server-side */
+        }
+        setPaymentInfo(
+          'لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید.',
+        );'''
+          new = '''        const pay = await initiatePayment(created.id, callbackUrl);
+        // Offline / no-gateway mode: booking already confirmed server-side
+        if (pay.offline || pay.status === 'paid' || (!pay.redirectUrl && pay.bookingId)) {
+          router.push(`/booking/confirmation/${created.id}`);
+          return;
+        }
+        if (pay.redirectUrl) {
+          window.location.href = pay.redirectUrl;
+          return;
+        }
+        // #64.2 — gateway expected but no URL: free calendar hold
+        try {
+          await cancelMyBooking(created.id, 'payment_no_redirect');
+        } catch {
+          /* already released server-side */
+        }
+        setPaymentInfo(
+          'لینک درگاه دریافت نشد. نوبت نگه‌داشته نشد — بعداً دوباره تلاش کنید.',
+        );'''
+          if old in t:
+              p.write_text(t.replace(old, new, 1))
+              print('wizard ok')
+          else:
+              print('wizard skip — pattern missing')
+              raise SystemExit('wizard pattern missing')
+
+          # env example notes
+          for envp in ['backend/.env.example', '.env.example']:
+              ep = Path(envp)
+              if not ep.exists():
+                  continue
+              et = ep.read_text()
+              if 'BOOKING_PAYMENT_MODE' in et:
+                  print(envp, 'already has mode')
+                  continue
+              et += '''
+
+# ---- Booking without online gateway (reversible) ----
+# auto (default): offline unless PAYMENT_PROVIDER is zarinpal/zibal/idpay
+# offline: always confirm without gateway
+# gateway: always require online payment (current strict behavior)
+# BOOKING_PAYMENT_MODE=auto
+'''
+              ep.write_text(et)
+              print(envp, 'annotated')
+
+          print('ALL_OK')
+          PY
+      - name: Commit main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/config/configuration.ts backend/src/payments/payments.service.ts \
+            frontend/src/lib/booking-api.ts frontend/src/components/booking/booking-wizard.tsx \
+            backend/.env.example .env.example || true
+          git status
+          git commit -m "feat: reversible offline booking when no payment gateway (BOOKING_PAYMENT_MODE)" || exit 0
+          git push origin HEAD:main
+      - name: Sync payments.service to export ROOT
+        run: |
+          set -euo pipefail
+          git fetch origin beautijoo-backend-export
+          rm -rf /tmp/be
+          git worktree add /tmp/be origin/beautijoo-backend-export
+          mkdir -p /tmp/be/src/payments /tmp/be/src/config
+          cp backend/src/payments/payments.service.ts /tmp/be/src/payments/
+          cp backend/src/config/configuration.ts /tmp/be/src/config/
+          cd /tmp/be
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/payments/payments.service.ts src/config/configuration.ts
+          git commit -m "feat: offline booking mode (no gateway) — reversible via BOOKING_PAYMENT_MODE" || exit 0
+          git push origin HEAD:beautijoo-backend-export
