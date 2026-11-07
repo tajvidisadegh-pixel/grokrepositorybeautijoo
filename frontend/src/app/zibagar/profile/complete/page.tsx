@@ -23,7 +23,7 @@ import {
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { IRAN_PROVINCES, citiesOf, type IranCity } from '@/lib/geo/iran-provinces';
-import LocationMapPicker, { type MapPosition } from '@/components/location/location-map-picker';
+import LocationMapPicker, type { MapPosition } from '@/components/location/location-map-picker';
 
 const STEPS: WizardStep[] = [
   { id: 'basic', label: 'اطلاعات پایه' },
@@ -43,6 +43,13 @@ const WEEK_DAYS = [
   { value: 'thursday', label: 'پنج‌شنبه' },
   { value: 'friday', label: 'جمعه' },
 ];
+
+/** 24h time options — avoids browser AM/PM type=time UI */
+const TIME_OPTIONS_24H: string[] = Array.from({ length: 24 * 4 }, (_, i) => {
+  const h = Math.floor(i / 4);
+  const m = (i % 4) * 15;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+});
 
 export default function ProfileCompletePage() {
   const { user, loading: authLoading, reload } = useAuth();
@@ -281,7 +288,7 @@ export default function ProfileCompletePage() {
       const data = await publishMyProfessional();
       setPro(data); setCompletion(data.completion || null);
       setConfirmPublish(false);
-      setMsg('پروفایل منتشر شد');
+      setMsg('پروفایل شما با موفقیت ثبت شد و برای بررسی ارسال شد. پس از تأیید ادمین، در صفحه عمومی و جستجو دیده خواهید شد.');
       await reload();
     } catch (e) {
       setError(friendlyApiError(e));
@@ -334,6 +341,7 @@ export default function ProfileCompletePage() {
           </label>
         </Card>
       )}
+
       {step === 1 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">تصاویر پروفایل</h2>
@@ -386,6 +394,7 @@ export default function ProfileCompletePage() {
           </div>
         </Card>
       )}
+
       {step === 2 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">موقعیت محل فعالیت</h2>
@@ -434,6 +443,7 @@ export default function ProfileCompletePage() {
           </div>
         </Card>
       )}
+
       {step === 3 && (
         <Card className="space-y-4">
           <h2 className="font-semibold text-[#0B2C4A]">تخصص خودت را انتخاب کن</h2>
@@ -464,38 +474,117 @@ export default function ProfileCompletePage() {
               </div>
             </div>
           )}
-          <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده</p>
         </Card>
       )}
+
       {step === 4 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">ساعات کاری</h2>
           <OnboardingTip>{STEP_TIPS.hours}</OnboardingTip>
-          <div className="flex flex-wrap gap-2">
-            {WEEK_DAYS.map((d) => (
-              <button key={d.value} type="button" onClick={() => toggleHourDay(d.value)}
-                className={`rounded-full border px-3 py-1.5 text-sm ${hourDays.includes(d.value) ? 'border-coral bg-coral text-white' : 'border-border'}`}>
-                {d.label}
-              </button>
-            ))}
+          <p className="text-xs text-gray">
+            روزهای کاری را روشن کنید. رنگ مرجانی و برچسب «فعال» یعنی روز کاری؛ خاکستری و «تعطیل» یعنی بسته.
+            ساعت‌ها به صورت ۲۴ ساعته هستند (بدون AM/PM).
+          </p>
+          <div className="space-y-2">
+            {WEEK_DAYS.map((d) => {
+              const active = hourDays.includes(d.value);
+              return (
+                <div
+                  key={d.value}
+                  className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${
+                    active ? 'border-coral/40 bg-coral-soft/30' : 'border-border bg-gray-light/40'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={`${d.label} ${active ? 'فعال' : 'تعطیل'}`}
+                    onClick={() => toggleHourDay(d.value)}
+                    className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+                      active ? 'bg-coral' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                        active ? 'right-0.5' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="w-16 shrink-0 text-sm font-medium">{d.label}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      active ? 'bg-coral text-white' : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {active ? 'فعال' : 'تعطیل'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1 text-sm">از ساعت
-              <Input type="time" value={hourStart} onChange={(e) => setHourStart(e.target.value)} dir="ltr" /></label>
-            <label className="block space-y-1 text-sm">تا ساعت
-              <Input type="time" value={hourEnd} onChange={(e) => setHourEnd(e.target.value)} dir="ltr" /></label>
+            <label className="block space-y-1 text-sm">
+              از ساعت
+              <select
+                className="h-10 w-full rounded-xl border border-border bg-white px-3 text-center text-sm"
+                value={hourStart}
+                onChange={(e) => setHourStart(e.target.value)}
+                dir="ltr"
+              >
+                {TIME_OPTIONS_24H.map((t) => (
+                  <option key={`ws-${t}`} value={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 text-sm">
+              تا ساعت
+              <select
+                className="h-10 w-full rounded-xl border border-border bg-white px-3 text-center text-sm"
+                value={hourEnd}
+                onChange={(e) => setHourEnd(e.target.value)}
+                dir="ltr"
+              >
+                {TIME_OPTIONS_24H.map((t) => (
+                  <option key={`we-${t}`} value={t}>{t}</option>
+                ))}
+              </select>
+            </label>
           </div>
+          <p className="text-[11px] text-gray">
+            همین بازه برای همه روزهای فعال اعمال می‌شود. بعداً در بخش «ساعات کاری» می‌توانید روزبه‌روز تغییر دهید.
+          </p>
         </Card>
       )}
+
       {step === 5 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">بررسی نهایی</h2>
           <OnboardingTip>{STEP_TIPS.review}</OnboardingTip>
           <p className="text-sm text-gray">پیشرفت: {percent}٪ {isPublished ? '· منتشر شده' : ''}</p>
           {!completion?.complete && <p className="text-sm text-coral">برخی موارد هنوز کامل نیست؛ می‌توانید بعداً تکمیل کنید.</p>}
-          <Button onClick={() => setConfirmPublish(true)} disabled={publishing || isPublished}>
-            {isPublished ? 'قبلاً منتشر شده' : 'انتشار پروفایل'}
+          <Button
+            onClick={() => setConfirmPublish(true)}
+            disabled={publishing || isPublished || pro?.status === 'pending_review'}
+          >
+            {isPublished
+              ? 'قبلاً تأیید شده'
+              : pro?.status === 'pending_review'
+                ? 'در انتظار بررسی ادمین'
+                : 'ارسال برای بررسی'}
           </Button>
+          {(pro?.status === 'pending_review' || isPublished) && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+              <p className="font-medium">ثبت شد ✓</p>
+              <p className="mt-1 text-xs leading-6">
+                {isPublished
+                  ? 'پروفایل شما تأیید شده و در صفحه عمومی قابل مشاهده است.'
+                  : 'پروفایل برای بررسی ارسال شد. پس از تأیید ادمین، در صفحه عمومی و جستجو دیده خواهید شد.'}
+              </p>
+              <Link href="/zibagar" className="mt-2 inline-block text-sm font-medium text-coral underline">
+                ورود به داشبورد
+              </Link>
+            </div>
+          )}
           {(isPublished || completion?.complete) && <FirstBookingGuide />}
         </Card>
       )}
@@ -510,8 +599,10 @@ export default function ProfileCompletePage() {
       {confirmPublish && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Card className="max-w-md space-y-4">
-            <h3 className="text-lg font-bold">تأیید انتشار</h3>
-            <p className="text-sm text-gray">پروفایل شما آماده انتشار است.</p>
+            <h3 className="text-lg font-bold">تأیید ارسال برای بررسی</h3>
+            <p className="text-sm text-gray">
+              با تأیید، پروفایل برای بررسی ادمین ارسال می‌شود. پس از تأیید، در صفحه عمومی و جستجو دیده خواهید شد.
+            </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setConfirmPublish(false)}>انصراف</Button>
               <Button size="sm" loading={publishing} onClick={onPublish}>تأیید و انتشار</Button>
