@@ -11,79 +11,70 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore and patch
+      - name: Curl restore
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/bb73ef6e50fa0cceaef5ce274a566d2b212e6a6f/backend/src/payments/payments.service.ts" \
             -o backend/src/payments/payments.service.ts
-          test -s backend/src/payments/payments.service.ts
-          grep -q "export class PaymentsService" backend/src/payments/payments.service.ts
-          python3 -c "
-from pathlib import Path
-p=Path('backend/src/payments/payments.service.ts')
-t=p.read_text()
-assert 'PLACEHOLDER' not in t
-old='''    if (booking.status === BookingStatus.pending || booking.status === BookingStatus.expired) {
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
-      });
-    }
-    return {
-      offline: true,'''
-new='''    if (booking.status === BookingStatus.pending) {
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
-      });
-    }
-    return {
-      offline: true,'''
-if old in t:
-    t=t.replace(old,new,1)
-    p.write_text(t)
-    print('ts fixed')
-else:
-    print('pattern missing or already fixed')
-    print('has offline return', 'offline: true' in t)
-"
-          # portfolio fix
-          python3 -c "
-from pathlib import Path
-p=Path('frontend/src/app/zibagar/portfolio/page.tsx')
-t=p.read_text()
-old='''          items={items.map((m) => ({
+          # TS2367: drop impossible expired check after early return in offline confirm only
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/payments/payments.service.ts')
+          t = p.read_text()
+          assert 'export class PaymentsService' in t and 'PLACEHOLDER' not in t
+          # Fix first offline-specific pending||expired that precedes offline: true return
+          needle = "if (booking.status === BookingStatus.pending || booking.status === BookingStatus.expired)"
+          # Only replace the one that is followed within 400 chars by offline: true
+          idx = 0
+          while True:
+              i = t.find(needle, idx)
+              if i < 0:
+                  break
+              window = t[i:i+500]
+              if 'offline: true' in window:
+                  t = t[:i] + "if (booking.status === BookingStatus.pending)" + t[i+len(needle):]
+                  print('replaced offline status check')
+                  break
+              idx = i + 1
+          p.write_text(t)
+          print('payments bytes', p.stat().st_size)
+          PY
+
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/f646098de8e5bfbfdbc3ca17902509877a7c54a2/frontend/src/app/zibagar/portfolio/page.tsx" \
+            -o frontend/src/app/zibagar/portfolio/page.tsx
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/zibagar/portfolio/page.tsx')
+          t = p.read_text()
+          assert 'ZibagarPortfolioPage' in t
+          old = """          items={items.map((m) => ({
             src: m.publicUrl || '',
             alt: m.title || 'portfolio',
             isVideo: isVideo(m.mimeType, m.publicUrl),
-          }))}'''
-new='''          items={items.map((m) => ({
+          }))}"""
+          new = """          items={items.map((m) => ({
             id: m.id,
             url: m.publicUrl || '',
             mimeType: m.mimeType || undefined,
             caption: m.title || undefined,
-          }))}'''
-if old in t:
-    p.write_text(t.replace(old,new,1))
-    print('portfolio fixed')
-elif 'id: m.id' in t:
-    print('portfolio ok')
-else:
-    print('portfolio pattern missing')
-"
-          wc -c backend/src/payments/payments.service.ts
-      - name: Commit
+          }))}"""
+          if old not in t:
+              raise SystemExit('portfolio map not found')
+          p.write_text(t.replace(old, new, 1))
+          print('portfolio fixed', p.stat().st_size)
+          PY
+      - name: Commit push
         run: |
+          set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/payments/payments.service.ts frontend/src/app/zibagar/portfolio/page.tsx
           git status
-          git commit -m "fix(ci): restore payments.service + portfolio LightboxItem types" || exit 0
+          git commit -m "fix(ci): restore payments offline + portfolio LightboxItem types"
           git push origin HEAD:main
-      - name: Export
+      - name: Export payments
         run: |
+          set -euxo pipefail
           git fetch origin beautijoo-backend-export
           rm -rf /tmp/be
           git worktree add /tmp/be origin/beautijoo-backend-export
@@ -93,5 +84,5 @@ else:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/payments/payments.service.ts
-          git commit -m "fix: restore payments offline + TS2367" || exit 0
-          git push origin HEAD:beautijoo-backend-export
+          git commit -m "fix: restore payments.service" || true
+          git push origin HEAD:beautijoo-backend-export || true
