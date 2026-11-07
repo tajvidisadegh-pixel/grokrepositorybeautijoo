@@ -1,0 +1,92 @@
+name: fix-82-16-dockerfile
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Generate package-lock.json + apply Dockerfile (#82.16)
+        run: |
+          set -euo pipefail
+          cd backend
+
+          # 1) Generate deterministic lockfile
+          if [ ! -f package-lock.json ]; then
+            echo "Generating package-lock.json via npm install..."
+            npm install --package-lock-only
+            test -f package-lock.json
+            echo "lockfile lines: $(wc -l < package-lock.json)"
+          else
+            echo "package-lock.json already present"
+          fi
+
+          # 2) Write hardened Dockerfile
+          python3 - << 'PY'
+          import base64, pathlib
+          content = base64.b64decode("""IyBCZWF1dGlqb28gQmFja2VuZCDigJQgcmVsaWFibGUgYnVpbGQgZm9yIExpYXJhIChHaXRIdWIgb3IgWklQKQojICM4Mi4xNjogZGV0ZXJtaW5pc3RpYyBkZXBzIChucG0gY2kgKyBsb2NrZmlsZSksIG5vbi1yb290IHJ1bnRpbWUsIHZpc2libGUgc2VlZCBlcnJvcnMKRlJPTSBub2RlOjIyLWJvb2t3b3JtLXNsaW0KCldPUktESVIgL2FwcAoKUlVOIGFwdC1nZXQgdXBkYXRlIFxcCiAgJiYgYXB0LWdldCBpbnN0YWxsIC15IC0tbm8taW5zdGFsbC1yZWNvbW1lbmRzIHB5dGhvbjMgbWFrZSBnKysgb3BlbnNzbCBjYS1jZXJ0aWZpY2F0ZXMgXFwKICAmJiBybSAtcmYgL3Zhci9saWIvYXB0L2xpc3RzLyoKCiMgcGFja2FnZS5qc29uICsgbG9ja2ZpbGUgZmlyc3QgKGNhY2hlKS4gcHJpc21hIEJFRk9SRSBpbnN0YWxsIHNvIGdlbmVyYXRlIG5ldmVyIG1pc3NlcyBzY2hlbWEuCiMgUHJlZmVyIG5wbSBjaSB3aGVuIHBhY2thZ2UtbG9jay5qc29uIGlzIHByZXNlbnQgKCM4Mi4xNik7IGZhbGwgYmFjayB0byBucG0gaW5zdGFsbCBmb3IgbG9jYWwgWklQIGRlcGxveXMgd2l0aG91dCBsb2NrLgpDT1BZIHBhY2thZ2UuanNvbiBwYWNrYWdlLWxvY2suanNvbiogLi8KQ09QWSBwcmlzbWEgLi9wcmlzbWEvCgpSVU4gaWYgWyAtZiBwYWNrYWdlLWxvY2suanNvbiBdOyB0aGVuIG5wbSBjaTsgZWxzZSBlY2hvICJXQVJOOiBubyBwYWNrYWdlLWxvY2suanNvbiDigJQgdXNpbmcgbnBtIGluc3RhbGwgKG5vbi1kZXRlcm1pbmlzdGljKSI7IG5wbSBpbnN0YWxsOyBmaQoKQ09QWSAuIC4KClJVTiBucHggcHJpc21hIGdlbmVyYXRlIC0tc2NoZW1hPS4vcHJpc21hL3NjaGVtYS5wcmlzbWEgXFwKICAmJiBucHggbmVzdCBidWlsZCBcXAogICYmIHRlc3QgLWYgZGlzdC9tYWluLmpzIFxcCiAgJiYgbWtkaXIgLXAgL2FwcC91cGxvYWRzIFxcCiAgJiYgY2hvd24gLVIgbm9kZTpub2RlIC9hcHAKCkVOViBOT0RFX0VOVj1wcm9kdWN0aW9uCkVOViBQT1JUPTMwMDAKIyBEZWZhdWx0IGxvY2FsIHBhdGggaW5zaWRlIHRoZSBjb250YWluZXIgKG92ZXJyaWRlIHdpdGggYSBEaXNrIG1vdW50IHBhdGggb24gTGlhcmEpCkVOViBTVE9SQUdFX0xPQ0FMX1BBVEg9L2FwcC91cGxvYWRzCiMgUHJlZmVyIG9iamVjdCBzdG9yYWdlIGluIHByb2R1Y3Rpb246IHNldCBTVE9SQUdFX1BST1ZJREVSPXMzIGFuZCBTM18qIHNlY3JldHMgb24gTGlhcmEKRU5WIFNUT1JBR0VfUFJPVklERVI9bG9jYWwKRVhQT1NFIDMwMDAKCiMgUnVuIGFzIG5vbi1yb290IChub2RlIHVpZCAxMDAwKS4gRm9yIExpYXJhIERpc2sgbW91bnRzIHRoYXQgYXJlIHJvb3Qtb3duZWQsCiMgc2V0IHRoZSBtb3VudCBwYXRoIGVudiBhbmQgZW5zdXJlIHRoZSB2b2x1bWUgaXMgd3JpdGFibGUgYnkgdWlkIDEwMDAsIG9yIHVzZSBTMy4KVVNFUiBub2RlCgojIE1pZ3JhdGUgKyBpZGVtcG90ZW50IHNlZWRzIG9uIGV2ZXJ5IGJvb3QgKExpYXJhIHNpbmdsZS1jb250YWluZXIgcGF0dGVybikuCiMgc2VlZC1yb2xlcyBpcyByZXF1aXJlZDsgc2VlZC1jYXRhbG9nIGlzIGNyZWF0ZS1vbmx5IC8gYmVzdC1lZmZvcnQg4oCUIGZhaWx1cmVzIGFyZSBsb2dnZWQsIG5vdCBzd2FsbG93ZWQgc2lsZW50bHkgKCM4Mi4xNikuCkNNRCBbInNoIiwgIi1jIiwgIm1rZGlyIC1wIFwiJHtTVE9SQUdFX0xPQ0FMX1BBVEg6LS9hcHAvdXBsb2Fkc31cIiAyPi9kZXYvbnVsbCB8fCB0cnVlOyBub2RlIHNjcmlwdHMvcHJpc21hLW1pZ3JhdGUtZGVwbG95LmNqcyAmJiBub2RlIHByaXNtYS9zZWVkLXJvbGVzLmNqcyAmJiAobm9kZSBwcmlzbWEvc2VlZC1jYXRhbG9nLmNqcyB8fCBlY2hvIFwiW2Jvb3RdIHNlZWQtY2F0YWxvZyBmYWlsZWQgKG5vbi1mYXRhbCwgc2VlIGxvZ3MgYWJvdmUpXCIgPiYyKSAmJiBub2RlIGRpc3QvbWFpbi5qcyJdCg==""").decode("utf-8")
+          pathlib.Path("Dockerfile").write_text(content)
+          print("wrote Dockerfile", len(content))
+          assert "npm ci" in content
+          assert "USER node" in content
+          assert "seed-catalog failed (non-fatal" in content
+          PY
+
+          # 3) Align package.json start script — log catalog seed failures instead of silent || true
+          python3 - << 'PY'
+          import json, pathlib
+          p = pathlib.Path("package.json")
+          data = json.loads(p.read_text())
+          old = data["scripts"].get("start", "")
+          new = (
+              "node scripts/prisma-migrate-deploy.cjs && "
+              "node prisma/seed-roles.cjs && "
+              "(node prisma/seed-catalog.cjs || echo \"[boot] seed-catalog failed (non-fatal)\" >&2) && "
+              "node dist/main.js"
+          )
+          if old != new:
+              data["scripts"]["start"] = new
+              data["scripts"]["start:prod"] = "npm run start"
+              p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+              print("updated package.json start script")
+          else:
+              print("package.json start already aligned")
+          print("start =", data["scripts"]["start"][:120])
+          PY
+
+          cd ..
+          echo "--- Dockerfile head ---"
+          head -20 backend/Dockerfile
+          echo "--- lock present ---"
+          ls -la backend/package-lock.json | head -1
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/Dockerfile backend/package-lock.json backend/package.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "$(cat <<'EOF'
+fix(#82.16): backend Dockerfile — npm ci + lockfile, non-root, visible seed errors
+
+- Commit package-lock.json and prefer npm ci for deterministic installs
+- Run container as node (non-root); chown /app at build
+- seed-catalog failure is logged instead of silent || true
+- package.json start script aligned with the same boot sequence
+EOF
+)"
+          git pull --rebase origin main || true
+          git push origin HEAD:main
