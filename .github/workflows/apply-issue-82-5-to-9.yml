@@ -1,17 +1,1 @@
-name: apply-issue-82-5-to-9
-on:
-  workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/apply-issue-82-5-to-9.yml'
-jobs:
-  apply:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: placeholder trigger
-        run: echo 'workflow registered; full payload applied in next commit'
+LOAD_FROM_FILE:/tmp/bj82/.github/workflows/apply-issue-82-5-to-9.yml
