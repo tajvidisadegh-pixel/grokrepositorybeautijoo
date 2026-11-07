@@ -140,13 +140,7 @@ export class PaymentsService {
 
   /**
    * Offline booking without gateway (reversible via BOOKING_PAYMENT_MODE / PAYMENT_PROVIDER).
-   * - offline: always confirm without gateway
-   * - gateway: always online path (mock/zarinpal/…)
-   * - auto (default): offline only when provider is disabled/empty/none/off;
-   *   mock stays on gateway path so e2e/dev keep working;
-   *   zarinpal/zibal/idpay use gateway.
-   * Production without license: PAYMENT_PROVIDER=disabled → offline bookings.
-   * After license: PAYMENT_PROVIDER=zarinpal → gateway automatically.
+   * auto: offline only when provider is disabled/empty; mock/zarinpal use gateway.
    */
   private resolveBookingPaymentMode(): 'offline' | 'gateway' {
     const explicit = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();
@@ -157,7 +151,6 @@ export class PaymentsService {
       return 'gateway';
     }
     const provider = this.providerName().toLowerCase();
-    // Real or test gateways — keep initiate/verify path (needed for e2e with mock)
     if (
       provider === 'zarinpal' ||
       provider === 'zibal' ||
@@ -166,7 +159,6 @@ export class PaymentsService {
     ) {
       return 'gateway';
     }
-    // disabled / empty / none / off / unknown without real gateway
     return 'offline';
   }
 
@@ -229,7 +221,7 @@ export class PaymentsService {
         },
       },
     });
-    if (booking.status === BookingStatus.pending || booking.status === BookingStatus.expired) {
+    if (booking.status === BookingStatus.pending) {
       await this.prisma.booking.update({
         where: { id: bookingId },
         data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
@@ -249,7 +241,6 @@ export class PaymentsService {
       return this.confirmOfflineBooking(userId, bookingId);
     }
 
-    // #64.5 — lock callback to allowed frontend origins before talking to gateway
     this.assertAllowedCallbackUrl(callbackUrl);
     const providerKey = this.providerName();
     if (providerKey === 'disabled') {
