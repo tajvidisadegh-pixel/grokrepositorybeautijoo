@@ -13,20 +13,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore from good commit and patch dual-role
+      - name: Restore auth from good SHA
         run: |
-          set -euo pipefail
-          # last known full auth.service before PLACEHOLDER
-          git show 48601f895ab22d19bf0dc4093be85cbda316aae3:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
-          test -s backend/src/auth/auth.service.ts
-          grep -q "export class AuthService" backend/src/auth/auth.service.ts
+          set -euxo pipefail
+          GOOD=48601f895ab22d19bf0dc4093be85cbda316aae3
+          git cat-file -e ${GOOD}^{commit}
+          git show ${GOOD}:backend/src/auth/auth.service.ts > backend/src/auth/auth.service.ts
+          wc -c backend/src/auth/auth.service.ts
+          grep -q 'export class AuthService' backend/src/auth/auth.service.ts
+          ! grep -q 'PLACEHOLDER' backend/src/auth/auth.service.ts
+          ! grep -q 'RESTORE_FROM_LOCAL' backend/src/auth/auth.service.ts
+      - name: Dual-role login/OTP patch
+        run: |
+          set -euxo pipefail
           python3 <<'PY'
           from pathlib import Path
           p = Path('backend/src/auth/auth.service.ts')
           t = p.read_text()
-          assert 'PLACEHOLDER' not in t
-          if 'otpCandidates' not in t:
-              old_login = """  async login(dto: LoginDto) {
+          if 'otpCandidates' in t:
+              print('already dual')
+          else:
+              old_login = '''  async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
     const user = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
@@ -34,8 +41,8 @@ jobs:
     });
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }"""
-              new_login = """  async login(dto: LoginDto) {
+    }'''
+              new_login = '''  async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
     const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';
     const candidates = await this.prisma.user.findMany({
@@ -51,41 +58,21 @@ jobs:
         const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
         const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
         throw new UnauthorizedException(
-          `برای این شماره حساب ${want} با رمز پیدا نشد. اگر حساب ${other} دارید نوع ورود را عوض کنید یا برای نقش ${want} ثبت‌نام کنید.`,
+          'برای این شماره حساب ' + want + ' با رمز پیدا نشد. اگر حساب ' + other + ' دارید نوع ورود را عوض کنید یا ثبت‌نام نقش جدید انجام دهید.',
         );
       }
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }"""
-              if old_login not in t:
-                  raise SystemExit('login missing')
+    }'''
+              assert old_login in t, 'login missing'
               t = t.replace(old_login, new_login, 1)
-              old_reg = """    const existing = await this.prisma.user.findFirst({
-      where: { phone: dto.phone, accountType },
-    });
-    if (existing) {
-      const label = roleName === 'professional' ? 'زیباگر' : 'مشتری';
-      throw new ConflictException(`این شماره قبلاً به‌عنوان ${label} ثبت شده است`);
-    }"""
-              new_reg = """    const existing = await this.prisma.user.findFirst({
-      where: { phone: dto.phone, accountType },
-    });
-    if (existing) {
-      const label = roleName === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
-      throw new ConflictException(
-        `این شماره قبلاً به‌عنوان ${label} ثبت شده است. از صفحه ورود با همان نقش وارد شوید.`,
-      );
-    }"""
-              if old_reg not in t:
-                  raise SystemExit('reg missing')
-              t = t.replace(old_reg, new_reg, 1)
-              old_vo = """    let user = await this.prisma.user.findFirst({
+              old_vo = '''    let user = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
 
     if (!user) {
-      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';"""
-              new_vo = """    const roleWantedOtp = accountType === AccountType.professional ? 'professional' : 'customer';
+      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';'''
+              new_vo = '''    const roleWantedOtp = accountType === AccountType.professional ? 'professional' : 'customer';
     const otpCandidates = await this.prisma.user.findMany({
       where: { phone: dto.phone },
       include: { profile: true, userRoles: { include: { role: true } } },
@@ -96,26 +83,21 @@ jobs:
       null;
 
     if (!user) {
-      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';"""
-              if old_vo not in t:
-                  raise SystemExit('vo missing')
+      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';'''
+              assert old_vo in t, 'vo missing'
               t = t.replace(old_vo, new_vo, 1)
               p.write_text(t)
-              print('patched dual-role')
-          else:
-              print('already dual')
-          print('size', p.stat().st_size)
+              print('dual patched', p.stat().st_size)
           PY
-      - name: Commit
+      - name: Commit push export
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/auth/auth.service.ts
-          git commit -m "fix: restore auth.service + dual-role same phone"
+          git status
+          git commit -m "fix: restore auth.service.ts + dual-role same phone"
           git push origin HEAD:main
-      - name: Export
-        run: |
           git fetch origin beautijoo-backend-export
           rm -rf /tmp/be
           git worktree add /tmp/be origin/beautijoo-backend-export
