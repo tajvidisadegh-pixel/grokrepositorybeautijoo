@@ -1,4 +1,4 @@
-name: Dual-role and dashboard tips
+name: Force dual-role patch
 on:
   workflow_dispatch:
   push:
@@ -11,118 +11,66 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Ensure auth healthy + dual-role + tips
+      - name: Patch
         run: |
           set -euxo pipefail
-          f=backend/src/auth/auth.service.ts
-          if ! grep -q 'export class AuthService' "$f"; then
-            curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/48601f895ab22d19bf0dc4093be85cbda316aae3/backend/src/auth/auth.service.ts" -o "$f"
-          fi
           python3 <<'PY'
           from pathlib import Path
           p = Path('backend/src/auth/auth.service.ts')
           t = p.read_text()
-          assert 'export class AuthService' in t
+          print('auth size', len(t))
+          print('has class', 'export class AuthService' in t)
+          print('has otpCandidates', 'otpCandidates' in t)
           if 'otpCandidates' not in t:
-              old_login = '''  async login(dto: LoginDto) {
-    const accountType = this.resolveAccountType(dto.accountType);
-    const user = await this.prisma.user.findFirst({
-      where: { phone: dto.phone, accountType },
-      include: { profile: true, userRoles: { include: { role: true } } },
-    });
-    if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }'''
-              new_login = '''  async login(dto: LoginDto) {
-    const accountType = this.resolveAccountType(dto.accountType);
-    const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';
-    const candidates = await this.prisma.user.findMany({
-      where: { phone: dto.phone },
-      include: { profile: true, userRoles: { include: { role: true } } },
-    });
-    let user =
-      candidates.find((u) => u.accountType === accountType) ||
-      candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted)) ||
-      null;
-    if (!user || !user.passwordHash) {
-      if (candidates.length > 0) {
-        const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
-        const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
-        throw new UnauthorizedException(
-          'برای این شماره حساب ' + want + ' با رمز پیدا نشد. اگر حساب ' + other + ' دارید نوع ورود را عوض کنید یا ثبت‌نام نقش جدید انجام دهید.',
-        );
-      }
-      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }'''
-              assert old_login in t, 'login missing'
-              t = t.replace(old_login, new_login, 1)
-              old_vo = '''    let user = await this.prisma.user.findFirst({
-      where: { phone: dto.phone, accountType },
-      include: { profile: true, userRoles: { include: { role: true } } },
-    });
-
-    if (!user) {
-      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';'''
-              new_vo = '''    const roleWantedOtp = accountType === AccountType.professional ? 'professional' : 'customer';
-    const otpCandidates = await this.prisma.user.findMany({
-      where: { phone: dto.phone },
-      include: { profile: true, userRoles: { include: { role: true } } },
-    });
-    let user =
-      otpCandidates.find((u) => u.accountType === accountType) ||
-      otpCandidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWantedOtp)) ||
-      null;
-
-    if (!user) {
-      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';'''
-              assert old_vo in t, 'vo missing'
-              t = t.replace(old_vo, new_vo, 1)
+              a = "const user = await this.prisma.user.findFirst({\n      where: { phone: dto.phone, accountType },\n      include: { profile: true, userRoles: { include: { role: true } } },\n    });\n    if (!user || !user.passwordHash) {\n      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');\n    }"
+              b = "const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';\n    const candidates = await this.prisma.user.findMany({\n      where: { phone: dto.phone },\n      include: { profile: true, userRoles: { include: { role: true } } },\n    });\n    let user =\n      candidates.find((u) => u.accountType === accountType) ||\n      candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted)) ||\n      null;\n    if (!user || !user.passwordHash) {\n      if (candidates.length > 0) {\n        const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';\n        const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';\n        throw new UnauthorizedException(\n          'برای این شماره حساب ' + want + ' با رمز پیدا نشد. اگر حساب ' + other + ' دارید نوع ورود را عوض کنید یا ثبت‌نام نقش جدید انجام دهید.',\n        );\n      }\n      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');\n    }"
+              if a not in t:
+                  raise SystemExit('login block not found')
+              t = t.replace(a, b, 1)
+              c = "let user = await this.prisma.user.findFirst({\n      where: { phone: dto.phone, accountType },\n      include: { profile: true, userRoles: { include: { role: true } } },\n    });\n\n    if (!user) {\n      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';"
+              d = "const roleWantedOtp = accountType === AccountType.professional ? 'professional' : 'customer';\n    const otpCandidates = await this.prisma.user.findMany({\n      where: { phone: dto.phone },\n      include: { profile: true, userRoles: { include: { role: true } } },\n    });\n    let user =\n      otpCandidates.find((u) => u.accountType === accountType) ||\n      otpCandidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWantedOtp)) ||\n      null;\n\n    if (!user) {\n      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';"
+              if c not in t:
+                  raise SystemExit('verifyOtp block not found')
+              t = t.replace(c, d, 1)
               p.write_text(t)
-              print('dual-role applied', p.stat().st_size)
-          else:
-              print('dual-role already present')
-
-          # dashboard tips
+              print('patched', p.stat().st_size)
+          # tips
           page = Path('frontend/src/app/zibagar/page.tsx')
           t = page.read_text()
-          old_tips = '''            <li><Link href="/zibagar/services" className="text-coral underline">خدمت بساز</Link></li>
-            <li><Link href="/zibagar/hours" className="text-coral underline">ساعات بگذار</Link></li>
-            <li><Link href="/zibagar/profile" className="text-coral underline">منتشر کن</Link></li>'''
-          new_tips = '''            <li><Link href="/zibagar/services" className="text-coral underline">خدمت بساز</Link></li>
-            <li><Link href="/zibagar/hours" className="text-coral underline">ساعات کاری بگذار</Link></li>
-            <li><Link href="/zibagar/portfolio" className="text-coral underline">گالری نمونه‌کار آپلود کن</Link></li>
-            <li><Link href="/zibagar/profile" className="text-coral underline">پروفایل را منتشر کن</Link></li>'''
-          if old_tips in t:
-              t = t.replace(old_tips, new_tips, 1)
-              print('tips')
-          old_btn = '''          <Link href="/zibagar/portfolio">
+          t = t.replace(
+              '<li><Link href="/zibagar/hours" className="text-coral underline">ساعات بگذار</Link></li>',
+              '<li><Link href="/zibagar/hours" className="text-coral underline">ساعات کاری بگذار</Link></li>\n            <li><Link href="/zibagar/portfolio" className="text-coral underline">گالری نمونه‌کار آپلود کن</Link></li>',
+              1,
+          )
+          t = t.replace(
+              '''          <Link href="/zibagar/portfolio">
             <Button size="sm" variant="outline">
               نمونه‌کار
             </Button>
-          </Link>'''
-          new_btn = '''          <Link href="/zibagar/portfolio">
+          </Link>''',
+              '''          <Link href="/zibagar/portfolio">
             <Button size="sm" variant="secondary">
               گالری نمونه‌کار
             </Button>
-          </Link>'''
-          if old_btn in t:
-              t = t.replace(old_btn, new_btn, 1)
-              print('btn')
+          </Link>''',
+              1,
+          )
           page.write_text(t)
+          print('page updated', 'گالری' in t)
           PY
-      - name: Commit push export
+      - name: Push
         run: |
           set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/auth/auth.service.ts frontend/src/app/zibagar/page.tsx
-          git commit -m "fix: dual-role same-phone login + portfolio discoverability" || exit 0
+          git status
+          git commit -m "fix: dual-role same-phone + portfolio tips" || { echo 'no changes'; exit 0; }
           git pull --rebase origin main || true
           git push origin HEAD:main
           git fetch origin beautijoo-backend-export
           rm -rf /tmp/be
           git worktree add /tmp/be origin/beautijoo-backend-export
-          mkdir -p /tmp/be/src/auth
           cp backend/src/auth/auth.service.ts /tmp/be/src/auth/
           cd /tmp/be
           git config user.name "github-actions[bot]"
