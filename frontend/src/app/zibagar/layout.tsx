@@ -9,11 +9,11 @@ import { fetchProBookings } from '@/lib/panel-api';
 const BASE_ITEMS: PanelNavItem[] = [
   { href: '/zibagar', label: 'داشبورد', mobile: true },
   { href: '/zibagar/bookings', label: 'رزروها', mobile: true },
-  { href: '/zibagar/notifications', label: 'اعلان‌ها', mobile: true },
+  { href: '/zibagar/notifications', label: 'اعلان‌ها' },
   { href: '/zibagar/profile', label: 'پروفایل', mobile: true },
   { href: '/zibagar/reviews', label: 'نظرات' },
   { href: '/zibagar/services', label: 'منوی خدمات', mobile: true },
-  { href: '/zibagar/portfolio', label: 'نمونه‌کار' },
+  { href: '/zibagar/portfolio', label: 'نمونه‌کار', mobile: true },
   { href: '/zibagar/earnings', label: 'درآمد' },
   { href: '/zibagar/hours', label: 'ساعات کاری' },
   { href: '/zibagar/locations', label: 'آدرس' },
