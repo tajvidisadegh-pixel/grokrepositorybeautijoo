@@ -1,0 +1,42 @@
+name: generate-backend-lockfile
+
+"on":
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/package.json"
+      - ".github/workflows/generate-backend-lockfile.yml"
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Ensure package-lock.json
+        run: |
+          set -euo pipefail
+          cd backend
+          if [ -f package-lock.json ]; then
+            echo "lock exists ($(wc -l < package-lock.json) lines)"
+          else
+            npm install --package-lock-only
+            test -f package-lock.json
+          fi
+          grep -q "npm ci" Dockerfile
+          grep -q "USER node" Dockerfile
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "noop"
+            exit 0
+          fi
+          git commit -m "chore(#82.16): add backend package-lock.json for deterministic npm ci"
+          git pull --rebase origin main || true
+          git push origin HEAD:main
