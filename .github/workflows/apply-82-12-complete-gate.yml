@@ -1,1 +1,73 @@
-TRIGGER
+name: apply-82-12-complete-gate
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-82-12-complete-gate.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore bookings from good commit and apply #82.12
+        run: |
+          set -e
+          # Restore from last known good content (pre-PLACEHOLDER)
+          git show f98f9759a54eb7c4e3964f5a5b232464915fa9c6:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path("backend/src/bookings/bookings.service.ts")
+          t = p.read_text()
+          if "#82.12" in t and "only confirmed (paid)" in t:
+              print("already patched")
+          else:
+              old = """    if (action === 'complete') {
+      if (!isPro) throw new ForbiddenException();
+      const allowed: BookingStatus[] = [
+        BookingStatus.confirmed,
+        BookingStatus.pending,
+        BookingStatus.expired,
+      ];
+      if (!allowed.includes(b.status)) throw new BadRequestException('قابل تکمیل نیست');
+      return this.prisma.booking.update({
+        where: { id },
+        data: { status: BookingStatus.completed, completedAt: new Date() },
+      });
+    }"""
+              new = """    if (action === 'complete') {
+      if (!isPro) throw new ForbiddenException();
+      // #82.12 — only confirmed (paid) bookings can be completed; never unpaid pending/expired
+      if (b.status !== BookingStatus.confirmed) {
+        throw new BadRequestException('فقط نوبت تأییدشده (پرداخت‌شده) قابل تکمیل است');
+      }
+      const paid =
+        b.payment?.status === 'paid' ||
+        (b.payment as { status?: string } | null)?.status === 'paid';
+      if (!paid) {
+        throw new BadRequestException('فقط نوبت پرداخت‌شده قابل تکمیل است');
+      }
+      return this.prisma.booking.update({
+        where: { id },
+        data: { status: BookingStatus.completed, completedAt: new Date() },
+      });
+    }"""
+              if old not in t:
+                  raise SystemExit("complete block not found after restore")
+              p.write_text(t.replace(old, new, 1))
+              print("bookings patched")
+          c = Path("backend/src/cleanup/cleanup.service.ts").read_text()
+          assert "#82.12" in c, "cleanup missing #82.12"
+          print("cleanup verified")
+          PY
+          grep -q '#82.12' backend/src/bookings/bookings.service.ts
+          grep -q '#82.12' backend/src/cleanup/cleanup.service.ts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git status
+          git commit -m "fix(#82.12): complete only confirmed+paid bookings in transition()" || echo "no change"
+          git push
