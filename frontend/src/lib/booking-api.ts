@@ -54,8 +54,12 @@ export function getBooking(id: string) {
 export function initiatePayment(bookingId: string, callbackUrl: string) {
   return apiClient.post<{
     paymentId?: string;
-    redirectUrl?: string;
+    redirectUrl?: string | null;
     providerRef?: string;
+    /** true when confirmed without online gateway */
+    offline?: boolean;
+    status?: string;
+    bookingId?: string;
   }>('/payments/initiate', { bookingId, callbackUrl });
 }
 
