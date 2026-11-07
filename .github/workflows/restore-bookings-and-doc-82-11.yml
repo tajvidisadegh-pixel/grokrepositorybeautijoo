@@ -1,0 +1,30 @@
+name: restore-bookings-and-doc-82-11
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-bookings-and-doc-82-11.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore bookings + document #82.11 constraint
+        run: |
+          set -e
+          git show 4bbf0d4652a62db11aea205915ae560163887b6b:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          head -1 backend/src/bookings/bookings.service.ts | grep -q import
+          grep -q maxBufferMin backend/src/bookings/bookings.service.ts
+          wc -c backend/src/bookings/bookings.service.ts
+          echo 'CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKIyBzY2hlbWEucHJpc21hCnAgPSBQYXRoKCJiYWNrZW5kL3ByaXNtYS9zY2hlbWEucHJpc21hIikKdCA9IHAucmVhZF90ZXh0KCkKaWYgImJvb2tpbmdzX25vX292ZXJsYXBfYWN0aXZlIiBub3QgaW4gdDoKICAgIG9sZCA9ICIiIiAgQEBpbmRleChbY3VzdG9tZXJJZF0pCiAgQEBpbmRleChbcHJvZmVzc2lvbmFsSWQsIHN0YXJ0QXRdKQogIEBAaW5kZXgoW3N0YXR1c10pCiAgQEBpbmRleChbc3RhcnRBdCwgZW5kQXRdKQogIEBAbWFwKCJib29raW5ncyIpCn0iIiIKICAgIG5ldyA9ICIiIiAgQEBpbmRleChbY3VzdG9tZXJJZF0pCiAgQEBpbmRleChbcHJvZmVzc2lvbmFsSWQsIHN0YXJ0QXRdKQogIEBAaW5kZXgoW3N0YXR1c10pCiAgQEBpbmRleChbc3RhcnRBdCwgZW5kQXRdKQogIC8vICM4Mi4xMSBEQi1sZXZlbCBhbnRpLW92ZXJsYXAgKG5vdCBleHByZXNzaWJsZSBpbiBQcmlzbWEpOgogIC8vIG1pZ3JhdGlvbiAyMDI2MDgyNjAwMDAwMV9jb25zdHJhaW50cyBjcmVhdGVzOgogIC8vICAgLSBnZW5lcmF0ZWQgY29sdW1uIHRpbWVfcmFuZ2UgdHN0enJhbmdlKHN0YXJ0X2F0LCBlbmRfYXQsICdbKScpCiAgLy8gICAtIEVYQ0xVREUgY29uc3RyYWludCBib29raW5nc19ub19vdmVybGFwX2FjdGl2ZQogIC8vICAgICBVU0lORyBHSVNUIChwcm9mZXNzaW9uYWxfaWQgV0lUSCA9LCB0aW1lX3JhbmdlIFdJVEggJiYpCiAgLy8gICAgIFdIRVJFIChzdGF0dXMgSU4gKCdwZW5kaW5nJywgJ2NvbmZpcm1lZCcpKSAgLS0gc3RhdHVzLWF3YXJlCiAgLy8gQXBwIG1hcHMgUEcgZXhjbHVzaW9uIC8gYm9va2luZ3Nfbm9fb3ZlcmxhcCogZXJyb3JzIHRvIDQwOSBDb25mbGljdC4KICBAQG1hcCgiYm9va2luZ3MiKQp9IiIiCiAgICBpZiBvbGQgbm90IGluIHQ6CiAgICAgICAgcmFpc2UgU3lzdGVtRXhpdCgiQm9va2luZyBtb2RlbCBibG9jayBub3QgZm91bmQiKQogICAgcC53cml0ZV90ZXh0KHQucmVwbGFjZShvbGQsIG5ldywgMSkpCiAgICBwcmludCgic2NoZW1hIGRvY3VtZW50ZWQiKQplbHNlOgogICAgcHJpbnQoInNjaGVtYSBhbHJlYWR5IGRvY3VtZW50ZWQiKQoKIyBjYXRjaCBhbGlnbm1lbnQKcDIgPSBQYXRoKCJiYWNrZW5kL3NyYy9ib29raW5ncy9ib29raW5ncy5zZXJ2aWNlLnRzIikKdDIgPSBwMi5yZWFkX3RleHQoKQppZiAibXNnLmluY2x1ZGVzKCdib29raW5nc19ub19vdmVybGFwX2FjdGl2ZScpIiBub3QgaW4gdDI6CiAgICBvbGQyID0gIm1zZy5pbmNsdWRlcygnYm9va2luZ3Nfbm9fb3ZlcmxhcCcpIHx8IgogICAgbmV3MiA9ICJtc2cuaW5jbHVkZXMoJ2Jvb2tpbmdzX25vX292ZXJsYXAnKSB8fCAvLyAjODIuMTEgbWF0Y2hlcyBib29raW5nc19ub19vdmVybGFwX2FjdGl2ZVxuICAgICAgICBtc2cuaW5jbHVkZXMoJ2Jvb2tpbmdzX25vX292ZXJsYXBfYWN0aXZlJykgfHwiCiAgICBpZiBvbGQyIG5vdCBpbiB0MjoKICAgICAgICBwcmludCgiY2F0Y2ggcGF0dGVybiBtaXNzaW5nIikKICAgIGVsc2U6CiAgICAgICAgcDIud3JpdGVfdGV4dCh0Mi5yZXBsYWNlKG9sZDIsIG5ldzIsIDEpKQogICAgICAgIHByaW50KCJjYXRjaCBhbGlnbmVkIikKZWxzZToKICAgIHByaW50KCJjYXRjaCBhbHJlYWR5IGV4cGxpY2l0IikK' | base64 -d > /tmp/doc82_11.py
+          python3 /tmp/doc82_11.py
+          grep -q bookings_no_overlap_active backend/prisma/schema.prisma
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts backend/prisma/schema.prisma
+          git commit -m "fix(#82.11): document bookings_no_overlap_active; restore bookings.service.ts from 4bbf0d4"
+          git push
