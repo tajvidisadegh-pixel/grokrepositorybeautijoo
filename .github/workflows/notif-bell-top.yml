@@ -1,0 +1,135 @@
+name: Notif bell top
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/notif-bell-top.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wire bell into header + panel-shell
+        run: |
+          set -euxo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          # header
+          header = Path('frontend/src/components/layout/header.tsx')
+          ht = header.read_text()
+          if 'NotificationBell' not in ht:
+              ht = ht.replace(
+                  "import { Search, Menu, X } from 'lucide-react';",
+                  "import { Search, Menu, X } from 'lucide-react';\nimport { NotificationBell } from '@/components/layout/notification-bell';",
+              )
+              needle = '''          <Link
+            href="/search"
+            className="flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
+            aria-label="جستجو"
+          >
+            <Search className="size-5" aria-hidden />
+          </Link>
+
+          {isAuthenticated ? ('''
+              repl = '''          <Link
+            href="/search"
+            className="flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
+            aria-label="جستجو"
+          >
+            <Search className="size-5" aria-hidden />
+          </Link>
+
+          {/* اعلان‌ها — زنگوله بالای صفحه */}
+          <NotificationBell />
+
+          {isAuthenticated ? ('''
+              assert needle in ht, 'header needle missing'
+              ht = ht.replace(needle, repl, 1)
+              header.write_text(ht)
+              print('header ok')
+          else:
+              print('header already')
+
+          # panel-shell
+          shell = Path('frontend/src/components/panel/panel-shell.tsx')
+          st = shell.read_text()
+          if "from '@/components/layout/notification-bell'" not in st:
+              st = st.replace(
+                  "import { fetchUnreadCount } from '@/lib/panel-api';",
+                  "import { fetchUnreadCount } from '@/lib/panel-api';\nimport { NotificationBell } from '@/components/layout/notification-bell';",
+              )
+          if 'NotificationBell />' not in st or st.count('NotificationBell') < 2:
+              old_desktop = '''          <aside className="hidden w-full shrink-0 md:block md:w-56">
+            {title ? <h2 className="mb-4 text-lg font-bold text-foreground">{title}</h2> : null}
+            <nav className="flex flex-col gap-1">'''
+              new_desktop = '''          <aside className="hidden w-full shrink-0 md:block md:w-56">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}
+              <NotificationBell />
+            </div>
+            <nav className="flex flex-col gap-1">'''
+              if old_desktop in st:
+                  st = st.replace(old_desktop, new_desktop, 1)
+                  print('desktop ok')
+              else:
+                  print('desktop pattern missing')
+              old_mobile = '''            <div className="mb-3 flex items-center justify-between gap-2">
+              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : null}
+              <button
+                type="button"
+                className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-gray"
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-expanded={moreOpen}
+              >
+                {moreOpen ? 'بستن منو' : 'همه بخش‌ها'}
+              </button>
+            </div>'''
+              new_mobile = '''            <div className="mb-3 flex items-center justify-between gap-2">
+              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}
+              <div className="flex items-center gap-1">
+                <NotificationBell />
+                <button
+                  type="button"
+                  className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-gray"
+                  onClick={() => setMoreOpen((v) => !v)}
+                  aria-expanded={moreOpen}
+                >
+                  {moreOpen ? 'بستن منو' : 'همه بخش‌ها'}
+                </button>
+              </div>
+            </div>'''
+              if old_mobile in st:
+                  st = st.replace(old_mobile, new_mobile, 1)
+                  print('mobile ok')
+              else:
+                  print('mobile pattern missing')
+              shell.write_text(st)
+          else:
+              print('shell already')
+
+          # panel layout: remove notifications from mobile bottom bar
+          pl = Path('frontend/src/app/panel/layout.tsx')
+          pt = pl.read_text()
+          pt2 = pt.replace(
+              "{ href: '/panel/notifications', label: 'اعلان‌ها', mobile: true },",
+              "{ href: '/panel/notifications', label: 'اعلان‌ها' },",
+          )
+          if pt2 != pt:
+              pl.write_text(pt2)
+              print('panel layout ok')
+          else:
+              print('panel layout unchanged')
+          PY
+      - name: Commit
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/layout/header.tsx frontend/src/components/panel/panel-shell.tsx frontend/src/app/panel/layout.tsx
+          git status
+          git commit -m "feat(ui): show notification bell on top of page" || exit 0
+          git pull --rebase origin main || true
+          git push origin HEAD:main
