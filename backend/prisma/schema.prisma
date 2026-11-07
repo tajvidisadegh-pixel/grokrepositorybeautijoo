@@ -478,6 +478,13 @@ model Booking {
   @@index([professionalId, startAt])
   @@index([status])
   @@index([startAt, endAt])
+  // #82.11 DB-level anti-overlap (not expressible in Prisma):
+  // migration 20260826000001_constraints creates:
+  //   - generated column time_range tstzrange(start_at, end_at, '[)')
+  //   - EXCLUDE constraint bookings_no_overlap_active
+  //     USING GIST (professional_id WITH =, time_range WITH &&)
+  //     WHERE (status IN ('pending', 'confirmed'))  -- status-aware
+  // App maps PG exclusion / bookings_no_overlap* errors to 409 Conflict.
   @@map("bookings")
 }
 
