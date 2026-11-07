@@ -1,4 +1,4 @@
-# buffer82 staging
+# buffer82 / #82.11 staging
 
-Temporary staging area used to land fix(#82.10) bufferMin overlap.
-Safe to ignore; does not affect runtime.
+Temporary notes for #82.10 bufferMin and #82.11 bookings_no_overlap_active docs.
+Runtime unaffected.
