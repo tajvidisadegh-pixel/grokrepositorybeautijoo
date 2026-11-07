@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
 import { apiClient } from '@/lib/api';
 import { ServicePricingPanel } from '@/components/admin/ServicePricingPanel';
@@ -330,8 +330,8 @@ export default function AdminServiceCategoriesPage() {
             )}
           </div>
           <div className="space-y-2">
-            {(childrenByParent.get(null) || []).map(function renderRoot(root: Category): React.ReactNode {
-              const renderNode = (cat: Category, depth: number): React.ReactNode => {
+            {(childrenByParent.get(null) || []).map(function renderRoot(root: Category): ReactNode {
+              const renderNode = (cat: Category, depth: number): ReactNode => {
                 const children = childrenByParent.get(cat.id) || [];
                 const isOpen = expanded.has(cat.id);
                 return (
