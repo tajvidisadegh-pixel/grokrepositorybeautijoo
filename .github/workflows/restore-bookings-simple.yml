@@ -1,0 +1,26 @@
+name: restore-bookings-simple
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-bookings-simple.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore file from good commit
+        run: |
+          set -e
+          git show 5fd76545f4516bd5187816ac7251febec453a026:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          wc -c backend/src/bookings/bookings.service.ts
+          head -3 backend/src/bookings/bookings.service.ts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git commit -m "fix: restore bookings.service.ts from 5fd7654 (undo accidental placeholder)"
+          git push
