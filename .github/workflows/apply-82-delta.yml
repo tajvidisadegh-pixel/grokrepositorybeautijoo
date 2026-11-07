@@ -1,0 +1,20 @@
+name: apply-82-delta
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-82-delta.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply delta patches
+        run: |
+          set -euo pipefail
+          python3 -c "import base64; open('/tmp/p82.py','wb').write(base64.b64decode('''\\
+$(python3 -c "from pathlib import Path; import re; t=Path('/home/workdir/artifacts/apply-82-delta.yml').read_text(); print('use file')"))
+          '''.replace(chr(10),'').replace(' ','')))"
+          python3 /tmp/p82.py
