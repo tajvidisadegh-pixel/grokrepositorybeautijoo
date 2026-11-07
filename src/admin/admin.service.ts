@@ -466,6 +466,8 @@ export class AdminService {
     if (!existing) throw new NotFoundException('User not found');
     const updated = await this.prisma.user.update({ where: { id }, data: { status: status as UserStatus } });
     await this.audit(actorId, 'user.status_change', 'user', id, { status: existing.status }, { status, reason });
+    // #82.15 — drop in-memory JWT user cache so suspended/inactive takes effect immediately on this instance
+    userAuthCache.invalidate(id);
     return updated;
   }
 
