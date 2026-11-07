@@ -38,6 +38,10 @@ export class BookingsService {
     private readonly notifications: NotificationsService,
     private readonly payments: PaymentsService,
   ) {}
+  private maxBufferMin(items: Array<{bufferMin?: number|null; professionalService?: {bufferMin?: number|null}|null}>): number {
+    let max=0; for (const it of items){ const v=it.professionalService?.bufferMin??it.bufferMin??0; if(typeof v==="number"&&v>max) max=v;} return Math.max(0,max); }
+  private bookingRangesConflict(aStart:Date,aEnd:Date,aBufferMin:number,bStart:Date,bEnd:Date,bBufferMin:number): boolean {
+    const aBusy=aEnd.getTime()+Math.max(0,aBufferMin)*60000; const bBusy=bEnd.getTime()+Math.max(0,bBufferMin)*60000; return aStart.getTime()<bBusy && bStart.getTime()<aBusy; }
 
   async create(
     customerId: string,
@@ -290,7 +294,8 @@ export class BookingsService {
 
     const dateStr = tehranDateStr(startAt);
     const startHHMM = tehranHHMM(startAt);
-    const avail = await this.availability.getSlots(data.professionalId, dateStr, totalDuration);
+    const newBufferMin = orderedServices.reduce((m,ps)=>Math.max(m, ps.bufferMin??0),0);
+    const avail = await this.availability.getSlots(data.professionalId, dateStr, totalDuration, newBufferMin);
     const normalizeHhmm = (s: string) => {
       const m = /^(\d{1,2}):(\d{2})/.exec(String(s).trim());
       if (!m) return s;
@@ -311,17 +316,9 @@ export class BookingsService {
             data.professionalId,
           );
 
-          const overlappingBookings = await tx.booking.count({
-            where: {
-              professionalId: data.professionalId,
-              status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
-              startAt: { lt: endAt },
-              endAt: { gt: startAt },
-            },
-          });
-          if (overlappingBookings > 0) {
-            throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
-          }
+          const padMs=Math.max(newBufferMin,180)*60000;
+          const candidates=await tx.booking.findMany({where:{professionalId:data.professionalId,status:{in:[BookingStatus.pending,BookingStatus.confirmed]},startAt:{lt:new Date(endAt.getTime()+padMs)},endAt:{gt:new Date(startAt.getTime()-padMs)}},include:{items:{select:{professionalService:{select:{bufferMin:true}}}}}});
+          for(const e of candidates){ if(this.bookingRangesConflict(startAt,endAt,newBufferMin,e.startAt,e.endAt,this.maxBufferMin(e.items))) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است'); }
 
           const overlappingTimeOff = await tx.timeOff.count({
             where: {
@@ -621,16 +618,11 @@ export class BookingsService {
     }
     const durationMs = b.endAt.getTime() - b.startAt.getTime();
     const endAt = new Date(startAt.getTime() + durationMs);
-    const overlap = await this.prisma.booking.count({
-      where: {
-        professionalId: b.professionalId,
-        id: { not: id },
-        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
-        startAt: { lt: endAt },
-        endAt: { gt: startAt },
-      },
-    });
-    if (overlap > 0) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+    const bFull=await this.prisma.booking.findUnique({where:{id},include:{items:{select:{professionalService:{select:{bufferMin:true}}}}}});
+    const newBufferMin=this.maxBufferMin(bFull?.items??[]);
+    const padMs=Math.max(newBufferMin,180)*60000;
+    const candidates=await this.prisma.booking.findMany({where:{professionalId:b.professionalId,id:{not:id},status:{in:[BookingStatus.pending,BookingStatus.confirmed]},startAt:{lt:new Date(endAt.getTime()+padMs)},endAt:{gt:new Date(startAt.getTime()-padMs)}},include:{items:{select:{professionalService:{select:{bufferMin:true}}}}}});
+    for(const e of candidates){ if(this.bookingRangesConflict(startAt,endAt,newBufferMin,e.startAt,e.endAt,this.maxBufferMin(e.items))) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است'); }
     return this.prisma.booking.update({ where: { id }, data: { startAt, endAt } });
   }
 
