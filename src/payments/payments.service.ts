@@ -101,7 +101,6 @@ export class PaymentsService {
     }
   }
 
-
   /**
    * #64.2 — If gateway is off or initiate fails, do not leave a pending
    * booking locking the professional calendar. Cancel unpaid pending only
@@ -119,7 +118,6 @@ export class PaymentsService {
     if (booking.payment?.status === PaymentStatus.paid) return;
     if (booking.status !== BookingStatus.pending) return;
 
-    // After paid-guard above, payment is unpaid/absent — cancel payment row if any
     if (booking.payment) {
       await this.prisma.payment.update({
         where: { id: booking.payment.id },
@@ -140,12 +138,103 @@ export class PaymentsService {
     });
   }
 
+  /**
+   * Offline booking without gateway (reversible via BOOKING_PAYMENT_MODE / PAYMENT_PROVIDER).
+   * auto (default): offline unless PAYMENT_PROVIDER is zarinpal/zibal/idpay.
+   * When you get a gateway license: set PAYMENT_PROVIDER=zarinpal → back to gateway.
+   */
+  private resolveBookingPaymentMode(): 'offline' | 'gateway' {
+    const explicit = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();
+    if (explicit === 'offline' || explicit === 'no_gateway' || explicit === 'pay_later') return 'offline';
+    if (explicit === 'gateway' || explicit === 'online') return 'gateway';
+    const provider = this.providerName();
+    if (provider === 'zarinpal' || provider === 'zibal' || provider === 'idpay') return 'gateway';
+    return 'offline';
+  }
+
+  private async confirmOfflineBooking(userId: string, bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { payment: true },
+    });
+    if (!booking) throw new NotFoundException();
+    if (booking.customerId !== userId) throw new ForbiddenException();
+    if (booking.status === BookingStatus.expired || booking.status === BookingStatus.cancelled) {
+      throw new BadRequestException('این رزرو دیگر قابل تأیید نیست');
+    }
+    if (booking.payment?.status === PaymentStatus.paid) {
+      return {
+        offline: true,
+        status: 'paid' as const,
+        bookingId,
+        redirectUrl: null as string | null,
+        providerRef: booking.payment.providerRef ?? 'offline',
+      };
+    }
+    const idempotencyKey = booking.payment?.idempotencyKey || randomUUID();
+    if (!booking.payment) {
+      await this.prisma.payment.create({
+        data: {
+          bookingId,
+          amount: booking.totalPrice,
+          status: PaymentStatus.pending,
+          provider: 'offline',
+          idempotencyKey,
+        },
+      });
+    }
+    let rate = DEFAULT_PLATFORM_COMMISSION_RATE;
+    try {
+      const rateRow = await this.prisma.platformSetting.findUnique({
+        where: { key: PLATFORM_COMMISSION_RATE_KEY },
+      });
+      if (rateRow?.value != null && Number.isFinite(Number(rateRow.value))) {
+        rate = Number(rateRow.value);
+      }
+    } catch {
+      /* optional */
+    }
+    const { commissionAmount, professionalNetAmount } = calculateCommission(booking.totalPrice, rate);
+    const ref = 'offline-' + bookingId.replace(/-/g, '').slice(0, 12);
+    await this.prisma.payment.update({
+      where: { bookingId },
+      data: {
+        status: PaymentStatus.paid,
+        provider: 'offline',
+        providerRef: ref,
+        paidAt: new Date(),
+        platformCommissionAmount: commissionAmount,
+        professionalNetAmount: professionalNetAmount,
+        metadata: {
+          mode: 'offline',
+          note: 'Confirmed without online gateway. Not a bank settlement.',
+        },
+      },
+    });
+    if (booking.status === BookingStatus.pending || booking.status === BookingStatus.expired) {
+      await this.prisma.booking.update({
+        where: { id: bookingId },
+        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
+      });
+    }
+    return {
+      offline: true,
+      status: 'paid' as const,
+      bookingId,
+      redirectUrl: null as string | null,
+      providerRef: ref,
+    };
+  }
+
   async initiate(userId: string, bookingId: string, callbackUrl: string) {
+    if (this.resolveBookingPaymentMode() === 'offline') {
+      return this.confirmOfflineBooking(userId, bookingId);
+    }
+
     // #64.5 — lock callback to allowed frontend origins before talking to gateway
     this.assertAllowedCallbackUrl(callbackUrl);
     const providerKey = this.providerName();
     if (providerKey === 'disabled') {
-      // #64.2 — gateway off: free the slot, then surface error
       await this.releaseUnpaidPendingBooking(
         bookingId,
         'payment_provider_disabled',
@@ -218,7 +307,6 @@ export class PaymentsService {
       ) {
         throw e;
       }
-      // #64.2 — provider/network failure: release calendar hold
       await this.releaseUnpaidPendingBooking(
         bookingId,
         'payment_initiate_failed',
@@ -239,7 +327,6 @@ export class PaymentsService {
           where: { id: payment.id },
           data: { status: PaymentStatus.failed },
         });
-        // #64.2 — user cancelled at gateway: free unpaid pending slot
         await this.releaseUnpaidPendingBooking(
           payment.bookingId,
           'gateway_user_cancel',
