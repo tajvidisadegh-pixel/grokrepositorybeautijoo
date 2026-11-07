@@ -1,4 +1,4 @@
-name: Fix dual-role auth and portfolio nav
+name: Fix dual-role auth service
 on:
   workflow_dispatch:
   push:
@@ -11,101 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch files
+      - name: Patch auth.service only
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
-
-          # --- zibagar layout: portfolio on mobile nav ---
-          p = Path('frontend/src/app/zibagar/layout.tsx')
-          t = p.read_text()
-          old = "{ href: '/zibagar/portfolio', label: 'نمونه‌کار' },"
-          new = "{ href: '/zibagar/portfolio', label: 'نمونه‌کار', mobile: true },"
-          if old in t:
-              t = t.replace(old, new, 1)
-              p.write_text(t)
-              print('layout portfolio mobile ok')
-          elif "portfolio', label: 'نمونه‌کار', mobile: true" in t or 'portfolio' in t and 'mobile: true' in t:
-              print('layout already ok')
-          else:
-              print('layout pattern missing')
-
-          # --- register page: role toggle + smarter redirect ---
-          p = Path('frontend/src/app/register/page.tsx')
-          t = p.read_text()
-          t2 = t
-          t2 = t2.replace(
-              "  /** نقش از لینک می‌آید (?as=professional)؛ در فرم ساده انتخاب نقش نشان داده نمی‌شود */\n  const role: RegisterRole = asParam === 'professional' ? 'professional' : 'customer';",
-              "  const [role, setRole] = useState<RegisterRole>(\n    asParam === 'professional' ? 'professional' : 'customer',\n  );",
-              1,
-          )
-          t2 = t2.replace(
-              """  if (isAuthenticated) {
-    if (hasRole('professional')) {
-      router.replace('/zibagar/profile/complete');
-    } else {
-      router.replace('/panel');
-    }
-  }""",
-              """  // اگر کاربر قبلاً همان نقش را دارد برو پنل؛ وگرنه بگذار نقش دوم را بسازد
-  if (isAuthenticated) {
-    if (role === 'professional' && hasRole('professional')) {
-      router.replace('/zibagar');
-    } else if (role === 'customer' && !hasRole('professional')) {
-      router.replace('/panel');
-    }
-    // مشتری لاگین‌شده که می‌خواهد زیباگر شود روی فرم می‌ماند
-  }""",
-              1,
-          )
-          # inject role toggle after card title area – find first form phone step
-          marker = '        {step === \'phone\' && ('
-          toggle = '''        <div className="mb-4 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setRole('customer')}
-            className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${
-              role === 'customer'
-                ? 'border-coral bg-coral/10 text-coral'
-                : 'border-border text-gray hover:border-coral/40'
-            }`}
-          >
-            نوبت می‌گیرم
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('professional')}
-            className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${
-              role === 'professional'
-                ? 'border-coral bg-coral/10 text-coral'
-                : 'border-border text-gray hover:border-coral/40'
-            }`}
-          >
-            زیباگر هستم
-          </button>
-        </div>
-        <p className="mb-3 text-xs text-gray">
-          یک شماره می‌تواند هم حساب نوبت‌گیر و هم حساب زیباگر داشته باشد. نقش را انتخاب کنید.
-        </p>
-'''
-          if marker in t2 and 'زیباگر هستم' not in t2:
-              t2 = t2.replace(marker, toggle + marker, 1)
-              print('register toggle ok')
-          else:
-              print('register toggle skip', 'زیباگر هستم' in t2)
-          if t2 != t:
-              p.write_text(t2)
-              print('register page written')
-          else:
-              print('register page unchanged')
-
-          # --- auth.service: dual-role same phone ---
           p = Path('backend/src/auth/auth.service.ts')
           t = p.read_text()
-
-          # Replace login lookup block for better dual-account handling
-          old_login = '''  async login(dto: LoginDto) {
+          if 'otpCandidates' in t and 'candidates.find' in t:
+              print('already patched')
+          else:
+              old_login = """  async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
     const user = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
@@ -113,9 +29,8 @@ jobs:
     });
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }'''
-
-          new_login = '''  async login(dto: LoginDto) {
+    }"""
+              new_login = """  async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
     const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';
     const candidates = await this.prisma.user.findMany({
@@ -131,29 +46,23 @@ jobs:
         const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
         const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
         throw new UnauthorizedException(
-          `برای این شماره حساب ${want} با رمز پیدا نشد. اگر حساب ${other} دارید، نوع ورود را عوض کنید یا برای نقش ${want} ثبت‌نام کنید.`,
+          `برای این شماره حساب ${want} با رمز پیدا نشد. اگر حساب ${other} دارید نوع ورود را عوض کنید یا برای نقش ${want} ثبت‌نام کنید.`,
         );
       }
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
-    }'''
-
-          if old_login in t:
+    }"""
+              if old_login not in t:
+                  raise SystemExit('login pattern missing')
               t = t.replace(old_login, new_login, 1)
-              print('login dual-role ok')
-          else:
-              print('login pattern missing')
 
-          # Register: when same phone exists as other accountType, create the second account (already allowed)
-          # Improve conflict message and ensure we don't block on wrong lookup
-          old_reg_exist = '''    const existing = await this.prisma.user.findFirst({
+              old_reg = """    const existing = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
     });
     if (existing) {
       const label = roleName === 'professional' ? 'زیباگر' : 'مشتری';
       throw new ConflictException(`این شماره قبلاً به‌عنوان ${label} ثبت شده است`);
-    }'''
-
-          new_reg_exist = '''    const existing = await this.prisma.user.findFirst({
+    }"""
+              new_reg = """    const existing = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
     });
     if (existing) {
@@ -162,24 +71,19 @@ jobs:
         `این شماره قبلاً به‌عنوان ${label} ثبت شده است. از صفحه ورود با همان نقش وارد شوید.`,
       );
     }
-    // همان شماره با نقش دیگر مجاز است (مثلاً مشتری + زیباگر) — فقط روی (phone, accountType) یکتا است'''
+    // همان شماره با نقش دیگر مجاز است — یکتایی فقط روی (phone, accountType)"""
+              if old_reg not in t:
+                  raise SystemExit('register pattern missing')
+              t = t.replace(old_reg, new_reg, 1)
 
-          if old_reg_exist in t:
-              t = t.replace(old_reg_exist, new_reg_exist, 1)
-              print('register exist message ok')
-          else:
-              print('register exist pattern missing')
-
-          # verifyOtp login path: find by accountType only - broaden find
-          old_vo = '''    let user = await this.prisma.user.findFirst({
+              old_vo = """    let user = await this.prisma.user.findFirst({
       where: { phone: dto.phone, accountType },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
 
     if (!user) {
-      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';'''
-
-          new_vo = '''    const roleWantedOtp = accountType === AccountType.professional ? 'professional' : 'customer';
+      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';"""
+              new_vo = """    const roleWantedOtp = accountType === AccountType.professional ? 'professional' : 'customer';
     const otpCandidates = await this.prisma.user.findMany({
       where: { phone: dto.phone },
       include: { profile: true, userRoles: { include: { role: true } } },
@@ -190,27 +94,21 @@ jobs:
       null;
 
     if (!user) {
-      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';'''
-
-          if old_vo in t:
+      const roleName = accountType === AccountType.professional ? 'professional' : 'customer';"""
+              if old_vo not in t:
+                  raise SystemExit('verifyOtp pattern missing')
               t = t.replace(old_vo, new_vo, 1)
-              print('verifyOtp dual ok')
-          else:
-              print('verifyOtp pattern missing')
-
-          p.write_text(t)
-          print('auth.service written', p.stat().st_size)
+              p.write_text(t)
+              print('auth patched', p.stat().st_size)
           PY
-      - name: Commit
+      - name: Commit and export
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/auth/auth.service.ts frontend/src/app/register/page.tsx frontend/src/app/zibagar/layout.tsx
-          git status
-          git commit -m "fix: same phone for customer+professional; portfolio on mobile nav" || exit 0
+          git add backend/src/auth/auth.service.ts
+          git commit -m "fix(auth): dual-role login/register same phone" || exit 0
           git push origin HEAD:main
-      - name: Sync export auth
-        run: |
           git fetch origin beautijoo-backend-export
           rm -rf /tmp/be
           git worktree add /tmp/be origin/beautijoo-backend-export
@@ -220,5 +118,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/auth/auth.service.ts
-          git commit -m "fix: dual-role same-phone login/register" || true
+          git commit -m "fix(auth): dual-role same phone" || true
           git push origin HEAD:beautijoo-backend-export || true
