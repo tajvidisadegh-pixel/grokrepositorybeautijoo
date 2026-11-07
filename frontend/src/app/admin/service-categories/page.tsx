@@ -40,6 +40,7 @@ export default function AdminServiceCategoriesPage() {
   const [serviceCategoryId, setServiceCategoryId] = useState('');
   const [query, setQuery] = useState('');
   const [pricingFilter, setPricingFilter] = useState<'all' | 'fixed' | 'variable' | 'deposit'>('all');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,23 +82,6 @@ export default function AdminServiceCategoriesPage() {
     return map;
   }, [categories]);
 
-  const descendantIds = useMemo(() => {
-    const result = new Map<string, Set<string>>();
-    const visit = (id: string, set: Set<string>) => {
-      for (const child of childrenByParent.get(id) || []) {
-        if (set.has(child.id)) continue;
-        set.add(child.id);
-        visit(child.id, set);
-      }
-    };
-    for (const c of categories) {
-      const set = new Set<string>();
-      visit(c.id, set);
-      result.set(c.id, set);
-    }
-    return result;
-  }, [categories, childrenByParent]);
-
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -108,13 +92,21 @@ export default function AdminServiceCategoriesPage() {
 
   const filteredServices = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return services;
-    return services.filter(
-      (s) =>
+    return services.filter((s) => {
+      if (selectedCategoryId) {
+        const cid = s.categoryId || s.category?.id;
+        if (cid !== selectedCategoryId) return false;
+      }
+      if (pricingFilter === 'fixed' && (s.allowVariable || s.allowDeposit)) return false;
+      if (pricingFilter === 'variable' && !s.allowVariable) return false;
+      if (pricingFilter === 'deposit' && !s.allowDeposit) return false;
+      if (!q) return true;
+      return (
         s.name.toLowerCase().includes(q) ||
-        (s.category?.name || '').toLowerCase().includes(q),
-    );
-  }, [services, query]);
+        (s.category?.name || '').toLowerCase().includes(q)
+      );
+    });
+  }, [services, query, pricingFilter, selectedCategoryId]);
 
   async function createCategory() {
     if (!name.trim()) return;
@@ -266,7 +258,7 @@ export default function AdminServiceCategoriesPage() {
       <div>
         <h1 className="text-xl font-bold text-[#0B2C4A]">تخصص‌ها و دسته‌بندی‌ها</h1>
         <p className="mt-1 text-sm text-gray-500">
-          مدیریت کامل دسته‌بندی‌ها و تخصص‌های اصلی (افزودن، ویرایش، فعال/غیرفعال).
+          مدیریت درخت دسته‌ها، تخصص‌های کاتالوگ و حالت‌های قیمت (ثابت / گزینه‌ها / بیعانه). از دکمه «قیمت‌گذاری» روی هر تخصص استفاده کنید.
         </p>
       </div>
       {error && (
@@ -283,256 +275,155 @@ export default function AdminServiceCategoriesPage() {
             {childParentId && <button type="button" className="text-xs text-gray-500 underline" onClick={() => { setChildParentId(null); setParentId(''); }}>لغو حالت زیرمجموعه</button>}
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={childParentId ? 'نام زیرمجموعه' : 'نام دسته‌بندی'}
-            />
-            <select
-              value={parentId}
-              onChange={(e) => setParentId(e.target.value)}
-              className="h-10 rounded-xl border px-3 text-sm"
-            >
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={childParentId ? 'نام زیرمجموعه' : 'نام دسته‌بندی'} />
+            <select value={parentId} onChange={(e) => setParentId(e.target.value)} className="h-10 rounded-xl border px-3 text-sm">
               <option value="">بدون والد</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
-          <button
-            disabled={busy || !name.trim()}
-            onClick={() => void createCategory()}
-            className="mt-3 rounded-xl bg-[#2D6CDF] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            ثبت دسته‌بندی
-          </button>
+          <button disabled={busy || !name.trim()} onClick={() => void createCategory()} className="mt-3 rounded-xl bg-[#2D6CDF] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">ثبت دسته‌بندی</button>
         </div>
 
         <div className="rounded-2xl border border-[#FFE6E2] bg-white p-4">
           <h2 className="font-semibold text-[#0B2C4A]">+ افزودن تخصص</h2>
           <div className="mt-3 grid gap-2">
-            <Input
-              value={serviceName}
-              onChange={(e) => setServiceName(e.target.value)}
-              placeholder="نام تخصص"
-            />
-            <select
-              value={serviceCategoryId}
-              onChange={(e) => setServiceCategoryId(e.target.value)}
-              className="h-10 w-full rounded-xl border px-3 text-sm"
-            >
+            <Input value={serviceName} onChange={(e) => setServiceName(e.target.value)} placeholder="نام تخصص" />
+            <select value={serviceCategoryId} onChange={(e) => setServiceCategoryId(e.target.value)} className="h-10 w-full rounded-xl border px-3 text-sm">
               <option value="">انتخاب دسته‌بندی</option>
-              {categories
-                .filter((c) => c.isActive)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              {categories.filter((c) => c.isActive).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
             </select>
           </div>
-          <button
-            disabled={busy || !serviceName.trim() || !serviceCategoryId}
-            onClick={() => void createService()}
-            className="mt-3 rounded-xl bg-[#FF6F61] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            ثبت تخصص
-          </button>
+          <button disabled={busy || !serviceName.trim() || !serviceCategoryId} onClick={() => void createService()} className="mt-3 rounded-xl bg-[#FF6F61] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">ثبت تخصص</button>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-semibold text-[#0B2C4A]">ساختار دسته‌بندی‌ها</h2>
-            <p className="mt-1 text-xs text-gray-500">دسته اصلی ← زیرمجموعه ← زیرمجموعه‌های بعدی. برای هر سطح می‌توانی مستقیم «زیرمجموعه» اضافه کنی.</p>
+      {editCat && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-4 shadow-xl" dir="rtl">
+            <h3 className="font-bold text-[#0B2C4A]">ویرایش دسته</h3>
+            <Input value={editCat.name} onChange={(e) => setEditCat({ ...editCat, name: e.target.value })} />
+            <select value={editCat.parentId || ''} onChange={(e) => setEditCat({ ...editCat, parentId: e.target.value || null })} className="h-10 w-full rounded-xl border px-3 text-sm">
+              <option value="">بدون والد</option>
+              {categories.filter((c) => c.id !== editCat.id).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!editCat.isActive} onChange={(e) => setEditCat({ ...editCat, isActive: e.target.checked })} />فعال</label>
+            <div className="flex gap-2">
+              <button type="button" disabled={busy} onClick={() => void saveEditCategory()} className="rounded-xl bg-[#2D6CDF] px-4 py-2 text-sm text-white">ذخیره</button>
+              <button type="button" onClick={() => setEditCat(null)} className="rounded-xl border px-4 py-2 text-sm">انصراف</button>
+            </div>
           </div>
-          <button
-            type="button"
-            className="rounded-lg border border-[#2D6CDF] px-3 py-1.5 text-xs text-[#2D6CDF]"
-            onClick={() => { setParentId(''); setChildParentId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-          >
-            + دسته اصلی
-          </button>
         </div>
-        <div className="mt-4 space-y-2">
-          {(childrenByParent.get(null) || []).map((root) => {
-            const renderNode = (cat: Category, depth = 0): React.ReactNode => {
-              const children = childrenByParent.get(cat.id) || [];
-              const isOpen = expanded.has(cat.id);
-              return (
-                <div key={cat.id} className="rounded-xl border border-gray-100 bg-gray-50/60">
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-                    <button
-                      type="button"
-                      aria-label={isOpen ? 'بستن زیرمجموعه‌ها' : 'باز کردن زیرمجموعه‌ها'}
-                      className="h-7 w-7 rounded-lg border bg-white text-sm"
-                      onClick={() => toggleExpanded(cat.id)}
-                    >
-                      {children.length ? (isOpen ? '−' : '+') : '•'}
-                    </button>
-                    <div className="min-w-0 flex-1" style={{ paddingRight: depth * 18 }}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-sm">{cat.name}</span>
-                        {depth === 0 && (
-                          <button type="button" disabled={busy} onClick={() => void togglePopular(cat)}
-                            className={`rounded-full border px-2 py-0.5 text-[11px] ${cat.icon === 'popular' ? 'border-[#FF6F61] bg-[#FF6F61] text-white' : 'border-gray-300 bg-white text-gray-600'}`}>
-                            {cat.icon === 'popular' ? 'محبوب ✓' : 'محبوب'}
-                          </button>
-                        )}
-                        {!cat.isActive && <span className="text-xs text-red-500">(غیرفعال)</span>}
-                        {children.length > 0 && <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">{children.length} زیرمجموعه</span>}
+      )}
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-[#E7F1FF] bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold text-[#0B2C4A]">دسته‌بندی‌ها</h2>
+            {selectedCategoryId && (
+              <button type="button" className="text-xs text-[#FF6F61] underline" onClick={() => setSelectedCategoryId(null)}>حذف فیلتر دسته</button>
+            )}
+          </div>
+          <div className="space-y-2">
+            {(childrenByParent.get(null) || []).map(function renderRoot(root: Category): React.ReactNode {
+              const renderNode = (cat: Category, depth: number): React.ReactNode => {
+                const children = childrenByParent.get(cat.id) || [];
+                const isOpen = expanded.has(cat.id);
+                return (
+                  <div key={cat.id} className={depth > 0 ? 'mr-3 border-r border-[#E7F1FF] pr-2' : ''}>
+                    <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${selectedCategoryId === cat.id ? 'border-[#FF6F61] bg-[#FFF5F3]' : 'border-[#E7F1FF] bg-white'}`}>
+                      {children.length > 0 ? (
+                        <button type="button" className="text-xs" onClick={() => toggleExpanded(cat.id)}>{isOpen ? '▼' : '▶'}</button>
+                      ) : <span className="w-3" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-[#0B2C4A]">{cat.name}{cat.icon === 'popular' ? ' ★' : ''}</p>
+                        <p className="text-[11px] text-gray-500">{cat._count?.services ?? 0} تخصص{!cat.isActive ? ' · غیرفعال' : ''}</p>
                       </div>
-                      <p className="text-[11px] text-gray-400">{cat.parent?.name ? `زیرمجموعهٔ ${cat.parent.name}` : 'دسته اصلی'} · {cat._count?.services ?? 0} تخصص · {cat.slug}</p>
+                      <div className="flex flex-wrap gap-1">
+                        <button type="button" disabled={busy} onClick={() => setSelectedCategoryId(cat.id)} className="text-xs text-[#0B2C4A]">فیلتر تخصص</button>
+                        <button type="button" disabled={busy} onClick={() => { setChildParentId(cat.id); setParentId(cat.id); setExpanded((p) => new Set(p).add(cat.id)); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-xs text-gray-600">+ زیرمجموعه</button>
+                        <button type="button" disabled={busy} onClick={() => setEditCat({ ...cat })} className="text-xs text-[#2D6CDF]">ویرایش</button>
+                        <button type="button" disabled={busy} onClick={() => void setCategoryActive(cat.id, !cat.isActive)} className="text-xs text-[#2D6CDF]">{cat.isActive ? 'غیرفعال' : 'فعال'}</button>
+                        <button type="button" disabled={busy} onClick={() => void togglePopular(cat)} className="text-xs text-amber-700">{cat.icon === 'popular' ? 'حذف محبوب' : 'محبوب'}</button>
+                        <button type="button" disabled={busy} onClick={() => void deleteCategory(cat.id)} className="text-xs text-[#FF6F61]">حذف</button>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="rounded-lg border border-[#FF6F61] px-2.5 py-1 text-xs text-[#FF6F61]"
-                        onClick={() => {
-                          setParentId(cat.id);
-                          setChildParentId(cat.id);
-                          setName('');
-                          setExpanded((prev) => new Set(prev).add(cat.id));
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                      >
-                        + زیرمجموعه
-                      </button>
-                      <button type="button" disabled={busy} onClick={() => setEditCat({ ...cat })} className="text-xs text-[#2D6CDF]">ویرایش</button>
-                      <button type="button" disabled={busy} onClick={() => void setCategoryActive(cat.id, !cat.isActive)} className="text-xs text-[#2D6CDF]">{cat.isActive ? 'غیرفعال' : 'فعال'}</button>
-                      <button type="button" disabled={busy} onClick={() => void deleteCategory(cat.id)} className="text-xs text-[#FF6F61]">حذف</button>
-                    </div>
+                    {isOpen && children.length > 0 && (
+                      <div className="mt-1 space-y-1">{children.map((ch) => renderNode(ch, depth + 1))}</div>
+                    )}
                   </div>
-                  {isOpen && children.length > 0 && (
-                    <div className="space-y-2 border-t border-gray-100 p-2 pr-5">
-                      {children.map((child) => renderNode(child, depth + 1))}
+                );
+              };
+              return renderNode(root, 0);
+            })}
+            {(childrenByParent.get(null) || []).length === 0 && (
+              <p className="py-6 text-center text-sm text-gray-500">هنوز دسته‌بندی‌ای ساخته نشده است.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#E7F1FF] bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold text-[#0B2C4A]">تخصص‌ها</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input className="max-w-xs" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="جستجوی تخصص..." />
+              <select value={pricingFilter} onChange={(e) => setPricingFilter(e.target.value as 'all' | 'fixed' | 'variable' | 'deposit')} className="h-10 rounded-xl border px-3 text-sm">
+                <option value="all">همه حالت‌ها</option>
+                <option value="fixed">فقط ثابت</option>
+                <option value="variable">دارای متغیر</option>
+                <option value="deposit">دارای بیعانه</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-3 divide-y">
+            {filteredServices.length === 0 ? (
+              <p className="py-6 text-center text-sm text-gray-500">موردی یافت نشد.</p>
+            ) : (
+              filteredServices.map((s) => (
+                <div key={s.id} className="flex flex-wrap items-start justify-between gap-2 py-3">
+                  {editSvc?.id === s.id ? (
+                    <div className="w-full space-y-2">
+                      <Input value={editSvc.name} onChange={(e) => setEditSvc({ ...editSvc, name: e.target.value })} />
+                      <select value={editSvc.categoryId || editSvc.category?.id || ''} onChange={(e) => setEditSvc({ ...editSvc, categoryId: e.target.value })} className="h-10 w-full rounded-xl border px-3 text-sm">
+                        {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                      </select>
+                      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editSvc.isActive !== false} onChange={(e) => setEditSvc({ ...editSvc, isActive: e.target.checked })} />فعال</label>
+                      <div className="flex gap-2">
+                        <button type="button" disabled={busy} onClick={() => void saveEditService()} className="rounded-lg bg-[#2D6CDF] px-3 py-1 text-xs text-white">ذخیره</button>
+                        <button type="button" onClick={() => setEditSvc(null)} className="rounded-lg border px-3 py-1 text-xs">انصراف</button>
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-[#0B2C4A]">{s.name}</p>
+                        <p className="text-xs text-gray-400">{s.category?.name || 'بدون دسته'} · {s.slug}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {s.allowVariable && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700">متغیر</span>}
+                          {s.allowDeposit && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">بیعانه</span>}
+                          {(s.allowVariable || s.allowDeposit) && (s.allowFixed !== false) && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">+ثابت</span>}
+                          {!s.allowVariable && !s.allowDeposit && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">ثابت</span>}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button disabled={busy} onClick={() => setEditSvc({ ...s, categoryId: s.categoryId || s.category?.id })} className="text-xs text-[#2D6CDF]">ویرایش</button>
+                        <button disabled={busy} onClick={() => setPricingSvc({ id: s.id, name: s.name })} className="rounded-lg bg-[#0B2C4A] px-2 py-1 text-xs text-white">قیمت‌گذاری</button>
+                        <button disabled={busy} onClick={() => void deleteService(s.id)} className="text-xs text-[#FF6F61]">حذف</button>
+                      </div>
+                    </>
                   )}
                 </div>
-              );
-            };
-            return renderNode(root);
-          })}
-          {(childrenByParent.get(null) || []).length === 0 && (
-            <p className="py-6 text-center text-sm text-gray-500">هنوز دسته‌بندی‌ای ساخته نشده است.</p>
-          )}
+              ))
+            )}
+          </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-[#0B2C4A]">تخصص‌ها</h2>
-          <Input
-            className="max-w-xs"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="جستجوی تخصص..."
-          />
-        </div>
-        <div className="mt-3 divide-y">
-          {filteredServices.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-500">تخصصی یافت نشد.</p>
-          ) : (
-            filteredServices.map((s) => (
-              <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                {editSvc?.id === s.id ? (
-                  <div className="flex w-full flex-wrap items-center gap-2">
-                    <Input
-                      value={editSvc.name}
-                      onChange={(e) => setEditSvc({ ...editSvc, name: e.target.value })}
-                      className="max-w-xs"
-                    />
-                    <select
-                      value={editSvc.categoryId || editSvc.category?.id || ''}
-                      onChange={(e) =>
-                        setEditSvc({ ...editSvc, categoryId: e.target.value })
-                      }
-                      className="h-10 rounded-xl border px-3 text-sm"
-                    >
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      disabled={busy}
-                      onClick={() => void saveEditService()}
-                      className="rounded-lg bg-[#2D6CDF] px-3 py-1.5 text-xs text-white"
-                    >
-                      ذخیره
-                    </button>
-                    <button
-                      onClick={() => setEditSvc(null)}
-                      className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs"
-                    >
-                      انصراف
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <p className="text-sm font-medium">
-                        {s.name}{' '}
-                        {s.isActive === false && (
-                          <span className="text-xs text-red-500">(غیرفعال)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {s.category?.name || 'بدون دسته'} · {s.slug}
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {/* #80: only show badges when non-fixed modes exist; pure fixed = no label clutter */}
-                        {s.allowVariable && (
-                          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700">متغیر</span>
-                        )}
-                        {s.allowDeposit && (
-                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">بیعانه</span>
-                        )}
-                        {(s.allowVariable || s.allowDeposit) && (s.allowFixed !== false) && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">+ثابت</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          setEditSvc({
-                            ...s,
-                            categoryId: s.categoryId || s.category?.id,
-                          })
-                        }
-                        className="text-xs text-[#2D6CDF]"
-                      >
-                        ویرایش
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => setPricingSvc({ id: s.id, name: s.name })}
-                        className="text-xs text-[#0B2C4A]"
-                      >
-                        قیمت‌گذاری
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => void deleteService(s.id)}
-                        className="text-xs text-[#FF6F61]"
-                      >
-                        حذف
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </section>
       {pricingSvc && (
         <ServicePricingPanel
           serviceId={pricingSvc.id}
