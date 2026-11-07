@@ -19,13 +19,13 @@ jobs:
           import base64
           from pathlib import Path
 
-          def assemble(prefix, dest):
+          def assemble(prefix, dest, n=8):
               parts = []
-              for i in range(4):
+              for i in range(n):
                   p = Path(f"scripts/b64chunks/{prefix}.{i}.b64")
                   if not p.exists():
                       raise SystemExit(f"missing {p}")
-                  parts.append(base64.b64decode("".join(p.read_text().split())))
+                  parts.append(base64.b64decode(p.read_text().strip()))
               data = b"".join(parts)
               Path(dest).parent.mkdir(parents=True, exist_ok=True)
               Path(dest).write_bytes(data)
