@@ -140,15 +140,33 @@ export class PaymentsService {
 
   /**
    * Offline booking without gateway (reversible via BOOKING_PAYMENT_MODE / PAYMENT_PROVIDER).
-   * auto (default): offline unless PAYMENT_PROVIDER is zarinpal/zibal/idpay.
-   * When you get a gateway license: set PAYMENT_PROVIDER=zarinpal → back to gateway.
+   * - offline: always confirm without gateway
+   * - gateway: always online path (mock/zarinpal/…)
+   * - auto (default): offline only when provider is disabled/empty/none/off;
+   *   mock stays on gateway path so e2e/dev keep working;
+   *   zarinpal/zibal/idpay use gateway.
+   * Production without license: PAYMENT_PROVIDER=disabled → offline bookings.
+   * After license: PAYMENT_PROVIDER=zarinpal → gateway automatically.
    */
   private resolveBookingPaymentMode(): 'offline' | 'gateway' {
     const explicit = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();
-    if (explicit === 'offline' || explicit === 'no_gateway' || explicit === 'pay_later') return 'offline';
-    if (explicit === 'gateway' || explicit === 'online') return 'gateway';
-    const provider = this.providerName();
-    if (provider === 'zarinpal' || provider === 'zibal' || provider === 'idpay') return 'gateway';
+    if (explicit === 'offline' || explicit === 'no_gateway' || explicit === 'pay_later') {
+      return 'offline';
+    }
+    if (explicit === 'gateway' || explicit === 'online') {
+      return 'gateway';
+    }
+    const provider = this.providerName().toLowerCase();
+    // Real or test gateways — keep initiate/verify path (needed for e2e with mock)
+    if (
+      provider === 'zarinpal' ||
+      provider === 'zibal' ||
+      provider === 'idpay' ||
+      provider === 'mock'
+    ) {
+      return 'gateway';
+    }
+    // disabled / empty / none / off / unknown without real gateway
     return 'offline';
   }
 
