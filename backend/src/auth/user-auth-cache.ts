@@ -3,8 +3,13 @@
  * Avoids a heavy Prisma include (roles + permissions + profile + professional)
  * on every authenticated request.
  *
- * Not a substitute for Redis in multi-instance deploys — each process has its
- * own cache. TTL is short so status/role changes propagate quickly.
+ * #82.15 notes:
+ * - Not a substitute for Redis in multi-instance deploys — each process has its
+ *   own cache. Prefer short TTL (default 30s) so status/role changes propagate.
+ * - JwtStrategy re-checks `user.status` on every cache hit (cheap select).
+ * - Call `invalidate(userId)` from admin paths that change status or roles
+ *   (setUserStatus, setUserRoles) so the same instance drops the entry immediately.
+ * - Set JWT_USER_CACHE_TTL_SECONDS=0 to disable the cache entirely.
  */
 
 export type CachedAuthUser = {
