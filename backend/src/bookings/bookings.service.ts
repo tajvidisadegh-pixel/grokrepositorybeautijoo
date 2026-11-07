@@ -575,13 +575,13 @@ export class BookingsService {
       if (!isPro) throw new ForbiddenException();
       // #82.12 — only confirmed (paid) bookings can be completed; never unpaid pending/expired
       if (b.status !== BookingStatus.confirmed) {
-        throw new BadRequestException('complete requires confirmed booking');
+        throw new BadRequestException('فقط نوبت تأییدشده (پرداخت‌شده) قابل تکمیل است');
       }
       const paid =
         b.payment?.status === 'paid' ||
         (b.payment as { status?: string } | null)?.status === 'paid';
       if (!paid) {
-        throw new BadRequestException('complete requires paid booking');
+        throw new BadRequestException('فقط نوبت پرداخت‌شده قابل تکمیل است');
       }
       return this.prisma.booking.update({
         where: { id },
