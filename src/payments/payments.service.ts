@@ -242,6 +242,22 @@ export class PaymentsService {
     }
 
     this.assertAllowedCallbackUrl(callbackUrl);
+
+    // #82.3 — Authorize ownership BEFORE any release/mutation so a customer
+    // cannot expire another customer's unpaid pending booking.
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { payment: true },
+    });
+    if (!booking) throw new NotFoundException();
+    if (booking.customerId !== userId) throw new ForbiddenException();
+    if (booking.status === BookingStatus.expired || booking.status === BookingStatus.cancelled) {
+      throw new BadRequestException('این رزرو دیگر قابل پرداخت نیست');
+    }
+    if (booking.payment?.status === PaymentStatus.paid || booking.payment?.status === 'paid') {
+      throw new ConflictException('قبلاً پرداخت شده');
+    }
+
     const providerKey = this.providerName();
     if (providerKey === 'disabled') {
       await this.releaseUnpaidPendingBooking(
@@ -252,17 +268,6 @@ export class PaymentsService {
         'پرداخت آنلاین در حال حاضر فعال نیست. درگاه واقعی پیکربندی نشده است. رزرو نگه‌داشته نشد.',
       );
     }
-
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: { payment: true },
-    });
-    if (!booking) throw new NotFoundException();
-    if (booking.customerId !== userId) throw new ForbiddenException();
-    if (booking.status === BookingStatus.expired || booking.status === BookingStatus.cancelled) {
-      throw new BadRequestException('این رزرو دیگر قابل پرداخت نیست');
-    }
-    if (booking.payment?.status === 'paid') throw new ConflictException('قبلاً پرداخت شده');
 
     const idempotencyKey = booking.payment?.idempotencyKey || randomUUID();
 
