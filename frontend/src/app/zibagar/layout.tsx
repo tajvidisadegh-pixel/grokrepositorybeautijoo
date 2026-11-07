@@ -13,7 +13,7 @@ const BASE_ITEMS: PanelNavItem[] = [
   { href: '/zibagar/profile', label: 'پروفایل', mobile: true },
   { href: '/zibagar/reviews', label: 'نظرات' },
   { href: '/zibagar/services', label: 'منوی خدمات', mobile: true },
-  { href: '/zibagar/portfolio', label: 'نمونه‌کار', mobile: true },
+  { href: '/zibagar/portfolio', label: 'گالری نمونه‌کار', mobile: true },
   { href: '/zibagar/earnings', label: 'درآمد' },
   { href: '/zibagar/hours', label: 'ساعات کاری' },
   { href: '/zibagar/locations', label: 'آدرس' },
