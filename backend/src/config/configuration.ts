@@ -161,6 +161,7 @@ export default () => {
      * - real keys (e.g. zarinpal): optional integrations — not a project lock-in
      */
     paymentProvider: process.env.PAYMENT_PROVIDER || '',
+    bookingPaymentMode: (process.env.BOOKING_PAYMENT_MODE || 'auto').toLowerCase(),
     zarinpalMerchantId: process.env.ZARINPAL_MERCHANT_ID || '',
     zarinpalSandbox: process.env.ZARINPAL_SANDBOX || 'false',
     zarinpalAccessToken: process.env.ZARINPAL_ACCESS_TOKEN || '',
