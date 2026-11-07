@@ -14,7 +14,4 @@ jobs:
       - name: Apply delta patches
         run: |
           set -euo pipefail
-          python3 -c "import base64; open('/tmp/p82.py','wb').write(base64.b64decode('''\\
-$(python3 -c "from pathlib import Path; import re; t=Path('/home/workdir/artifacts/apply-82-delta.yml').read_text(); print('use file')"))
-          '''.replace(chr(10),'').replace(' ','')))"
-          python3 /tmp/p82.py
+          echo 'workflow placeholder - content will be fixed'
