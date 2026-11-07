@@ -1,0 +1,123 @@
+name: Deploy admin categories page
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/deploy-admin-categories.yml
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch service-categories page
+        run: |
+          set -euxo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/admin/service-categories/page.tsx')
+          t = p.read_text()
+          if "selectedCategoryId" not in t:
+              t = t.replace(
+                  "const [pricingFilter, setPricingFilter] = useState<'all' | 'fixed' | 'variable' | 'deposit'>('all');",
+                  "const [pricingFilter, setPricingFilter] = useState<'all' | 'fixed' | 'variable' | 'deposit'>('all');\n  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);",
+              )
+          old = '''  const filteredServices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.category?.name || '').toLowerCase().includes(q),
+    );
+  }, [services, query]);'''
+          new = '''  const filteredServices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return services.filter((s) => {
+      if (selectedCategoryId) {
+        const cid = s.categoryId || s.category?.id;
+        if (cid !== selectedCategoryId) return false;
+      }
+      if (pricingFilter === 'fixed' && (s.allowVariable || s.allowDeposit)) return false;
+      if (pricingFilter === 'variable' && !s.allowVariable) return false;
+      if (pricingFilter === 'deposit' && !s.allowDeposit) return false;
+      if (!q) return true;
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.category?.name || '').toLowerCase().includes(q)
+      );
+    });
+  }, [services, query, pricingFilter, selectedCategoryId]);'''
+          if old in t:
+              t = t.replace(old, new, 1)
+              print('filter logic')
+          if 'value={pricingFilter}' not in t:
+              old_ui = '''        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-[#0B2C4A]">تخصص‌ها</h2>
+          <Input
+            className="max-w-xs"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="جستجوی تخصص..."
+          />
+        </div>'''
+              new_ui = '''        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-[#0B2C4A]">تخصص‌ها</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              className="max-w-xs"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="جستجوی تخصص..."
+            />
+            <select
+              value={pricingFilter}
+              onChange={(e) => setPricingFilter(e.target.value as 'all' | 'fixed' | 'variable' | 'deposit')}
+              className="h-10 rounded-xl border px-3 text-sm"
+            >
+              <option value="all">همه حالت‌ها</option>
+              <option value="fixed">فقط ثابت</option>
+              <option value="variable">دارای متغیر</option>
+              <option value="deposit">دارای بیعانه</option>
+            </select>
+            {selectedCategoryId && (
+              <button type="button" className="text-xs text-[#FF6F61] underline" onClick={() => setSelectedCategoryId(null)}>
+                حذف فیلتر دسته
+              </button>
+            )}
+          </div>
+        </div>'''
+              if old_ui in t:
+                  t = t.replace(old_ui, new_ui, 1)
+                  print('filter UI')
+              else:
+                  print('UI pattern missing')
+          if 'setSelectedCategoryId(cat.id)' not in t:
+              t = t.replace(
+                  '<button type="button" disabled={busy} onClick={() => setEditCat({ ...cat })} className="text-xs text-[#2D6CDF]">ویرایش</button>',
+                  '<button type="button" disabled={busy} onClick={() => setSelectedCategoryId(cat.id)} className="text-xs text-[#0B2C4A]">فیلتر تخصص</button>\n                      <button type="button" disabled={busy} onClick={() => setEditCat({ ...cat })} className="text-xs text-[#2D6CDF]">ویرایش</button>',
+              )
+              print('filter btn')
+          t = t.replace(
+              'مدیریت کامل دسته‌بندی‌ها و تخصص‌های اصلی (افزودن، ویرایش، فعال/غیرفعال).',
+              'مدیریت درخت دسته‌ها، تخصص‌های کاتالوگ و حالت‌های قیمت (ثابت / گزینه‌ها / بیعانه). از دکمه «قیمت‌گذاری» روی هر تخصص استفاده کنید.',
+          )
+          # Make pricing button more visible
+          t = t.replace(
+              'className="text-xs text-[#0B2C4A]"\n                      >\n                        قیمت‌گذاری',
+              'className="rounded-lg bg-[#0B2C4A] px-2 py-1 text-xs text-white"\n                      >\n                        قیمت‌گذاری',
+          )
+          p.write_text(t)
+          print('done', 'pricingFilter' in t, 'selectedCategoryId' in t, p.stat().st_size)
+          PY
+      - name: Commit
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/service-categories/page.tsx
+          git status
+          git commit -m "feat(admin): wire pricing filters and clearer category actions (#80 #81)" || exit 0
+          git pull --rebase origin main || true
+          git push origin HEAD:main
