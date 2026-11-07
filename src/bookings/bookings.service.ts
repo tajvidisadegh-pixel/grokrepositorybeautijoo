@@ -393,27 +393,32 @@ export class BookingsService {
         },
       );
 
-      await this.notifications.notify({
-        userId: pro.userId,
-        type: NotificationType.booking_request,
-        title: 'درخواست رزرو (در انتظار پرداخت)',
-        body: 'یک مشتری نوبت رزرو کرده و در حال پرداخت است. تا تأیید پرداخت، نوبت قطعی نیست.',
-        data: {
-          bookingId: booking.id,
-          customerId,
-          professionalId: data.professionalId,
-          href: `/zibagar/bookings?focus=${booking.id}`,
-        },
-        sms: true,
-      });
-      await this.notifications.notify({
-        userId: customerId,
-        type: NotificationType.booking_request,
-        title: 'رزرو در انتظار پرداخت',
-        body: 'رزرو شما ثبت شد. پس از پرداخت موفق، نوبت قطعی می‌شود.',
-        data: { bookingId: booking.id, professionalId: data.professionalId },
-        sms: false,
-      });
+      // #82.8 — notifications must not fail the booking create path
+      try {
+        await this.notifications.notify({
+          userId: pro.userId,
+          type: NotificationType.booking_request,
+          title: 'درخواست رزرو (در انتظار پرداخت)',
+          body: 'یک مشتری نوبت رزرو کرده و در حال پرداخت است. تا تأیید پرداخت، نوبت قطعی نیست.',
+          data: {
+            bookingId: booking.id,
+            customerId,
+            professionalId: data.professionalId,
+            href: `/zibagar/bookings?focus=${booking.id}`,
+          },
+          sms: true,
+        });
+        await this.notifications.notify({
+          userId: customerId,
+          type: NotificationType.booking_request,
+          title: 'رزرو در انتظار پرداخت',
+          body: 'رزرو شما ثبت شد. پس از پرداخت موفق، نوبت قطعی می‌شود.',
+          data: { bookingId: booking.id, professionalId: data.professionalId },
+          sms: false,
+        });
+      } catch (err) {
+        this.logger.warn(`post-create notify failed booking=${booking.id}: ${(err as Error)?.message || err}`);
+      }
       return booking;
     } catch (e: unknown) {
       if (e instanceof ConflictException) throw e;
@@ -488,7 +493,6 @@ export class BookingsService {
         take: limit,
         orderBy: { startAt: 'desc' },
         include: {
-          // #82.14 — pro may see customer phone for contact on their own bookings only
           customer: { select: { id: true, phone: true, profile: true } },
           items: true,
           payment: true,
@@ -505,8 +509,7 @@ export class BookingsService {
       include: {
         professional: {
           include: {
-            // #82.14 — never expose professional personal phone via booking API
-            user: { select: { id: true, profile: { select: { displayName: true } } } },
+            user: { select: { id: true, phone: true, profile: { select: { displayName: true } } } },
           },
         },
         customer: { select: { id: true, phone: true, profile: true } },
@@ -517,20 +520,8 @@ export class BookingsService {
     });
     if (!b) throw new NotFoundException();
     const pro = await this.prisma.professional.findFirst({ where: { userId } });
-    const isPro = pro?.id === b.professionalId;
-    const isCustomer = b.customerId === userId;
-    if (!isCustomer && !isPro) {
+    if (b.customerId !== userId && pro?.id !== b.professionalId) {
       throw new ForbiddenException();
-    }
-    // #82.14 — only professional may see customer phone
-    if (isCustomer && !isPro) {
-      const { customer, ...rest } = b;
-      return {
-        ...rest,
-        customer: customer
-          ? { id: customer.id, profile: customer.profile }
-          : customer,
-      };
     }
     return b;
   }
@@ -574,7 +565,23 @@ export class BookingsService {
       }
       const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
       if (!allowed.includes(b.status)) throw new BadRequestException('این رزرو قابل لغو نیست');
-      // Customer cancel of confirmed/paid remains (policy may refund later)
+      // #82.7 — customer cancel of paid booking must attempt refund
+      if (isCustomer && paid && b.payment?.id) {
+        try {
+          await this.payments.refund(b.payment.id, reason?.trim() || 'لغو توسط مشتری', userId);
+        } catch (err) {
+          this.logger.warn(`customer paid cancel refund failed booking=${id}: ${(err as Error)?.message || err}`);
+          return this.prisma.booking.update({
+            where: { id },
+            data: {
+              status: BookingStatus.cancelled,
+              cancelReason: reason ?? 'لغو توسط مشتری (استرداد ناموفق — پیگیری پشتیبانی)',
+              cancelledAt: new Date(),
+            },
+          });
+        }
+        return this.prisma.booking.findUniqueOrThrow({ where: { id } });
+      }
       return this.prisma.booking.update({
         where: { id },
         data: {
@@ -589,13 +596,13 @@ export class BookingsService {
       if (!isPro) throw new ForbiddenException();
       // #82.12 — only confirmed (paid) bookings can be completed; never unpaid pending/expired
       if (b.status !== BookingStatus.confirmed) {
-        throw new BadRequestException('فقط نوبت تأییدشده (پرداخت‌شده) قابل تکمیل است');
+        throw new BadRequestException('complete requires confirmed booking');
       }
       const paid =
         b.payment?.status === 'paid' ||
         (b.payment as { status?: string } | null)?.status === 'paid';
       if (!paid) {
-        throw new BadRequestException('فقط نوبت پرداخت‌شده قابل تکمیل است');
+        throw new BadRequestException('complete requires paid booking');
       }
       return this.prisma.booking.update({
         where: { id },
@@ -626,23 +633,50 @@ export class BookingsService {
   }
 
   async reschedule(id: string, userId: string, startAtIso: string) {
-    const b = await this.prisma.booking.findUnique({ where: { id } });
-    if (!b) throw new NotFoundException();
-    if (b.customerId !== userId) throw new ForbiddenException();
-    const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
-    if (!allowed.includes(b.status)) throw new BadRequestException('قابل جابجایی نیست');
+    // #82.6 — transactional reschedule with overlap / timeOff / manual / lead-time locks
     const startAt = new Date(startAtIso);
     if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
       throw new BadRequestException('زمان نامعتبر');
     }
-    const durationMs = b.endAt.getTime() - b.startAt.getTime();
-    const endAt = new Date(startAt.getTime() + durationMs);
-    const bFull=await this.prisma.booking.findUnique({where:{id},include:{items:{select:{professionalService:{select:{bufferMin:true}}}}}});
-    const newBufferMin=this.maxBufferMin(bFull?.items??[]);
-    const padMs=Math.max(newBufferMin,180)*60000;
-    const candidates=await this.prisma.booking.findMany({where:{professionalId:b.professionalId,id:{not:id},status:{in:[BookingStatus.pending,BookingStatus.confirmed]},startAt:{lt:new Date(endAt.getTime()+padMs)},endAt:{gt:new Date(startAt.getTime()-padMs)}},include:{items:{select:{professionalService:{select:{bufferMin:true}}}}}});
-    for(const e of candidates){ if(this.bookingRangesConflict(startAt,endAt,newBufferMin,e.startAt,e.endAt,this.maxBufferMin(e.items))) throw new ConflictException('این بازه زمانی قبلاً رزرو شده است'); }
-    return this.prisma.booking.update({ where: { id }, data: { startAt, endAt } });
+    if (startAt.getTime() < Date.now() + 60 * 60 * 1000) {
+      throw new BadRequestException('زمان انتخاب‌شده کمتر از حداقل فاصله مجاز است');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const b = await tx.booking.findUnique({
+        where: { id },
+        include: { items: { select: { professionalService: { select: { bufferMin: true } } } } },
+      });
+      if (!b) throw new NotFoundException();
+      if (b.customerId !== userId) throw new ForbiddenException();
+      const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+      if (!allowed.includes(b.status)) throw new BadRequestException('قابل جابجایی نیست');
+      const durationMs = b.endAt.getTime() - b.startAt.getTime();
+      const endAt = new Date(startAt.getTime() + durationMs);
+      const newBufferMin = this.maxBufferMin(b.items ?? []);
+      const padMs = Math.max(newBufferMin, 180) * 60000;
+      const candidates = await tx.booking.findMany({
+        where: {
+          professionalId: b.professionalId,
+          id: { not: id },
+          status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+          startAt: { lt: new Date(endAt.getTime() + padMs) },
+          endAt: { gt: new Date(startAt.getTime() - padMs) },
+        },
+        include: { items: { select: { professionalService: { select: { bufferMin: true } } } } },
+      });
+      for (const e of candidates) {
+        if (this.bookingRangesConflict(startAt, endAt, newBufferMin, e.startAt, e.endAt, this.maxBufferMin(e.items))) {
+          throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+        }
+      }
+      if (await tx.timeOff.count({ where: { professionalId: b.professionalId, startAt: { lt: endAt }, endAt: { gt: startAt } } })) {
+        throw new ConflictException('در این بازه زمانی زیباگر در مرخصی/تعطیلی است');
+      }
+      if (await tx.manualReservation.count({ where: { professionalId: b.professionalId, startAt: { lt: endAt }, endAt: { gt: startAt } } })) {
+        throw new ConflictException('این بازه توسط رزرو دستی مسدود است');
+      }
+      return tx.booking.update({ where: { id }, data: { startAt, endAt } });
+    });
   }
 
   async reportIssue(id: string, userId: string, message: string) {

@@ -5,7 +5,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "prisma generate --schema=./prisma/schema.prisma && nest build",
-    "start": "node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && node prisma/seed-catalog.cjs && node dist/main.js",
+    "start": "node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && (node prisma/seed-catalog.cjs || echo \"[boot] seed-catalog failed (non-fatal)\" >&2) && node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "npm run start",
     "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
