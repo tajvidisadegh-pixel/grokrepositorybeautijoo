@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/restore-82-5-9-robust.yml'
+      - 'scripts/patch_82_*.py'
 jobs:
   restore:
     runs-on: ubuntu-latest
@@ -13,252 +14,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore base from good commit then apply #82.5-9
+      - name: Restore base + apply patches
         run: |
           set -euo pipefail
-          git show dc12132f12064c6b6840dea9cf32ed59540bfdb4:backend/src/payments/payments.service.ts > backend/src/payments/payments.service.ts || true
-          git show dc12132f12064c6b6840dea9cf32ed59540bfdb4:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts || true
-          python3 << 'PY'
-          from pathlib import Path
-          p = Path("backend/src/payments/payments.service.ts")
-          t = p.read_text()
-          if "#82.5" in t and "booking_cancelled" in t:
-              print("payments already has #82.5")
-          else:
-              old = """    const verified = await this.provider.verify(providerRef, payment.amount);
-    if (!verified.success) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.failed },
-      });
-      await this.releaseUnpaidPendingBooking(
-        payment.bookingId,
-        'payment_verify_failed',
-      );
-      return { status: 'failed', bookingId: payment.bookingId };
-    }
-
-    const rateRow = await this.prisma.platformSetting.findUnique({
-      where: { key: PLATFORM_COMMISSION_RATE_KEY },
-    });
-    const rate =
-      rateRow?.value != null && Number.isFinite(Number(rateRow.value))
-        ? Number(rateRow.value)
-        : DEFAULT_PLATFORM_COMMISSION_RATE;
-    const { commissionAmount, professionalNetAmount } = calculateCommission(
-      payment.amount,
-      rate,
-    );
-
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: PaymentStatus.paid,
-        paidAt: new Date(),
-        platformCommissionAmount: commissionAmount,
-        professionalNetAmount: professionalNetAmount,
-        metadata: {
-          ...(typeof payment.metadata === 'object' && payment.metadata !== null
-            ? (payment.metadata as object)
-            : {}),
-          gatewayRefId: verified.refId ?? null,
-        },
-      },
-    });
-
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: payment.bookingId },
-    });
-    if (booking && (booking.status === 'pending' || booking.status === 'expired')) {
-      await this.prisma.booking.update({
-        where: { id: payment.bookingId },
-        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
-      });
-    }
-
-    return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };
-  }"""
-              new = """    const verified = await this.provider.verify(providerRef, payment.amount);
-    if (!verified.success) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.failed },
-      });
-      await this.releaseUnpaidPendingBooking(
-        payment.bookingId,
-        'payment_verify_failed',
-      );
-      return { status: 'failed', bookingId: payment.bookingId };
-    }
-
-    // #82.5 — never mark paid / confirm against a cancelled booking
-    const bookingRow =
-      payment.booking ||
-      (await this.prisma.booking.findUnique({ where: { id: payment.bookingId } }));
-    if (!bookingRow) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: PaymentStatus.failed,
-          metadata: {
-            ...(typeof payment.metadata === 'object' && payment.metadata !== null
-              ? (payment.metadata as object)
-              : {}),
-            gatewayRefId: verified.refId ?? null,
-            rejectReason: 'booking_missing',
-            verifiedButRejected: true,
-          },
-        },
-      });
-      return { status: 'failed', bookingId: payment.bookingId, reason: 'booking_missing' };
-    }
-    if (bookingRow.status === BookingStatus.cancelled) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: PaymentStatus.failed,
-          metadata: {
-            ...(typeof payment.metadata === 'object' && payment.metadata !== null
-              ? (payment.metadata as object)
-              : {}),
-            gatewayRefId: verified.refId ?? null,
-            rejectReason: 'booking_cancelled',
-            verifiedButRejected: true,
-          },
-        },
-      });
-      try {
-        if (payment.providerRef) {
-          await this.provider.refund({
-            providerRef: payment.providerRef,
-            amount: payment.amount,
-            reason: 'رزرو در زمان تأیید پرداخت لغو شده بود',
-          });
-        }
-      } catch {
-        /* non-blocking refund attempt */
-      }
-      return {
-        status: 'failed',
-        bookingId: payment.bookingId,
-        reason: 'booking_cancelled',
-      };
-    }
-
-    // #82.5 — expired (or any re-confirm): re-check slot before confirming
-    if (
-      bookingRow.status === BookingStatus.expired ||
-      bookingRow.status === BookingStatus.pending
-    ) {
-      const overlap = await this.prisma.booking.count({
-        where: {
-          professionalId: bookingRow.professionalId,
-          id: { not: bookingRow.id },
-          status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
-          startAt: { lt: bookingRow.endAt },
-          endAt: { gt: bookingRow.startAt },
-        },
-      });
-      const timeOff = await this.prisma.timeOff.count({
-        where: {
-          professionalId: bookingRow.professionalId,
-          startAt: { lt: bookingRow.endAt },
-          endAt: { gt: bookingRow.startAt },
-        },
-      });
-      const manual = await this.prisma.manualReservation.count({
-        where: {
-          professionalId: bookingRow.professionalId,
-          startAt: { lt: bookingRow.endAt },
-          endAt: { gt: bookingRow.startAt },
-        },
-      });
-      if (overlap > 0 || timeOff > 0 || manual > 0) {
-        await this.prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: PaymentStatus.failed,
-            metadata: {
-              ...(typeof payment.metadata === 'object' && payment.metadata !== null
-                ? (payment.metadata as object)
-                : {}),
-              gatewayRefId: verified.refId ?? null,
-              rejectReason: 'slot_unavailable',
-              verifiedButRejected: true,
-            },
-          },
-        });
-        try {
-          if (payment.providerRef) {
-            await this.provider.refund({
-              providerRef: payment.providerRef,
-              amount: payment.amount,
-              reason: 'اسلات در زمان تأیید پرداخت آزاد نبود',
-            });
-          }
-        } catch {
-          /* non-blocking */
-        }
-        return {
-          status: 'failed',
-          bookingId: payment.bookingId,
-          reason: 'slot_unavailable',
-        };
-      }
-    }
-
-    const rateRow = await this.prisma.platformSetting.findUnique({
-      where: { key: PLATFORM_COMMISSION_RATE_KEY },
-    });
-    const rate =
-      rateRow?.value != null && Number.isFinite(Number(rateRow.value))
-        ? Number(rateRow.value)
-        : DEFAULT_PLATFORM_COMMISSION_RATE;
-    const { commissionAmount, professionalNetAmount } = calculateCommission(
-      payment.amount,
-      rate,
-    );
-
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: PaymentStatus.paid,
-        paidAt: new Date(),
-        platformCommissionAmount: commissionAmount,
-        professionalNetAmount: professionalNetAmount,
-        metadata: {
-          ...(typeof payment.metadata === 'object' && payment.metadata !== null
-            ? (payment.metadata as object)
-            : {}),
-          gatewayRefId: verified.refId ?? null,
-        },
-      },
-    });
-
-    if (
-      bookingRow.status === BookingStatus.pending ||
-      bookingRow.status === BookingStatus.expired
-    ) {
-      await this.prisma.booking.update({
-        where: { id: payment.bookingId },
-        data: { status: BookingStatus.confirmed, confirmedAt: new Date() },
-      });
-    }
-
-    return { status: 'paid', bookingId: payment.bookingId, refId: verified.refId };
-  }"""
-              if old not in t:
-                  print("WARNING: #82.5 payments anchor missing")
-              else:
-                  p.write_text(t.replace(old, new, 1))
-                  print("#82.5 payments applied")
-          print("payments step done")
-          PY
+          GOOD=dc12132f12064c6b6840dea9cf32ed59540bfdb4
+          git show $GOOD:backend/src/payments/payments.service.ts > backend/src/payments/payments.service.ts
+          git show $GOOD:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          python3 scripts/patch_82_pay.py
+          python3 scripts/patch_82_book1.py
+          python3 scripts/patch_82_book2.py
+          mkdir -p docs
+          cat > docs/SECURITY_ISSUE_82_9.md << 'DOC'
+          # Issue #82.9 — Repository exposure & secret hygiene
+          Owner: make repo private, run gitleaks/trufflehog, rotate secrets.
+          App: never commit .env or payment/SMS keys.
+          DOC
+          grep -q '#82.5' backend/src/payments/payments.service.ts
+          grep -q '#82.6' backend/src/bookings/bookings.service.ts
+          grep -q '#82.7' backend/src/bookings/bookings.service.ts
+          grep -q '#82.8' backend/src/bookings/bookings.service.ts
+          echo SANITY_OK
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add backend/src/payments/payments.service.ts backend/src/bookings/bookings.service.ts docs/SECURITY_ISSUE_82_9.md
           if git diff --cached --quiet; then echo no-change; exit 0; fi
-          git commit -m "fix(#82.5-9): callback guards + reschedule + paid cancel refund + safe notify"
+          git commit -m "fix(#82.5-9): callback guards, reschedule locks, paid cancel refund, safe notify, security doc"
           git push
