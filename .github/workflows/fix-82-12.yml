@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - '.github/workflows/fix-82-12.yml'
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -12,29 +14,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply 82.12
+      - name: Restore and patch bookings #82.12
         run: |
-          set -e
-          echo starting
+          set -euo pipefail
+          echo "=== start fix-82-12 ==="
           git show f98f9759a54eb7c4e3964f5a5b232464915fa9c6:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
-          python3 -c "
+          wc -c backend/src/bookings/bookings.service.ts
+          python3 << 'PY'
           from pathlib import Path
-          p = Path('backend/src/bookings/bookings.service.ts')
+          p = Path("backend/src/bookings/bookings.service.ts")
           t = p.read_text()
-          start = t.find(\"    if (action === 'complete') {\")
-          end = t.find(\"    if (action === 'no_show') {\", start)
-          assert start > 0 and end > start
-          new_block = '''    if (action === \'complete\') {
+          if "#82.12" in t and "only confirmed (paid)" in t:
+              print("already patched")
+          else:
+              start = t.find("    if (action === 'complete') {")
+              end = t.find("    if (action === 'no_show') {", start)
+              if start < 0 or end < 0:
+                  raise SystemExit(f"markers not found start={start} end={end}")
+              new_block = """    if (action === 'complete') {
       if (!isPro) throw new ForbiddenException();
       // #82.12 — only confirmed (paid) bookings can be completed; never unpaid pending/expired
       if (b.status !== BookingStatus.confirmed) {
-        throw new BadRequestException(\'complete requires confirmed booking\');
+        throw new BadRequestException('فقط نوبت تأییدشده (پرداخت‌شده) قابل تکمیل است');
       }
       const paid =
-        b.payment?.status === \'paid\' ||
-        (b.payment as { status?: string } | null)?.status === \'paid\';
+        b.payment?.status === 'paid' ||
+        (b.payment as { status?: string } | null)?.status === 'paid';
       if (!paid) {
-        throw new BadRequestException(\'complete requires paid booking\');
+        throw new BadRequestException('فقط نوبت پرداخت‌شده قابل تکمیل است');
       }
       return this.prisma.booking.update({
         where: { id },
@@ -42,14 +49,23 @@ jobs:
       });
     }
 
-'''
-          p.write_text(t[:start] + new_block + t[end:])
-          print('patched', '#82.12' in p.read_text())
-          "
-          grep -q '#82.12' backend/src/bookings/bookings.service.ts
-          grep -q '#82.12' backend/src/cleanup/cleanup.service.ts || true
+"""
+              p.write_text(t[:start] + new_block + t[end:])
+              print("bookings patched")
+          text = p.read_text()
+          assert "#82.12" in text
+          assert "only confirmed (paid)" in text
+          print("verify ok", p.stat().st_size)
+          PY
+          grep -n "#82.12" backend/src/bookings/bookings.service.ts
+          grep -n "#82.12" backend/src/cleanup/cleanup.service.ts || echo "cleanup note: may already be patched"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/bookings/bookings.service.ts
-          git commit -m "fix(#82.12): complete only confirmed+paid bookings in transition()" || echo nochange
-          git push
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "fix(#82.12): complete only confirmed+paid bookings in transition()"
+            git push
+            echo "pushed"
+          fi
