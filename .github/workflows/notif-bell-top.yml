@@ -11,117 +11,72 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Wire bell into header + panel-shell
+      - name: Line-based patch
         run: |
           set -euxo pipefail
           python3 <<'PY'
           from pathlib import Path
 
-          # header
-          header = Path('frontend/src/components/layout/header.tsx')
-          ht = header.read_text()
-          if 'NotificationBell' not in ht:
-              ht = ht.replace(
-                  "import { Search, Menu, X } from 'lucide-react';",
-                  "import { Search, Menu, X } from 'lucide-react';\nimport { NotificationBell } from '@/components/layout/notification-bell';",
-              )
-              needle = '''          <Link
-            href="/search"
-            className="flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
-            aria-label="جستجو"
-          >
-            <Search className="size-5" aria-hidden />
-          </Link>
-
-          {isAuthenticated ? ('''
-              repl = '''          <Link
-            href="/search"
-            className="flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl text-gray transition-colors hover:bg-coral-soft hover:text-coral md:hidden"
-            aria-label="جستجو"
-          >
-            <Search className="size-5" aria-hidden />
-          </Link>
-
-          {/* اعلان‌ها — زنگوله بالای صفحه */}
-          <NotificationBell />
-
-          {isAuthenticated ? ('''
-              assert needle in ht, 'header needle missing'
-              ht = ht.replace(needle, repl, 1)
-              header.write_text(ht)
-              print('header ok')
+          # --- header ---
+          p = Path('frontend/src/components/layout/header.tsx')
+          lines = p.read_text().splitlines(keepends=True)
+          text = ''.join(lines)
+          if 'NotificationBell' not in text:
+              out = []
+              for i, line in enumerate(lines):
+                  out.append(line)
+                  if "from 'lucide-react'" in line and 'NotificationBell' not in ''.join(out):
+                      out.append("import { NotificationBell } from '@/components/layout/notification-bell';\n")
+                  # after search icon closing Link, before isAuthenticated
+                  if line.strip() == '</Link>' and i + 2 < len(lines) and '{isAuthenticated ? (' in lines[i+2]:
+                      # only first such occurrence after Search
+                      if any('Search' in lines[j] for j in range(max(0, i-6), i)):
+                          out.append('\n')
+                          out.append('          <NotificationBell />\n')
+              p.write_text(''.join(out))
+              print('header written', 'NotificationBell' in p.read_text())
           else:
-              print('header already')
+              print('header skip')
 
-          # panel-shell
-          shell = Path('frontend/src/components/panel/panel-shell.tsx')
-          st = shell.read_text()
-          if "from '@/components/layout/notification-bell'" not in st:
-              st = st.replace(
+          # --- panel-shell ---
+          p = Path('frontend/src/components/panel/panel-shell.tsx')
+          t = p.read_text()
+          if "from '@/components/layout/notification-bell'" not in t:
+              t = t.replace(
                   "import { fetchUnreadCount } from '@/lib/panel-api';",
                   "import { fetchUnreadCount } from '@/lib/panel-api';\nimport { NotificationBell } from '@/components/layout/notification-bell';",
+                  1,
               )
-          if 'NotificationBell />' not in st or st.count('NotificationBell') < 2:
-              old_desktop = '''          <aside className="hidden w-full shrink-0 md:block md:w-56">
-            {title ? <h2 className="mb-4 text-lg font-bold text-foreground">{title}</h2> : null}
-            <nav className="flex flex-col gap-1">'''
-              new_desktop = '''          <aside className="hidden w-full shrink-0 md:block md:w-56">
-            <div className="mb-4 flex items-center justify-between gap-2">
-              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}
-              <NotificationBell />
-            </div>
-            <nav className="flex flex-col gap-1">'''
-              if old_desktop in st:
-                  st = st.replace(old_desktop, new_desktop, 1)
-                  print('desktop ok')
+          # desktop title
+          old = '{title ? <h2 className="mb-4 text-lg font-bold text-foreground">{title}</h2> : null}'
+          new = '<div className="mb-4 flex items-center justify-between gap-2">{title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}<NotificationBell /></div>'
+          if old in t:
+              t = t.replace(old, new, 1)
+              print('desktop title')
+          # mobile: inject bell before menu button
+          if 'Mobile header' in t and t.count('<NotificationBell') < 2:
+              t = t.replace(
+                  '{title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : null}\n              <button',
+                  '{title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}\n              <div className="flex items-center gap-1">\n                <NotificationBell />\n                <button',
+                  1,
+              )
+              # close the div after the mobile menu button block end - find first occurrence of closing after moreOpen
+              # simpler: after aria-expanded button closing tag of menu
+              marker = "{moreOpen ? 'بستن منو' : 'همه بخش‌ها'}\n              </button>\n            </div>"
+              if marker in t:
+                  t = t.replace(marker, "{moreOpen ? 'بستن منو' : 'همه بخش‌ها'}\n                </button>\n              </div>\n            </div>", 1)
+                  print('mobile close')
               else:
-                  print('desktop pattern missing')
-              old_mobile = '''            <div className="mb-3 flex items-center justify-between gap-2">
-              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : null}
-              <button
-                type="button"
-                className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-gray"
-                onClick={() => setMoreOpen((v) => !v)}
-                aria-expanded={moreOpen}
-              >
-                {moreOpen ? 'بستن منو' : 'همه بخش‌ها'}
-              </button>
-            </div>'''
-              new_mobile = '''            <div className="mb-3 flex items-center justify-between gap-2">
-              {title ? <h2 className="text-lg font-bold text-foreground">{title}</h2> : <span />}
-              <div className="flex items-center gap-1">
-                <NotificationBell />
-                <button
-                  type="button"
-                  className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-gray"
-                  onClick={() => setMoreOpen((v) => !v)}
-                  aria-expanded={moreOpen}
-                >
-                  {moreOpen ? 'بستن منو' : 'همه بخش‌ها'}
-                </button>
-              </div>
-            </div>'''
-              if old_mobile in st:
-                  st = st.replace(old_mobile, new_mobile, 1)
-                  print('mobile ok')
-              else:
-                  print('mobile pattern missing')
-              shell.write_text(st)
-          else:
-              print('shell already')
+                  print('mobile marker missing')
+          p.write_text(t)
+          print('shell bells', p.read_text().count('NotificationBell'))
 
-          # panel layout: remove notifications from mobile bottom bar
+          # panel layout remove mobile from notifications
           pl = Path('frontend/src/app/panel/layout.tsx')
           pt = pl.read_text()
-          pt2 = pt.replace(
-              "{ href: '/panel/notifications', label: 'اعلان‌ها', mobile: true },",
-              "{ href: '/panel/notifications', label: 'اعلان‌ها' },",
-          )
-          if pt2 != pt:
-              pl.write_text(pt2)
-              print('panel layout ok')
-          else:
-              print('panel layout unchanged')
+          pt2 = pt.replace("label: 'اعلان‌ها', mobile: true", "label: 'اعلان‌ها'")
+          pl.write_text(pt2)
+          print('panel', "mobile: true" in pt2 and "اعلان" in pt2)
           PY
       - name: Commit
         run: |
@@ -130,6 +85,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add frontend/src/components/layout/header.tsx frontend/src/components/panel/panel-shell.tsx frontend/src/app/panel/layout.tsx
           git status
-          git commit -m "feat(ui): show notification bell on top of page" || exit 0
+          git commit -m "feat(ui): notification bell at top of page" || exit 0
           git pull --rebase origin main || true
           git push origin HEAD:main
