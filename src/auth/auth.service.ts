@@ -31,6 +31,8 @@ const PRIVILEGED_ROLES = new Set(['SUPER_ADMIN']); // admin is NOT privileged (i
 
 @Injectable()
 export class AuthService {
+  /** #82.med15 — in-memory per-IP OTP request hits (process-local) */
+  private readonly otpIpHits = new Map<string, { count: number; windowStart: number }>();
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -149,6 +151,10 @@ export class AuthService {
     await this.consumeOtp(dto.phone, dto.code, `register:${accountType}`);
 
     // Password is optional (issue #43) - OTP-only accounts have null passwordHash
+    // #82.med16 — non-empty password shorter than 8 must error (was silently ignored)
+    if (dto.password != null && dto.password !== '' && dto.password.length < 8) {
+      throw new BadRequestException('رمز عبور حداقل ۸ کاراکتر باشد');
+    }
     const passwordHash =
       dto.password && dto.password.length >= 8
         ? await argon2.hash(dto.password)
@@ -236,9 +242,37 @@ export class AuthService {
     };
   }
 
-  async requestOtp(dto: RequestOtpDto) {
+  async requestOtp(dto: RequestOtpDto, clientIp?: string) {
+    // #82.med15 — purpose whitelist
+    const allowedPurposes = new Set([
+      'login',
+      'register',
+      'password_reset',
+      'change_phone',
+      'delete_account',
+    ]);
+    const purposeBase = (dto.purpose || 'login').toString().trim();
+    if (!allowedPurposes.has(purposeBase)) {
+      throw new BadRequestException('هدف درخواست کد نامعتبر است');
+    }
+    // #82.med15 — per-IP soft limit (default 20 / 10 min)
+    if (clientIp) {
+      const maxIp = parseInt(process.env.OTP_MAX_PER_IP_10M || '20', 10) || 20;
+      const now = Date.now();
+      const windowMs = 600_000;
+      const entry = this.otpIpHits.get(clientIp);
+      if (!entry || now - entry.windowStart > windowMs) {
+        this.otpIpHits.set(clientIp, { count: 1, windowStart: now });
+      } else {
+        entry.count += 1;
+        if (entry.count > maxIp) {
+          throw new BadRequestException(
+            'تعداد درخواست از این شبکه بیش از حد مجاز است. کمی بعد دوباره تلاش کنید',
+          );
+        }
+      }
+    }
     const accountType = this.resolveAccountType(dto.accountType);
-    const purposeBase = dto.purpose || 'login';
     const purpose = `${purposeBase}:${accountType}`;
     const ttl = this.config.get<number>('otpTtlSeconds') || 300;
     const cooldown = this.config.get<number>('otpCooldownSeconds') || 60;
@@ -541,34 +575,43 @@ export class AuthService {
 
     const emailUpdate = dto.email !== undefined ? dto.email : undefined;
 
-    await this.prisma.$transaction(async (tx) => {
-      if (emailUpdate !== undefined) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { email: emailUpdate },
-        });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (emailUpdate !== undefined) {
+          await tx.user.update({
+            where: { id: userId },
+            data: { email: emailUpdate },
+          });
+        }
+        if (Object.keys(profileData).length > 0) {
+          await tx.profile.upsert({
+            where: { userId },
+            create: { userId, displayName: (dto.displayName as string) || '', ...profileData },
+            update: profileData,
+          });
+        }
+        try {
+          await tx.auditLog.create({
+            data: {
+              actorId: userId,
+              action: 'user.profile_update',
+              entityType: 'user',
+              entityId: userId,
+              after: { email: emailUpdate, ...profileData } as any,
+            },
+          });
+        } catch {
+          /* non-blocking */
+        }
+      });
+    } catch (e: unknown) {
+      // #82.med17 — duplicate email must be 400, not Prisma 500
+      const err = e as { code?: string };
+      if (err?.code === 'P2002') {
+        throw new ConflictException('این ایمیل قبلاً ثبت شده است');
       }
-      if (Object.keys(profileData).length > 0) {
-        await tx.profile.upsert({
-          where: { userId },
-          create: { userId, displayName: (dto.displayName as string) || '', ...profileData },
-          update: profileData,
-        });
-      }
-      try {
-        await tx.auditLog.create({
-          data: {
-            actorId: userId,
-            action: 'user.profile_update',
-            entityType: 'user',
-            entityId: userId,
-            after: { email: emailUpdate, ...profileData } as any,
-          },
-        });
-      } catch {
-        /* non-blocking */
-      }
-    });
+      throw e;
+    }
 
     userAuthCache.invalidate(userId);
     return this.me(userId);

@@ -73,8 +73,10 @@ export class AuthController {
   @HttpCode(200)
   // #82.13 — OTP request stricter (SMS cost / abuse)
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
-  requestOtp(@Body() dto: RequestOtpDto) {
-    return this.auth.requestOtp(dto);
+  requestOtp(@Body() dto: RequestOtpDto, @Req() req: Request) {
+    const xf = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
+    const ip = xf || req.ip || req.socket?.remoteAddress || '';
+    return this.auth.requestOtp(dto, ip);
   }
 
   @Public()
