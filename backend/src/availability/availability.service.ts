@@ -1,35 +1,11 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { DayOfWeek } from '@prisma/client';
-import {
-  tehranDayBounds,
-  minutesSinceTehranMidnight,
-  tehranLocalToUtc,
-  tehranDateStr,
-  tehranHHMM,
-  TEHRAN_TZ,
-} from '../common/timezone';
-
-const DAY_MAP: Record<number, DayOfWeek> = {
-  0: DayOfWeek.sunday,
-  1: DayOfWeek.monday,
-  2: DayOfWeek.tuesday,
-  3: DayOfWeek.wednesday,
-  4: DayOfWeek.thursday,
-  5: DayOfWeek.friday,
-  6: DayOfWeek.saturday,
-};
+import { BookingStatus } from '@prisma/client';
+import { TEHRAN_TZ, tehranLocalToUtc, tehranWeekdaySun0 } from '../common/timezone';
 
 function parseTime(t: string): number {
-  // #82.r2 — reject incomplete / NaN times so slot loops do not silently fail
-  const parts = String(t || '').split(':');
-  if (parts.length < 2) throw new BadRequestException('ساعت کاری نامعتبر');
-  const h = Number(parts[0]);
-  const m = Number(parts[1]);
-  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
-    throw new BadRequestException('ساعت کاری نامعتبر');
-  }
-  return h * 60 + m;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + (m || 0);
 }
 
 function formatTime(mins: number): string {
@@ -42,36 +18,43 @@ function formatTime(mins: number): string {
 export class AvailabilityService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Public availability slots for a professional on a given Tehran calendar date.
+   * Returns only available slots (busy windows are not exposed).
+   */
   async getSlots(
     professionalId: string,
     dateStr: string,
-    durationMin: number,
-    /** #82.10 optional trailing buffer for the requested service(s); 0 = legacy */
+    durationMin = 30,
     bufferMin = 0,
   ) {
-    if (!durationMin || durationMin < 5) throw new BadRequestException('مدت نامعتبر');
-    const trailingBuffer = Math.max(0, bufferMin || 0);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      throw new BadRequestException('date must be YYYY-MM-DD');
+    }
     const pro = await this.prisma.professional.findUnique({ where: { id: professionalId } });
     if (!pro || pro.status !== 'approved') throw new NotFoundException('زیباگر یافت نشد');
 
-    let bounds: { dayStart: Date; dayEnd: Date; dayOfWeek: number };
-    try {
-      bounds = tehranDayBounds(dateStr);
-    } catch {
-      throw new BadRequestException('تاریخ نامعتبر');
-    }
-    const { dayStart, dayEnd, dayOfWeek: dow } = bounds;
-    const dayOfWeek = DAY_MAP[dow];
-
-    const hours = await this.prisma.workingHour.findMany({
-      where: { professionalId, dayOfWeek, isActive: true, isClosed: false },
-      include: { breaks: true },
+    const weekday = tehranWeekdaySun0(dateStr);
+    const hours = await this.prisma.workingHours.findMany({
+      where: { professionalId, weekday, isActive: true },
     });
-    if (hours.length === 0) {
+    if (!hours.length) {
       return { date: dateStr, professionalId, durationMin, slots: [], timezone: TEHRAN_TZ };
     }
 
-    const [timeOffs, manuals, bookings] = await Promise.all([
+    const dayStart = tehranLocalToUtc(dateStr, '00:00');
+    const dayEnd = tehranLocalToUtc(dateStr, '23:59');
+
+    const [bookings, timeOffs, manuals, breaks] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: {
+          professionalId,
+          status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+          startAt: { lt: dayEnd },
+          endAt: { gt: dayStart },
+        },
+        select: { startAt: true, endAt: true },
+      }),
       this.prisma.timeOff.findMany({
         where: {
           professionalId,
@@ -86,64 +69,50 @@ export class AvailabilityService {
           endAt: { gt: dayStart },
         },
       }),
-      this.prisma.booking.findMany({
-        where: {
-          professionalId,
-          status: { in: ['pending', 'confirmed'] },
-          startAt: { lt: dayEnd },
-          endAt: { gt: dayStart },
-        },
-        select: {
-          startAt: true,
-          endAt: true,
-          items: {
-            select: {
-              professionalService: { select: { bufferMin: true } },
-            },
-          },
-        },
+      this.prisma.breakTime.findMany({
+        where: { professionalId, weekday },
       }),
     ]);
 
-    const busy: { start: number; end: number }[] = [];
-    for (const t of timeOffs) {
-      busy.push({
-        start: Math.max(0, minutesSinceTehranMidnight(t.startAt, dayStart)),
-        end: Math.min(24 * 60, minutesSinceTehranMidnight(t.endAt, dayStart)),
-      });
-    }
-    for (const m of manuals) {
-      busy.push({
-        start: Math.max(0, minutesSinceTehranMidnight(m.startAt, dayStart)),
-        end: Math.min(24 * 60, minutesSinceTehranMidnight(m.endAt, dayStart)),
-      });
-    }
-    for (const b of bookings) {
-      // #82.10 — treat trailing bufferMin as occupied so slots stay consistent with create
-      let buf = 0;
-      for (const it of b.items) {
-        const v = it.professionalService?.bufferMin ?? 0;
-        if (v > buf) buf = v;
-      }
-      const endWithBuffer = new Date(b.endAt.getTime() + Math.max(0, buf) * 60_000);
-      busy.push({
-        start: Math.max(0, minutesSinceTehranMidnight(b.startAt, dayStart)),
-        end: Math.min(24 * 60, minutesSinceTehranMidnight(endWithBuffer, dayStart)),
-      });
-    }
-
-    // Skip past wall-clock times for "today" in Tehran (#69)
-    const now = new Date();
-    const todayTehran = tehranDateStr(now);
-    const nowMins = dateStr === todayTehran ? parseTime(tehranHHMM(now)) : -1;
-
-    const slots: { start: string; end: string; available: boolean }[] = [];
+    const trailingBuffer = Math.max(0, bufferMin || 0);
     const step = 15;
+    const slots: { start: string; end: string; available: boolean }[] = [];
+
+    // Tehran "now" for same-day filtering
+    const now = new Date();
+    const nowTehran = new Intl.DateTimeFormat('en-GB', {
+      timeZone: TEHRAN_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(now);
+    const part = (t: string) => nowTehran.find((p) => p.type === t)?.value || '0';
+    const todayStr = `${part('year')}-${part('month')}-${part('day')}`;
+    const nowMins =
+      todayStr === dateStr ? parseInt(part('hour'), 10) * 60 + parseInt(part('minute'), 10) : -1;
+
+    const busy = [
+      ...bookings.map((b) => ({
+        start: Math.floor((b.startAt.getTime() - dayStart.getTime()) / 60000),
+        end: Math.ceil((b.endAt.getTime() - dayStart.getTime()) / 60000),
+      })),
+      ...timeOffs.map((b) => ({
+        start: Math.floor((b.startAt.getTime() - dayStart.getTime()) / 60000),
+        end: Math.ceil((b.endAt.getTime() - dayStart.getTime()) / 60000),
+      })),
+      ...manuals.map((b) => ({
+        start: Math.floor((b.startAt.getTime() - dayStart.getTime()) / 60000),
+        end: Math.ceil((b.endAt.getTime() - dayStart.getTime()) / 60000),
+      })),
+    ];
 
     for (const wh of hours) {
       const whStart = parseTime(wh.startTime);
       const whEnd = parseTime(wh.endTime);
-      const breaks = wh.breaks.map((b) => ({
+      const breakRanges = breaks.map((b) => ({
         start: parseTime(b.startTime),
         end: parseTime(b.endTime),
       }));
@@ -152,9 +121,8 @@ export class AvailabilityService {
         if (nowMins >= 0 && t < nowMins) continue;
 
         const slotEnd = t + durationMin;
-        // Occupancy check includes this request's trailing buffer so next booking gap is kept
         const slotBusyEnd = slotEnd + trailingBuffer;
-        const inBreak = breaks.some((b) => t < b.end && slotEnd > b.start);
+        const inBreak = breakRanges.some((b) => t < b.end && slotEnd > b.start);
         const inBusy = busy.some((b) => t < b.end && slotBusyEnd > b.start);
         const available = !inBreak && !inBusy;
         slots.push({
@@ -165,7 +133,15 @@ export class AvailabilityService {
       }
     }
 
-    return { date: dateStr, professionalId, durationMin, slots, timezone: TEHRAN_TZ };
+    // Public response: do not leak busy/unavailable windows (calendar privacy)
+    const publicSlots = slots.filter((s) => s.available);
+    return {
+      date: dateStr,
+      professionalId,
+      durationMin,
+      slots: publicSlots,
+      timezone: TEHRAN_TZ,
+    };
   }
 
   static tehranLocalToUtc(dateStr: string, hhmm: string): Date {
