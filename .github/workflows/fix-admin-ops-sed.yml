@@ -1,0 +1,75 @@
+name: fix-admin-ops-sed
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-admin-ops-sed.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sed patches
+        run: |
+          set -euo pipefail
+          F=backend/src/admin/admin-ops.controller.ts
+          # depth > 12: do not null out
+          sed -i 's/if (depth > 12) return null;/if (depth > 12) return typeof value === '\''string'\'' ? value.replace(\/<[^>]*>/g, '\'''\'').slice(0, 5000) : value;/' "$F" || true
+          # hardcap SMS
+          if grep -q 'Number(process.env.BULK_SMS_MAX || 200)' "$F"; then
+            python3 -c "
+from pathlib import Path
+p=Path('backend/src/admin/admin-ops.controller.ts')
+t=p.read_text()
+old='const maxSms = Math.min(ids.length, Number(process.env.BULK_SMS_MAX || 200));'
+new='''const envMax = parseInt(process.env.BULK_SMS_MAX || '\''200'\'', 10);
+      const hardMax = Math.min(200, Number.isFinite(envMax) && envMax > 0 ? envMax : 200);
+      const maxSms = Math.min(ids.length, hardMax);'''
+if old in t:
+    t=t.replace(old,new,1)
+    p.write_text(t)
+    print('hardcap ok')
+else:
+    print('hardcap skip')
+"
+          fi
+          # deliveryStatus pending when sms
+          python3 -c "
+from pathlib import Path
+p=Path('backend/src/admin/admin-ops.controller.ts')
+t=p.read_text()
+t=t.replace(\"deliveryStatus: 'sent',\\n              smsRequested: !!dto.sms,\", \"deliveryStatus: dto.sms ? 'pending' : 'sent',\\n              smsRequested: !!dto.sms,\")
+t=t.replace(\"data: { campaignId, deliveryStatus: 'sent', smsRequested: !!dto.sms } as any,\", \"data: { campaignId, deliveryStatus: dto.sms ? 'pending' : 'sent', smsRequested: !!dto.sms } as any,\")
+# campaign index
+old='const idsList = [campaignId, ...(Array.isArray(prev) ? prev : [])].slice(0, 500);'
+new='const prevIds = Array.isArray(prev) ? prev.filter((x: string) => x !== campaignId) : [];\n      const idsList = [campaignId, ...prevIds].slice(0, 500);'
+if old in t: t=t.replace(old,new,1); print('idx')
+# putContent size
+if 'rawSize > 400_000' not in t:
+    t=t.replace(
+        'async putContent(@Body() body: any, @CurrentUser(\x27id\x27) actorId?: string) {\n    const cleaned = stripHtmlDeep({',
+        'async putContent(@Body() body: any, @CurrentUser(\x27id\x27) actorId?: string) {\n    const rawSize = Buffer.byteLength(JSON.stringify(body ?? {}), \x27utf8\x27);\n    if (rawSize > 400_000) throw new BadRequestException(\x27payload too large\x27);\n    const cleaned = stripHtmlDeep({',
+        1,
+    )
+    print('putContent')
+if 'listRaw.length > 200' in t and 'sbSize' not in t:
+    t=t.replace(
+        'if (listRaw.length > 200) throw new BadRequestException',
+        'const sbSize = Buffer.byteLength(JSON.stringify(listRaw), \x27utf8\x27);\n    if (sbSize > 400_000) throw new BadRequestException(\x27payload too large\x27);\n    if (listRaw.length > 200) throw new BadRequestException',
+        1,
+    )
+    print('siteBuilder')
+p.write_text(t)
+print('markers', 'hardMax' in t, '400_000' in t, \"dto.sms ? 'pending'\" in t)
+"
+          grep -n 'hardMax\|400_000\|pending' "$F" | head -20 || true
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin-ops.controller.ts
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(#82.r3): CMS payload limits, SMS hardcap, deliveryStatus pending, campaign index"
+          git push origin HEAD:main
