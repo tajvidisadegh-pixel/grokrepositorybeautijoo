@@ -651,7 +651,7 @@ export class BookingsService {
                 status: BookingStatus.cancelled,
                 cancelReason:
                   (reason?.trim() || 'لغو دیرهنگام توسط مشتری') +
-                  ` (خارج از پنجره لغو رایگان ${hours} ساعته — استرداد خودکار انجام نشد)',
+                  ` (خارج از پنجره لغو رایگان ${hours} ساعته — استرداد خودکار انجام نشد)`,
                 cancelledAt: new Date(),
               },
             });

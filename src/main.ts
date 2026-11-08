@@ -1,3 +1,4 @@
+import type { Request, Response, NextFunction } from 'express';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -45,7 +46,7 @@ async function bootstrap() {
     }
 
     // #82.14 / #82.infra19 — static media: no listing; only image extensions; block path tricks
-    app.use('/uploads', (req, res, next) => {
+    app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
       const urlPath = (req.path || '').split('?')[0];
       if (urlPath.includes('..') || urlPath.includes('%2e') || urlPath.includes('%2E')) {
         return res.status(400).end('bad path');
