@@ -1393,22 +1393,27 @@ export class AdminService {
     // Sequential deletes after precheck (each hardDeleteUser has its own tx).
     const deletedIds: string[] = [];
     const failed: { id: string; error: string }[] = [];
-    for (const id of ids) {
+    let stopAt = -1;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
       try {
         await this.hardDeleteUser(id, actorId);
         deletedIds.push(id);
       } catch (e) {
         failed.push({ id, error: (e as Error)?.message || String(e) });
-        // Stop further deletes; report partial success accurately
+        stopAt = i;
         break;
       }
     }
+    const skipped =
+      stopAt >= 0 ? ids.slice(stopAt + 1).map((id) => ({ id, reason: 'not_attempted_after_error' })) : [];
     return {
       deleted: deletedIds.length,
       failed,
+      skipped,
       cappedAt: 50,
       deletedIds,
-      partial: failed.length > 0,
+      partial: failed.length > 0 || skipped.length > 0,
     };
   }
 
@@ -1648,6 +1653,17 @@ export class AdminService {
     return out;
   }
 
+  /** Raw panel JSON only (no env merge) — safe for read-modify-write saves. */
+  private async getStoredPlatformConfig(): Promise<Record<string, unknown>> {
+    const row = await this.prisma.platformSetting.findUnique({
+      where: { key: 'platform_config' },
+    });
+    if (row?.value && typeof row.value === 'object' && !Array.isArray(row.value)) {
+      return row.value as Record<string, unknown>;
+    }
+    return {};
+  }
+
   async getPlatformSettings() {
     const row = await this.prisma.platformSetting.findUnique({
       where: { key: 'platform_config' },
@@ -1668,7 +1684,11 @@ export class AdminService {
     partial: Record<string, unknown>,
     actorId?: string,
   ) {
-    const current = await this.getPlatformSettings();
+    const current = this.deepMerge(
+      this.platformDefaults() as unknown as Record<string, unknown>,
+      await this.getStoredPlatformConfig(),
+    ); // never seed DB with env snapshot
+
     const cleaned: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(partial || {})) {
       if (ALLOWED_PLATFORM_ROOT_KEYS.has(k)) cleaned[k] = v;

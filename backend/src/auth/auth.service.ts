@@ -489,19 +489,27 @@ export class AuthService {
 
   async setSmsOptOut(userId: string, optOut: boolean) {
     const key = 'sms_opt_out_user_ids';
-    const row = await this.prisma.platformSetting.findUnique({ where: { key } });
-    const prev = Array.isArray(row?.value)
-      ? (row!.value as string[])
-      : Array.isArray((row?.value as any)?.ids)
-        ? ((row!.value as any).ids as string[])
-        : [];
-    let ids = prev.map(String);
-    if (optOut) ids = Array.from(new Set([...ids, userId]));
-    else ids = ids.filter((x) => x !== userId);
-    await this.prisma.platformSetting.upsert({
-      where: { key },
-      create: { key, value: ids as any },
-      update: { value: ids as any },
+    const MAX = 50_000;
+    const ids = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.platformSetting.findUnique({ where: { key } });
+      const prev = Array.isArray(row?.value)
+        ? (row!.value as string[])
+        : Array.isArray((row?.value as any)?.ids)
+          ? ((row!.value as any).ids as string[])
+          : [];
+      let next = prev.map(String);
+      if (optOut) {
+        if (!next.includes(userId)) next.push(userId);
+      } else {
+        next = next.filter((x) => x !== userId);
+      }
+      if (next.length > MAX) next = next.slice(next.length - MAX);
+      await tx.platformSetting.upsert({
+        where: { key },
+        create: { key, value: next as any },
+        update: { value: next as any },
+      });
+      return next;
     });
     return { ok: true, optOut, idsCount: ids.length };
   }

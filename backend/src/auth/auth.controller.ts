@@ -117,17 +117,19 @@ export class AuthController {
     return attachRefreshCookieAndSanitize(res, result);
   }
 
-  @Public()
-
-  /** User self-service: opt out of marketing/bulk SMS. */
+  /** User self-service: opt out of marketing/bulk SMS (authenticated). */
+  @ApiBearerAuth()
   @Post('me/sms-opt-out')
+  @HttpCode(200)
   async smsOptOut(@CurrentUser('id') userId: string) {
-    return this.authService.setSmsOptOut(userId, true);
+    return this.auth.setSmsOptOut(userId, true);
   }
 
+  @ApiBearerAuth()
   @Post('me/sms-opt-in')
+  @HttpCode(200)
   async smsOptIn(@CurrentUser('id') userId: string) {
-    return this.authService.setSmsOptOut(userId, false);
+    return this.auth.setSmsOptOut(userId, false);
   }
 
   @Post('logout')
