@@ -462,8 +462,23 @@ export class AdminService {
   }
 
   async setUserStatus(id: string, status: UserStatus | string, actorId?: string, reason?: string) {
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      include: { userRoles: { include: { role: true } } },
+    });
     if (!existing) throw new NotFoundException('User not found');
+    if (actorId && actorId === id && status !== UserStatus.active) {
+      throw new BadRequestException('نمی‌توانید وضعیت حساب خودتان را غیرفعال کنید');
+    }
+    const targetIsSuper = (existing.userRoles || []).some((ur) => ur.role.name === 'SUPER_ADMIN');
+    if (targetIsSuper && status !== UserStatus.active) {
+      const superCount = await this.prisma.userRole.count({
+        where: { role: { name: 'SUPER_ADMIN' }, user: { status: UserStatus.active } },
+      });
+      if (superCount <= 1) {
+        throw new BadRequestException('نمی‌توان آخرین SUPER_ADMIN فعال را غیرفعال کرد');
+      }
+    }
     const updated = await this.prisma.user.update({ where: { id }, data: { status: status as UserStatus } });
     await this.audit(actorId, 'user.status_change', 'user', id, { status: existing.status }, { status, reason });
     // #82.15 — drop in-memory JWT user cache so suspended/inactive takes effect immediately on this instance
@@ -502,6 +517,23 @@ export class AdminService {
         }
       } else {
         throw new ForbiddenException('فقط سوپر ادمین می‌تواند نقش SUPER_ADMIN را اختصاص دهد');
+      }
+    }
+
+    // #r4.C2 — non-SUPER_ADMIN may only assign roles they themselves hold
+    if (actorId) {
+      const actor = await this.prisma.user.findUnique({
+        where: { id: actorId },
+        include: { userRoles: { include: { role: true } } },
+      });
+      const actorRoles = (actor?.userRoles || []).map((ur) => ur.role.name);
+      const isSuper = actorRoles.includes('SUPER_ADMIN');
+      if (!isSuper) {
+        const actorLower = new Set(actorRoles.map((r) => r.toLowerCase()));
+        const forbidden = normalized.filter((r) => !actorLower.has(r.toLowerCase()));
+        if (forbidden.length) {
+          throw new ForbiddenException(`نمی‌توانید نقش‌هایی که خودتان ندارید اعطا کنید: ${forbidden.join(', ')}`);
+        }
       }
     }
 
@@ -708,6 +740,16 @@ export class AdminService {
 
     // Public catalog requires status=approved AND publishedAt != null
     if (status === ProfessionalStatus.approved) {
+      const [svcCount, locCount] = await Promise.all([
+        this.prisma.professionalService.count({ where: { professionalId: id, isActive: true } }),
+        this.prisma.professionalLocation.count({ where: { professionalId: id } }),
+      ]);
+      if (svcCount < 1) {
+        throw new BadRequestException('برای تأیید، حداقل یک خدمت فعال لازم است');
+      }
+      if (locCount < 1) {
+        throw new BadRequestException('برای تأیید، ثبت آدرس لازم است');
+      }
       data.publishedAt = existing.publishedAt || new Date();
       data.verifiedAt = existing.verifiedAt || new Date();
     } else if (
@@ -733,15 +775,7 @@ export class AdminService {
     const updated = await this.prisma.professional.update({ where: { id }, data });
     this.cache.invalidateCatalog();
 
-    // On approve, publish draft portfolio media so it becomes visible
-    if (status === ProfessionalStatus.approved) {
-      await this.prisma.mediaAsset
-        .updateMany({
-          where: { professionalId: id, status: MediaStatus.draft },
-          data: { status: MediaStatus.published },
-        })
-        .catch(() => undefined);
-    }
+    // Media stays draft until explicitly moderated (#r4.H4)
 
     // In-app notification for the professional
     try {
@@ -805,7 +839,7 @@ export class AdminService {
       this.prisma.payment.count({ where: { status: PaymentStatus.failed } }),
     ]);
     const grossRevenue = Number(paidAgg._sum.amount || 0);
-    const commissionRate = 10;
+    const commissionRate = (await this.getCommissionSetting()).rate;
     return {
       total,
       today,
@@ -823,8 +857,18 @@ export class AdminService {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const where: Prisma.BookingWhereInput = {};
-    if (q.status) where.status = q.status;
-    if (q.paymentStatus) where.payment = { status: q.paymentStatus };
+    if (q.status) {
+      if (!Object.values(BookingStatus).includes(q.status)) {
+        throw new BadRequestException('status نامعتبر');
+      }
+      where.status = q.status;
+    }
+    if (q.paymentStatus) {
+      if (!Object.values(PaymentStatus).includes(q.paymentStatus)) {
+        throw new BadRequestException('paymentStatus نامعتبر');
+      }
+      where.payment = { status: q.paymentStatus };
+    }
     if (q.startDate || q.endDate) {
       where.startAt = {};
       if (q.startDate) (where.startAt as any).gte = new Date(q.startDate);
@@ -875,15 +919,48 @@ export class AdminService {
   }
 
   async updateBookingStatus(id: string, status: BookingStatus, actorId?: string, reason?: string) {
-    const existing = await this.prisma.booking.findUnique({ where: { id } });
+    const existing = await this.prisma.booking.findUnique({
+      where: { id },
+      include: { payment: true },
+    });
     if (!existing) throw new NotFoundException('Booking not found');
+
+    const from = existing.status;
+    const allowed: Record<string, BookingStatus[]> = {
+      [BookingStatus.pending]: [BookingStatus.confirmed, BookingStatus.rejected, BookingStatus.cancelled, BookingStatus.expired],
+      [BookingStatus.confirmed]: [BookingStatus.completed, BookingStatus.cancelled, BookingStatus.no_show],
+      [BookingStatus.rejected]: [],
+      [BookingStatus.cancelled]: [],
+      [BookingStatus.completed]: [],
+      [BookingStatus.expired]: [],
+      [BookingStatus.no_show]: [],
+    };
+    const nextOk = (allowed[from] || []).includes(status);
+    if (!nextOk) {
+      throw new BadRequestException(`انتقال وضعیت از ${from} به ${status} مجاز نیست`);
+    }
+
+    // Payment = confirmed slot: cannot confirm/complete unpaid; cancel paid needs explicit reason
+    const payStatus = existing.payment?.status;
+    if (status === BookingStatus.confirmed || status === BookingStatus.completed) {
+      if (payStatus && payStatus !== PaymentStatus.paid && payStatus !== PaymentStatus.refunded) {
+        throw new BadRequestException('بدون پرداخت موفق نمی‌توان رزرو را تأیید یا تکمیل کرد');
+      }
+    }
+    if (status === BookingStatus.cancelled && payStatus === PaymentStatus.paid) {
+      if (!reason || !String(reason).trim()) {
+        throw new BadRequestException('لغو رزرو پرداخت‌شده نیازمند دلیل است (استرداد جداگانه انجام شود)');
+      }
+    }
+
     const data: Prisma.BookingUpdateInput = { status };
     if (reason) data.cancelReason = reason;
     if (status === BookingStatus.cancelled) data.cancelledAt = new Date();
     if (status === BookingStatus.confirmed) data.confirmedAt = new Date();
     if (status === BookingStatus.completed) data.completedAt = new Date();
+    if (status === BookingStatus.no_show) data.noShowAt = new Date();
     const updated = await this.prisma.booking.update({ where: { id }, data });
-    await this.audit(actorId, 'booking.status_change', 'booking', id, { status: existing.status }, { status, reason });
+    await this.audit(actorId, 'booking.status_change', 'booking', id, { status: from, payStatus }, { status, reason });
     return updated;
   }
 
@@ -1209,6 +1286,21 @@ export class AdminService {
     if (existing.professional) {
       throw new BadRequestException('این حساب زیباگر است. برای حذف از بخش زیباگرها اقدام کنید.');
     }
+    const activeBookings = await this.prisma.booking.count({
+      where: { customerId: id, status: { in: [BookingStatus.pending, BookingStatus.confirmed] } },
+    });
+    if (activeBookings > 0) {
+      throw new BadRequestException('کاربر رزرو فعال دارد؛ ابتدا رزروها را لغو کنید');
+    }
+    const paidOpen = await this.prisma.payment.count({
+      where: {
+        status: { in: [PaymentStatus.paid, PaymentStatus.processing, PaymentStatus.pending] },
+        booking: { customerId: id },
+      },
+    });
+    if (paidOpen > 0) {
+      throw new BadRequestException('سوابق پرداخت باز/پرداخت‌شده وجود دارد؛ حذف دائمی مجاز نیست');
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { customerId: id } });
       await tx.booking.deleteMany({ where: { customerId: id } });
@@ -1219,23 +1311,42 @@ export class AdminService {
   }
 
   async bulkHardDeleteUsers(userIds: string[], actorId?: string) {
-    const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+    const ids = Array.from(new Set((userIds || []).filter(Boolean))).slice(0, 50);
+    if ((userIds || []).length > 50) {
+      throw new BadRequestException('حداکثر ۵۰ کاربر در هر درخواست');
+    }
     let deleted = 0;
     const failed: string[] = [];
     for (const id of ids) {
       try {
         await this.hardDeleteUser(id, actorId);
         deleted += 1;
-      } catch {
+      } catch (e) {
         failed.push(id);
+        this.logger.warn(`bulkHardDelete fail ${id}: ${(e as Error)?.message || e}`);
       }
     }
-    return { deleted, failed };
+    return { deleted, failed, cappedAt: 50 };
   }
 
   async hardDeleteProfessional(id: string, actorId?: string) {
     const pro = await this.prisma.professional.findUnique({ where: { id } });
     if (!pro) throw new NotFoundException('Professional not found');
+    const activeBookings = await this.prisma.booking.count({
+      where: { professionalId: id, status: { in: [BookingStatus.pending, BookingStatus.confirmed] } },
+    });
+    if (activeBookings > 0) {
+      throw new BadRequestException('زیباگر رزرو فعال دارد؛ ابتدا رزروها را مدیریت کنید');
+    }
+    const paidOpen = await this.prisma.payment.count({
+      where: {
+        status: { in: [PaymentStatus.paid, PaymentStatus.processing, PaymentStatus.pending] },
+        booking: { professionalId: id },
+      },
+    });
+    if (paidOpen > 0) {
+      throw new BadRequestException('سوابق پرداخت مرتبط وجود دارد؛ حذف دائمی مجاز نیست');
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { professionalId: id } });
       await tx.booking.deleteMany({ where: { professionalId: id } });
@@ -1297,11 +1408,7 @@ export class AdminService {
       create: { key: 'site_cms_published', value },
       update: { value },
     });
-    await this.prisma.platformSetting.upsert({
-      where: { key: 'site_cms_draft' },
-      create: { key: 'site_cms_draft', value },
-      update: { value },
-    });
+    // Keep draft as-is so unpublished edits are not wiped (#r4.C7)
     await this.audit(actorId, 'site_cms.publish', 'platform_setting', 'site_cms_published', null, value);
     return { success: true, publishedAt: value.publishedAt };
   }
@@ -1438,8 +1545,8 @@ export class AdminService {
       (next.commission as { ratePercent: number }).ratePercent = rate;
       await this.prisma.platformSetting.upsert({
         where: { key: 'commission_rate' },
-        create: { key: 'commission_rate', value: rate as unknown as object },
-        update: { value: rate as unknown as object },
+        create: { key: 'commission_rate', value: { rate } as object },
+        update: { value: { rate } as object },
       });
     }
 
@@ -1537,6 +1644,17 @@ export class AdminService {
   ) {
     const row = await this.prisma.payoutRequest.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('درخواست تسویه یافت نشد');
+    const from = String(row.status);
+    const allowed: Record<string, string[]> = {
+      pending: ['approved', 'rejected'],
+      approved: ['paid', 'rejected'],
+      paid: [],
+      rejected: [],
+      cancelled: [],
+    };
+    if (!(allowed[from] || []).includes(status)) {
+      throw new BadRequestException(`انتقال وضعیت تسویه از ${from} به ${status} مجاز نیست`);
+    }
     const updated = await this.prisma.payoutRequest.update({
       where: { id },
       data: {
