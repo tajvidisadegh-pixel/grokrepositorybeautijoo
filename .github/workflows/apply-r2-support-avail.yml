@@ -1,0 +1,97 @@
+name: apply-r2-support-avail
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-r2-support-avail.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+
+          # availability parseTime
+          p = Path('backend/src/availability/availability.service.ts')
+          t = p.read_text(encoding='utf-8')
+          old = '''function parseTime(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}'''
+          new = '''function parseTime(t: string): number {
+  // #82.r2 — reject incomplete / NaN times so slot loops do not silently fail
+  const parts = String(t || '').split(':');
+  if (parts.length < 2) throw new BadRequestException('ساعت کاری نامعتبر');
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    throw new BadRequestException('ساعت کاری نامعتبر');
+  }
+  return h * 60 + m;
+}'''
+          if old in t:
+              t = t.replace(old, new, 1)
+              p.write_text(t, encoding='utf-8')
+              print('parseTime ok')
+          else:
+              print('parseTime skip')
+
+          # support service body/subject limits
+          s = Path('backend/src/support/support.service.ts')
+          st = s.read_text(encoding='utf-8')
+          if 'msg.length > 5000' not in st:
+              st = st.replace(
+                  "const msg = (body || '').trim();\n    if (msg.length < 1) throw new BadRequestException('متن پیام خالی است');",
+                  "const msg = (body || '').trim();\n    if (msg.length < 1) throw new BadRequestException('متن پیام خالی است');\n    if (msg.length > 5000) throw new BadRequestException('متن پیام بیش از حد طولانی است');",
+                  1,
+              )
+              st = st.replace(
+                  "const msg = (body || '').trim();\n    if (msg.length < 1) throw new BadRequestException('پیام خالی است');",
+                  "const msg = (body || '').trim();\n    if (msg.length < 1) throw new BadRequestException('پیام خالی است');\n    if (msg.length > 5000) throw new BadRequestException('پیام بیش از حد طولانی است');",
+                  1,
+              )
+              s.write_text(st, encoding='utf-8')
+              print('support limits ok')
+          else:
+              print('support limits skip')
+
+          # support controller throttle on create
+          c = Path('backend/src/support/support.controller.ts')
+          ct = c.read_text(encoding='utf-8')
+          if 'Throttle' not in ct:
+              ct = ct.replace(
+                  "import { Roles } from '../common/decorators/roles.decorator';",
+                  "import { Roles } from '../common/decorators/roles.decorator';\nimport { Throttle } from '@nestjs/throttler';",
+                  1,
+              )
+              ct = ct.replace(
+                  "  @Post('tickets')\n  create(",
+                  "  @Post('tickets')\n  @Throttle({ default: { limit: 10, ttl: 600_000 } })\n  create(",
+                  1,
+              )
+              ct = ct.replace(
+                  "  @Post('tickets/:id/messages')\n  addMessage(",
+                  "  @Post('tickets/:id/messages')\n  @Throttle({ default: { limit: 30, ttl: 600_000 } })\n  addMessage(",
+                  1,
+              )
+              c.write_text(ct, encoding='utf-8')
+              print('support throttle ok')
+          else:
+              print('support throttle skip')
+
+          print('ALL_OK')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/availability/availability.service.ts backend/src/support/support.service.ts backend/src/support/support.controller.ts
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(#82.r2): validate parseTime, support message max length + throttle"
+          git push origin HEAD:main
