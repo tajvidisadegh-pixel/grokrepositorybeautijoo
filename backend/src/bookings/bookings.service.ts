@@ -668,7 +668,7 @@ return booking;
     if (recent >= 3) {
       throw new BadRequestException('تعداد گزارش‌های این رزرو در یک ساعت بیش از حد مجاز است. لطفاً بعداً تلاش کنید.');
     }
-    const admins = await this downstreamprisma.user.findMany({
+    const admins = await this.prisma.user.findMany({
       where: { userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } } },
       select: { id: true },
           });
