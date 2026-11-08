@@ -1,0 +1,27 @@
+name: run-fix-r4-settings-optout
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          set -euo pipefail
+          python3 scripts/fix-r4-settings-optout.py
+          grep -n "getStoredPlatformConfig\|never seed DB" backend/src/admin/admin.service.ts | head -6
+          grep -n "skipped\|not_attempted" backend/src/admin/admin.service.ts | head -5
+          grep -n "mutateSmsOptOut\|MAX = 50" backend/src/admin/admin-ops.controller.ts | head -6
+          grep -n "sms-opt-out\|auth.setSmsOptOut\|ApiBearerAuth" backend/src/auth/auth.controller.ts | head -10
+          grep -n "setSmsOptOut" backend/src/auth/auth.service.ts | head -5
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix: no env snapshot on settings save, user SMS opt-out auth, bulk skipped, opt-out tx+cap"
+          git push origin HEAD:main
