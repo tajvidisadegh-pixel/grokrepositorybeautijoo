@@ -13,6 +13,15 @@ class NotifyUsersDto { @IsArray() @IsString({ each: true }) userIds!: string[]; 
 class NotifyByFilterDto { @IsString() title!: string; @IsString() body!: string; @IsOptional() @IsBoolean() sms?: boolean; @IsOptional() @IsNumber() limit?: number; @IsOptional() filters?: Record<string, unknown>; }
 class FeaturedDto { @IsBoolean() isFeatured!: boolean; }
 
+/** Normalize Iranian mobile to 09xxxxxxxxx (#82.r2.8). */
+function normalizeIranPhone(raw: string): string {
+  let s = String(raw || '').trim().replace(/[\s-]/g, '');
+  if (s.startsWith('+98')) s = '0' + s.slice(3);
+  else if (s.startsWith('98') && s.length >= 12) s = '0' + s.slice(2);
+  else if (s.startsWith('9') && s.length === 10) s = '0' + s;
+  return s;
+}
+
 @ApiTags('admin-ops')
 @ApiBearerAuth()
 @Controller('admin')
@@ -111,17 +120,26 @@ export class AdminOpsController {
 
   @RequirePermissions('admin.users.write')
   @Post('users')
-  async createCustomer(@Body() dto: CreateCustomerDto) {
-    const phone = String(dto.phone || '').trim();
-    if (!phone) throw new BadRequestException('phone required');
-    if (await this.prisma.user.findFirst({ where: { phone } })) throw new ConflictException('phone exists');
-    return this.prisma.user.create({
+  async createCustomer(@Body() dto: CreateCustomerDto, @CurrentUser('id') actorId?: string) {
+    const phone = normalizeIranPhone(dto.phone || '');
+    if (!phone || phone.length < 10) throw new BadRequestException('phone required');
+    // #82.r2.8 — dual-role: uniqueness is (phone, accountType)
+    if (await this.prisma.user.findFirst({ where: { phone, accountType: 'customer' as any } })) {
+      throw new ConflictException('phone exists');
+    }
+    const user = await this.prisma.user.create({
       data: {
         phone, accountType: 'customer' as any, status: UserStatus.active,
         profile: { create: { displayName: (dto.displayName || dto.firstName || phone).trim(), firstName: dto.firstName?.trim() || null, lastName: dto.lastName?.trim() || null } },
       },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
+    try {
+      await this.prisma.auditLog.create({
+        data: { actorId: actorId || null, action: 'admin.customer.create', entityType: 'user', entityId: user.id, after: { phone } as any },
+      });
+    } catch { /* non-blocking */ }
+    return user;
   }
 
   @RequirePermissions('admin.users.write')
@@ -129,8 +147,10 @@ export class AdminOpsController {
   async updateUserProfile(@Param('id') id: string, @Body() dto: UpdateUserProfileDto) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('not found');
-    if (dto.phone?.trim() && dto.phone.trim() !== existing.phone) {
-      if (await this.prisma.user.findFirst({ where: { phone: dto.phone.trim(), NOT: { id } } })) throw new ConflictException('phone exists');
+    if (dto.phone?.trim() && normalizeIranPhone(dto.phone) !== normalizeIranPhone(existing.phone || '')) {
+      const nextPhone = normalizeIranPhone(dto.phone);
+      if (await this.prisma.user.findFirst({ where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } } })) throw new ConflictException('phone exists');
+      dto.phone = nextPhone;
       await this.prisma.user.update({ where: { id }, data: { phone: dto.phone.trim() } });
     }
     const profileData: any = {};
@@ -245,9 +265,13 @@ export class AdminOpsController {
     @Body() body: { phone: string; title?: string; displayName?: string; firstName?: string; lastName?: string },
     @CurrentUser('id') actorId?: string,
   ) {
-    const phone = String(body.phone || '').trim();
-    if (!phone) throw new BadRequestException('موبایل الزامی است');
-    let user: any = await this.prisma.user.findFirst({ where: { phone }, include: { professional: true, profile: true } });
+    const phone = normalizeIranPhone(body.phone || '');
+    if (!phone || phone.length < 10) throw new BadRequestException('موبایل الزامی است');
+    // #82.r2.7/8 — dual-role: look up professional accountType first
+    let user: any = await this.prisma.user.findFirst({
+      where: { phone, accountType: 'professional' as any },
+      include: { professional: true, profile: true },
+    });
     if (!user) {
       user = await this.prisma.user.create({
         data: {
@@ -264,6 +288,13 @@ export class AdminOpsController {
         },
         include: { professional: true, profile: true },
       });
+      // attach professional role when roles table exists
+      try {
+        const role = await this.prisma.role.findUnique({ where: { name: 'professional' } });
+        if (role) {
+          await this.prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
+        }
+      } catch { /* non-blocking */ }
     }
     if (user.professional) return user.professional;
     const baseSlug = (body.title || body.displayName || phone).toString().trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u0600-\u06FF-]+/g, '').slice(0, 40) || 'pro';
