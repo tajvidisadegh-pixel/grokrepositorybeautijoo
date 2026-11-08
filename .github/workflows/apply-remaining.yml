@@ -17,13 +17,12 @@ jobs:
           python3 << 'PY'
           from pathlib import Path
 
-          # ========== 1) med9 cancel policy in bookings.service.ts ==========
           p = Path('backend/src/bookings/bookings.service.ts')
           t = p.read_text(encoding='utf-8')
           if 'class BookingsService' not in t:
               raise SystemExit('bookings broken')
 
-          if '#82.med9' not in t:
+          if 'BOOKING_FREE_CANCEL_HOURS' not in t:
               old = (
                   "      // Unpaid pending: either side may cancel (slot release)\n"
                   "      // unpaid pending: pro may clear hold (fall through to cancel)\n"
@@ -59,7 +58,6 @@ jobs:
                   "        const withinFreeWindow = msLeft >= hours * 3600_000;\n"
                   "        if (isCustomer && paid && b.payment?.id) {\n"
                   "          if (!withinFreeWindow && hours > 0) {\n"
-                  "            // Late cancel: cancel slot but do not auto-refund\n"
                   "            return this.prisma.booking.update({\n"
                   "              where: { id },\n"
                   "              data: {\n"
@@ -71,7 +69,6 @@ jobs:
                   "              },\n"
                   "            });\n"
                   "          }\n"
-                  "          // #82.7 — within free window: attempt refund\n"
                   "          try {\n"
                   "            await this.payments.refund(\n"
                   "              b.payment.id,\n"
@@ -102,43 +99,38 @@ jobs:
               print('med9 ok')
           else:
               print('med9 skip')
-
           p.write_text(t, encoding='utf-8')
 
-          # ========== 2) med15 OTP purpose whitelist + per-IP in auth.service ==========
           pa = Path('backend/src/auth/auth.service.ts')
           a = pa.read_text(encoding='utf-8')
+          if 'otpIpHits' not in a:
+              old_cls = (
+                  "@Injectable()\n"
+                  "export class AuthService {\n"
+                  "  constructor(\n"
+                  "    private readonly prisma: PrismaService,\n"
+                  "    private readonly jwt: JwtService,\n"
+                  "    private readonly config: ConfigService,\n"
+                  "    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,\n"
+                  "  ) {}\n"
+              )
+              new_cls = (
+                  "@Injectable()\n"
+                  "export class AuthService {\n"
+                  "  /** #82.med15 — in-memory per-IP OTP request hits (process-local) */\n"
+                  "  private readonly otpIpHits = new Map<string, { count: number; windowStart: number }>();\n"
+                  "  constructor(\n"
+                  "    private readonly prisma: PrismaService,\n"
+                  "    private readonly jwt: JwtService,\n"
+                  "    private readonly config: ConfigService,\n"
+                  "    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,\n"
+                  "  ) {}\n"
+              )
+              if old_cls not in a:
+                  raise SystemExit('auth class header missing')
+              a = a.replace(old_cls, new_cls, 1)
 
-          if '#82.med15' not in a:
-              # Add IP rate map near top of class after constructor - inject after issueTokens helper
-              if 'otpIpHits' not in a:
-                  old_cls = (
-                      "@Injectable()\n"
-                      "export class AuthService {\n"
-                      "  constructor(\n"
-                      "    private readonly prisma: PrismaService,\n"
-                      "    private readonly jwt: JwtService,\n"
-                      "    private readonly config: ConfigService,\n"
-                      "    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,\n"
-                      "  ) {}\n"
-                  )
-                  new_cls = (
-                      "@Injectable()\n"
-                      "export class AuthService {\n"
-                      "  /** #82.med15 — in-memory per-IP OTP request hits (process-local) */\n"
-                      "  private readonly otpIpHits = new Map<string, { count: number; windowStart: number }>();\n"
-                      "  constructor(\n"
-                      "    private readonly prisma: PrismaService,\n"
-                      "    private readonly jwt: JwtService,\n"
-                      "    private readonly config: ConfigService,\n"
-                      "    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,\n"
-                      "  ) {}\n"
-                  )
-                  if old_cls not in a:
-                      raise SystemExit('auth class header missing')
-                  a = a.replace(old_cls, new_cls, 1)
-
-              # Patch requestOtp signature and body
+          if 'allowedPurposes' not in a:
               old_ro = (
                   "  async requestOtp(dto: RequestOtpDto) {\n"
                   "    const accountType = this.resolveAccountType(dto.accountType);\n"
@@ -185,13 +177,11 @@ jobs:
               print('med15 service ok')
           else:
               print('med15 service skip')
-
           pa.write_text(a, encoding='utf-8')
 
-          # ========== 3) auth.controller pass IP ==========
           pc = Path('backend/src/auth/auth.controller.ts')
           c = pc.read_text(encoding='utf-8')
-          if 'requestOtp(@Body()' in c and 'clientIp' not in c:
+          if 'requestOtp(@Body() dto: RequestOtpDto) {' in c:
               old = (
                   "  requestOtp(@Body() dto: RequestOtpDto) {\n"
                   "    return this.auth.requestOtp(dto);\n"
@@ -212,7 +202,6 @@ jobs:
               print('med15 controller skip')
           pc.write_text(c, encoding='utf-8')
 
-          # ========== 4) infra19 — harden static /uploads in main.ts ==========
           pm = Path('backend/src/main.ts')
           m = pm.read_text(encoding='utf-8')
           if '#82.infra19' not in m:
@@ -269,60 +258,52 @@ jobs:
               print('infra19 skip')
           pm.write_text(m, encoding='utf-8')
 
-          # ========== 5) infra20 — seed catalog only when enabled ==========
           pd = Path('backend/Dockerfile')
           d = pd.read_text(encoding='utf-8')
           if 'RUN_SEED_CATALOG_ON_BOOT' not in d:
-              old = (
-                  'CMD ["sh", "-c", "mkdir -p \\"${STORAGE_LOCAL_PATH:-/app/uploads}\\" 2>/dev/null || true; node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && (node prisma/seed-catalog.cjs || echo \\"[boot] seed-catalog failed (non-fatal, see logs above)\\" >&2) && node dist/main.js"]'
-              )
-              # simpler: match loosely
-              import re
               new_cmd = (
                   'CMD ["sh", "-c", "mkdir -p \\"${STORAGE_LOCAL_PATH:-/app/uploads}\\" 2>/dev/null || true; '
-                  'node scripts/prisma-migrate-deploy.cjs && '
-                  'node prisma/seed-roles.cjs && '
+                  'node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && '
                   'if [ \\"${RUN_SEED_CATALOG_ON_BOOT:-false}\\" = \\"true\\" ]; then '
                   '(node prisma/seed-catalog.cjs || echo \\"[boot] seed-catalog failed (non-fatal)\\" >&2); '
                   'else echo \\"[boot] seed-catalog skipped (set RUN_SEED_CATALOG_ON_BOOT=true to enable)\\"; fi && '
                   'node dist/main.js"]'
               )
-              if 'seed-catalog.cjs' not in d:
-                  raise SystemExit('Dockerfile seed-catalog missing')
-              d2 = re.sub(
-                  r'CMD \[.*?\]\s*$',
-                  new_cmd,
-                  d,
-                  count=1,
-                  flags=re.,
-              )
-              if d2 == d:
-                  # try exact line replace from file
-                  lines = d.splitlines()
-                  out = []
-                  for line in lines:
-                      if line.startswith('CMD ['):
-                          out.append(new_cmd)
-                      else:
-                          out.append(line)
-                  d2 = '\n'.join(out) + ('\n' if d.endswith('\n') else '')
-              d = d2
+              lines = d.splitlines()
+              out = []
+              replaced = False
+              for line in lines:
+                  if line.startswith('CMD ['):
+                      out.append(new_cmd)
+                      replaced = True
+                  else:
+                      out.append(line)
+              if not replaced:
+                  raise SystemExit('Dockerfile CMD line missing')
+              d = '\n'.join(out) + ('\n' if d.endswith('\n') else '')
               print('infra20 ok')
           else:
               print('infra20 skip')
           pd.write_text(d, encoding='utf-8')
 
-          # ========== 6) SECURITY doc for infra21 ==========
           sec = Path('docs/SECURITY_ISSUE_82_9.md')
           sec.parent.mkdir(parents=True, exist_ok=True)
-          body = """# Security hygiene (#82.9 / #82.infra21)\n\nOwner checklist (cannot be fully automated from CI):\n\n1. **Make the repository private** on GitHub (Settings → Danger Zone → Change visibility).\n2. **Scan secrets in git history** with gitleaks or trufflehog:\n   ```bash\n   gitleaks detect --source . --log-opts="--all"\n   # or\n   trufflehog git file://. --only-verified\n   ```\n3. **Rotate** any credentials that ever appeared in commits (.env, API keys, JWT secrets, SMS/payment keys).\n4. Confirm `.env` / `*.pem` are in `.gitignore` and never force-added.\n5. Prefer `STORAGE_PROVIDER=s3` in production so `/uploads` is not a durable public disk.\n6. Set `RUN_SEED_CATALOG_ON_BOOT=true` only when intentionally reseeding catalog; default is off.\n\nLast code-side mitigations: image-only `/uploads`, OTP purpose whitelist + per-IP limit, tighter auth throttles.\n"""
-          sec.write_text(body, encoding='utf-8')
+          sec.write_text(
+              '# Security hygiene (#82.9 / #82.infra21)\n\n'
+              'Owner checklist (cannot be fully automated from CI):\n\n'
+              '1. **Make the repository private** on GitHub (Settings → Danger Zone → Change visibility).\n'
+              '2. **Scan secrets in git history** with gitleaks or trufflehog.\n'
+              '3. **Rotate** any credentials that ever appeared in commits.\n'
+              '4. Confirm `.env` / `*.pem` are in `.gitignore`.\n'
+              '5. Prefer `STORAGE_PROVIDER=s3` in production.\n'
+              '6. Set `RUN_SEED_CATALOG_ON_BOOT=true` only when intentionally reseeding catalog.\n',
+              encoding='utf-8',
+          )
           print('infra21 doc ok')
 
-          # sanity
           t = Path('backend/src/bookings/bookings.service.ts').read_text(encoding='utf-8')
-          assert '#82.med9' in t or 'BOOKING_FREE_CANCEL_HOURS' in t
           a = Path('backend/src/auth/auth.service.ts').read_text(encoding='utf-8')
+          assert 'BOOKING_FREE_CANCEL_HOURS' in t
           assert 'otpIpHits' in a and 'allowedPurposes' in a
           assert 'class BookingsService' in t and 'class AuthService' in a
           print('ALL_OK')
