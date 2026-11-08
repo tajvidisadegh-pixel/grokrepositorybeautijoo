@@ -8,6 +8,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { SupportService } from './support.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -54,6 +55,7 @@ export class SupportController {
   }
 
   @Post('tickets')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   create(
     @CurrentUser('id') userId: string,
     @Body() body: { subject?: string; body?: string; source?: string },
@@ -67,6 +69,7 @@ export class SupportController {
   }
 
   @Post('tickets/:id/messages')
+  @Throttle({ default: { limit: 30, ttl: 600_000 } })
   addMessage(
     @CurrentUser('id') userId: string,
     @CurrentUser('roles') roles: string[] | undefined,
