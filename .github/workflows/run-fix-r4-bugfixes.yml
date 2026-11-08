@@ -1,0 +1,28 @@
+name: run-fix-r4-bugfixes
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          set -euo pipefail
+          python3 scripts/fix-r4-bugfixes.py
+          git rm -rf scripts/b64chunks scripts/buffer82 scripts/ci-blobs scripts/patches 2>/dev/null || true
+          grep -n "envOverlay()" backend/src/admin/admin.service.ts | head -5
+          grep -n "cancelWindowHours: 24" backend/src/admin/admin.service.ts | head -3
+          grep -n "sms_opt_out_user_ids" backend/src/admin/admin-ops.controller.ts | head -3
+          grep -n "storageKey" backend/src/admin/admin.service.ts | head -5
+          grep -n "|| true" Dockerfile || echo "no swallow"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix: r4 bugfixes — envOverlay wired, bulk precheck honest, media storage purge, SMS opt-out list"
+          git push origin HEAD:main
