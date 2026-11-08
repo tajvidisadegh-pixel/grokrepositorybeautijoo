@@ -1,0 +1,52 @@
+name: restore-bookings-service-now
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore bookings.service.ts from a36cd642 + #82.19 cleanup
+        run: |
+          set -euo pipefail
+          git show a36cd642258a024d90fe0ff818552c9fdac6eb08:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/bookings/bookings.service.ts')
+          text = p.read_text(encoding='utf-8')
+          assert text.strip() and text.strip() != 'PLACEHOLDER'
+          assert 'export class BookingsService' in text
+
+          dead = """      // #72 — pro-initiated customer block no longer enforced\n      const links = (proRow?.socialLinks as { _blockedCustomerIds?: string[] } | null) || null;\n      const blocked = Array.isArray(links?._blockedCustomerIds) ? links!._blockedCustomerIds! : [];\n      if (false && blocked.includes(customerId)) {\n        throw new BadRequestException('متأسفانه امکان رزرو نزد این زیباگر برای شما وجود ندارد.');\n      }\n"""
+          if dead in text:
+              text = text.replace(dead, '      // #82.19 / #72 — pro-initiated customer block removed (no longer enforced)\n', 1)
+
+          old_qr = """          await tx.$queryRawUnsafe(\n            `SELECT id FROM professionals WHERE id = $1::uuid FOR UPDATE`,\n            data.professionalId,\n          );"""
+          new_qr = """          // #82.19 — tagged $queryRaw (no $queryRawUnsafe) for professional row lock\n          await tx.$queryRaw`SELECT id FROM professionals WHERE id = ${data.professionalId}::uuid FOR UPDATE`;"""
+          if old_qr in text:
+              text = text.replace(old_qr, new_qr, 1)
+
+          assert 'if (false && blocked' not in text
+          assert 'await tx.$queryRawUnsafe(' not in text
+          assert 'await tx.$queryRaw`' in text
+          assert '_pauseBookings' in text
+          p.write_text(text, encoding='utf-8')
+          print('restored bytes', p.stat().st_size)
+          PY
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          if git diff --cached --quiet; then
+            echo "No change needed"
+            exit 0
+          fi
+          git commit -m "fix: restore bookings.service.ts from a36cd642 + #82.19 cleanup"
+          git push origin HEAD:main
