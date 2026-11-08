@@ -486,7 +486,7 @@ return booking;
     const isPro = pro?.id === existing.professionalId;
     const isCustomer = existing.customerId === userId;
     if (!isPro && !isCustomer) throw new ForbiddenException();
-    if (![BookingStatus.pending, BookingStatus.confirmed].includes(existing.status)) {
+    if (!([BookingStatus.pending, BookingStatus.confirmed] as BookingStatus[]).includes(existing.status)) {
       throw new BadRequestException('این رزرو قابل تغییر زمان نیست');
     }
     const totalDuration = existing.items.reduce((s, it) => s + (it.durationMin || 0), 0) || 30;
@@ -646,7 +646,7 @@ return booking;
 
     if (action === 'no_show') {
       if (!isPro) throw new ForbiddenException();
-      if (![BookingStatus.pending, BookingStatus.confirmed].includes(b.status)) {
+      if (!([BookingStatus.pending, BookingStatus.confirmed] as BookingStatus[]).includes(b.status)) {
         throw new BadRequestException('این رزرو قابل ثبت عدم حضور نیست');
       }
       return this.prisma.booking.update({ where: { id }, data: { status: BookingStatus.no_show, cancelReason: null } });

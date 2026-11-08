@@ -1,17 +1,36 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, DayOfWeek } from '@prisma/client';
 import { TEHRAN_TZ, tehranLocalToUtc, tehranWeekdaySun0 } from '../common/timezone';
 
 function parseTime(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + (m || 0);
+  const parts = String(t || '').trim().split(':');
+  const h = Number(parts[0]);
+  const m = Number(parts[1] || 0);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    throw new BadRequestException('invalid time');
+  }
+  return h * 60 + m;
 }
 
 function formatTime(mins: number): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Map Sun0 weekday to Prisma DayOfWeek enum. */
+function toDayOfWeek(sun0: number): DayOfWeek {
+  const map: DayOfWeek[] = [
+    DayOfWeek.sunday,
+    DayOfWeek.monday,
+    DayOfWeek.tuesday,
+    DayOfWeek.wednesday,
+    DayOfWeek.thursday,
+    DayOfWeek.friday,
+    DayOfWeek.saturday,
+  ];
+  return map[((sun0 % 7) + 7) % 7];
 }
 
 @Injectable()
@@ -32,20 +51,21 @@ export class AvailabilityService {
       throw new BadRequestException('date must be YYYY-MM-DD');
     }
     const pro = await this.prisma.professional.findUnique({ where: { id: professionalId } });
-    if (!pro || pro.status !== 'approved') throw new NotFoundException('زیباگر یافت نشد');
+    if (!pro || pro.status !== 'approved') throw new NotFoundException('\u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
 
-    const weekday = tehranWeekdaySun0(dateStr);
-    const hours = await this.prisma.workingHours.findMany({
-      where: { professionalId, weekday, isActive: true },
+    const dayOfWeek = toDayOfWeek(tehranWeekdaySun0(dateStr));
+    const hours = await this.prisma.workingHour.findMany({
+      where: { professionalId, dayOfWeek, isActive: true, isClosed: false },
+      include: { breaks: true },
     });
     if (!hours.length) {
-      return { date: dateStr, professionalId, durationMin, slots: [], timezone: TEHRAN_TZ };
+      return { date: dateStr, professionalId, durationMin, slots: [] as { start: string; end: string; available: boolean }[], timezone: TEHRAN_TZ };
     }
 
     const dayStart = tehranLocalToUtc(dateStr, '00:00');
     const dayEnd = tehranLocalToUtc(dateStr, '23:59');
 
-    const [bookings, timeOffs, manuals, breaks] = await Promise.all([
+    const [bookings, timeOffs, manuals] = await Promise.all([
       this.prisma.booking.findMany({
         where: {
           professionalId,
@@ -61,6 +81,7 @@ export class AvailabilityService {
           startAt: { lt: dayEnd },
           endAt: { gt: dayStart },
         },
+        select: { startAt: true, endAt: true },
       }),
       this.prisma.manualReservation.findMany({
         where: {
@@ -68,9 +89,7 @@ export class AvailabilityService {
           startAt: { lt: dayEnd },
           endAt: { gt: dayStart },
         },
-      }),
-      this.prisma.breakTime.findMany({
-        where: { professionalId, weekday },
+        select: { startAt: true, endAt: true },
       }),
     ]);
 
@@ -78,7 +97,6 @@ export class AvailabilityService {
     const step = 15;
     const slots: { start: string; end: string; available: boolean }[] = [];
 
-    // Tehran "now" for same-day filtering
     const now = new Date();
     const nowTehran = new Intl.DateTimeFormat('en-GB', {
       timeZone: TEHRAN_TZ,
@@ -94,25 +112,22 @@ export class AvailabilityService {
     const nowMins =
       todayStr === dateStr ? parseInt(part('hour'), 10) * 60 + parseInt(part('minute'), 10) : -1;
 
-    const busy = [
-      ...bookings.map((b) => ({
-        start: Math.floor((b.startAt.getTime() - dayStart.getTime()) / 60000),
-        end: Math.ceil((b.endAt.getTime() - dayStart.getTime()) / 60000),
-      })),
-      ...timeOffs.map((b) => ({
-        start: Math.floor((b.startAt.getTime() - dayStart.getTime()) / 60000),
-        end: Math.ceil((b.endAt.getTime() - dayStart.getTime()) / 60000),
-      })),
-      ...manuals.map((b) => ({
-        start: Math.floor((b.startAt.getTime() - dayStart.getTime()) / 60000),
-        end: Math.ceil((b.endAt.getTime() - dayStart.getTime()) / 60000),
-      })),
+    type Range = { start: number; end: number };
+    const toRange = (b: { startAt: Date; endAt: Date }): Range => ({
+      start: Math.floor((b.startAt.getTime() - dayStart.getTime()) / 60000),
+      end: Math.ceil((b.endAt.getTime() - dayStart.getTime()) / 60000),
+    });
+
+    const busy: Range[] = [
+      ...bookings.map(toRange),
+      ...timeOffs.map(toRange),
+      ...manuals.map(toRange),
     ];
 
     for (const wh of hours) {
       const whStart = parseTime(wh.startTime);
       const whEnd = parseTime(wh.endTime);
-      const breakRanges = breaks.map((b) => ({
+      const breakRanges: Range[] = (wh.breaks || []).map((b) => ({
         start: parseTime(b.startTime),
         end: parseTime(b.endTime),
       }));
@@ -133,7 +148,6 @@ export class AvailabilityService {
       }
     }
 
-    // Public response: do not leak busy/unavailable windows (calendar privacy)
     const publicSlots = slots.filter((s) => s.available);
     return {
       date: dateStr,
