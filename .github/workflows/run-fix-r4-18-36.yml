@@ -1,0 +1,30 @@
+name: run-fix-r4-18-36
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/run-fix-r4-18-36.yml'
+      - 'scripts/fix-r4-18-36.py'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          set -euo pipefail
+          python3 scripts/fix-r4-18-36.py
+          grep -n "never return full phone" backend/src/admin/admin-ops.controller.ts | head -2 || true
+          grep -n "purge storage" backend/src/admin/admin.service.ts | head -2 || true
+          grep -n "ALLOW_DB_RESET" scripts/db-reset.sh | head -3 || true
+          grep -n "ln -sf" Dockerfile | head -3 || true
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(security): r4 items 18-36 — phone mask campaigns, media purge, db-reset guard, docker hygiene"
+          git push origin HEAD:main
