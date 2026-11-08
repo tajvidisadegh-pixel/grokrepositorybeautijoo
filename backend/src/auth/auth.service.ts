@@ -31,6 +31,8 @@ const PRIVILEGED_ROLES = new Set(['SUPER_ADMIN']); // admin is NOT privileged (i
 
 @Injectable()
 export class AuthService {
+  /** #82.med15 — in-memory per-IP OTP request hits (process-local) */
+  private readonly otpIpHits = new Map<string, { count: number; windowStart: number }>();
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -240,9 +242,37 @@ export class AuthService {
     };
   }
 
-  async requestOtp(dto: RequestOtpDto) {
+  async requestOtp(dto: RequestOtpDto, clientIp?: string) {
+    // #82.med15 — purpose whitelist
+    const allowedPurposes = new Set([
+      'login',
+      'register',
+      'password_reset',
+      'change_phone',
+      'delete_account',
+    ]);
+    const purposeBase = (dto.purpose || 'login').toString().trim();
+    if (!allowedPurposes.has(purposeBase)) {
+      throw new BadRequestException('هدف درخواست کد نامعتبر است');
+    }
+    // #82.med15 — per-IP soft limit (default 20 / 10 min)
+    if (clientIp) {
+      const maxIp = parseInt(process.env.OTP_MAX_PER_IP_10M || '20', 10) || 20;
+      const now = Date.now();
+      const windowMs = 600_000;
+      const entry = this.otpIpHits.get(clientIp);
+      if (!entry || now - entry.windowStart > windowMs) {
+        this.otpIpHits.set(clientIp, { count: 1, windowStart: now });
+      } else {
+        entry.count += 1;
+        if (entry.count > maxIp) {
+          throw new BadRequestException(
+            'تعداد درخواست از این شبکه بیش از حد مجاز است. کمی بعد دوباره تلاش کنید',
+          );
+        }
+      }
+    }
     const accountType = this.resolveAccountType(dto.accountType);
-    const purposeBase = dto.purpose || 'login';
     const purpose = `${purposeBase}:${accountType}`;
     const ttl = this.config.get<number>('otpTtlSeconds') || 300;
     const cooldown = this.config.get<number>('otpCooldownSeconds') || 60;

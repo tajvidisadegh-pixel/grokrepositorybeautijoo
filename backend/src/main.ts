@@ -44,17 +44,36 @@ async function bootstrap() {
       );
     }
 
-    // #82.14 — no directory listing; public portfolio media only
+    // #82.14 / #82.infra19 — static media: no listing; only image extensions; block path tricks
+    app.use('/uploads', (req, res, next) => {
+      const urlPath = (req.path || '').split('?')[0];
+      if (urlPath.includes('..') || urlPath.includes('%2e') || urlPath.includes('%2E')) {
+        return res.status(400).end('bad path');
+      }
+      if (urlPath === '/' || urlPath === '') {
+        return res.status(404).end();
+      }
+      const lower = urlPath.toLowerCase();
+      const okExt = /\.(jpe?g|png|gif|webp|avif|svg|ico)$/i.test(lower);
+      if (!okExt) {
+        return res.status(404).end();
+      }
+      return next();
+    });
     app.useStaticAssets(uploadsAbs, {
       prefix: '/uploads/',
       index: false,
+      dotfiles: 'deny',
       setHeaders: (res) => {
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         res.setHeader('Cache-Control', 'public, max-age=86400');
         res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY');
       },
     });
-    logger.log(`Static /uploads → ${uploadsAbs} (#82.14 public media only)`);
+    logger.log(
+      `Static /uploads → ${uploadsAbs} (#82.infra19 image-only; prefer STORAGE_PROVIDER=s3 in prod)`,
+    );
   } else {
     logger.log(
       `STORAGE_PROVIDER=${storageKind} — static /uploads disabled (object storage serves files)`,

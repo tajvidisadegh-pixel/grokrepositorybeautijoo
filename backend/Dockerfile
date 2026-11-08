@@ -37,4 +37,4 @@ USER node
 
 # Migrate + idempotent seeds on every boot (Liara single-container pattern).
 # seed-roles is required; seed-catalog is create-only / best-effort — failures are logged, not swallowed silently (#82.16).
-CMD ["sh", "-c", "mkdir -p \"${STORAGE_LOCAL_PATH:-/app/uploads}\" 2>/dev/null || true; node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && (node prisma/seed-catalog.cjs || echo \"[boot] seed-catalog failed (non-fatal, see logs above)\" >&2) && node dist/main.js"]
+CMD ["sh", "-c", "mkdir -p \"${STORAGE_LOCAL_PATH:-/app/uploads}\" 2>/dev/null || true; node scripts/prisma-migrate-deploy.cjs && node prisma/seed-roles.cjs && if [ \"${RUN_SEED_CATALOG_ON_BOOT:-false}\" = \"true\" ]; then (node prisma/seed-catalog.cjs || echo \"[boot] seed-catalog failed (non-fatal)\" >&2); else echo \"[boot] seed-catalog skipped (set RUN_SEED_CATALOG_ON_BOOT=true to enable)\"; fi && node dist/main.js"]

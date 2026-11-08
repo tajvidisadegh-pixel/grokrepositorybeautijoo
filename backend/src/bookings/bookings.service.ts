@@ -634,26 +634,50 @@ export class BookingsService {
           'لغو نوبت پرداخت‌شده توسط زیباگر مجاز نیست. لطفاً از پشتیبانی تیکت ثبت کنید.',
         );
       }
-      // Unpaid pending: either side may cancel (slot release)
       // unpaid pending: pro may clear hold (fall through to cancel)
       const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
       if (!allowed.includes(b.status)) throw new BadRequestException('این رزرو قابل لغو نیست');
-      // #82.7 — customer cancel of paid booking must attempt refund
-      if (isCustomer && paid && b.payment?.id) {
-        try {
-          await this.payments.refund(b.payment.id, reason?.trim() || 'لغو توسط مشتری', userId);
-        } catch (err) {
-          this.logger.warn(`customer paid cancel refund failed booking=${id}: ${(err as Error)?.message || err}`);
-          return this.prisma.booking.update({
-            where: { id },
-            data: {
-              status: BookingStatus.cancelled,
-              cancelReason: reason ?? 'لغو توسط مشتری (استرداد ناموفق — پیگیری پشتیبانی)',
-              cancelledAt: new Date(),
-            },
-          });
+      // #82.med9 — free-cancel window (BOOKING_FREE_CANCEL_HOURS, default 24)
+      {
+        const freeH = parseInt(process.env.BOOKING_FREE_CANCEL_HOURS || '24', 10);
+        const hours = Number.isFinite(freeH) && freeH >= 0 ? freeH : 24;
+        const msLeft = b.startAt.getTime() - Date.now();
+        const withinFreeWindow = msLeft >= hours * 3600_000;
+        if (isCustomer && paid && b.payment?.id) {
+          if (!withinFreeWindow && hours > 0) {
+            return this.prisma.booking.update({
+              where: { id },
+              data: {
+                status: BookingStatus.cancelled,
+                cancelReason:
+                  (reason?.trim() || 'لغو دیرهنگام توسط مشتری') +
+                  ` (خارج از پنجره لغو رایگان ${hours} ساعته — استرداد خودکار انجام نشد)',
+                cancelledAt: new Date(),
+              },
+            });
+          }
+          try {
+            await this.payments.refund(
+              b.payment.id,
+              reason?.trim() || 'لغو توسط مشتری',
+              userId,
+            );
+          } catch (err) {
+            this.logger.warn(
+              `customer paid cancel refund failed booking=${id}: ${(err as Error)?.message || err}`,
+            );
+            return this.prisma.booking.update({
+              where: { id },
+              data: {
+                status: BookingStatus.cancelled,
+                cancelReason:
+                  reason ?? 'لغو توسط مشتری (استرداد ناموفق — پیگیری پشتیبانی)',
+                cancelledAt: new Date(),
+              },
+            });
+          }
+          return this.prisma.booking.findUniqueOrThrow({ where: { id } });
         }
-        return this.prisma.booking.findUniqueOrThrow({ where: { id } });
       }
       return this.prisma.booking.update({
         where: { id },
