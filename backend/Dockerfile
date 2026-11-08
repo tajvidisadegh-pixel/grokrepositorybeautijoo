@@ -13,7 +13,7 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 
-RUN if [ -f package-lock.json ]; then npm ci; else echo "WARN: no package-lock.json — using npm install (non-deterministic)"; npm install; fi
+RUN if [ -f package-lock.json ]; then npm ci; else echo "ERROR: package-lock.json required for reproducible builds" >&2; exit 1; fi
 
 COPY . .
 
@@ -34,6 +34,9 @@ EXPOSE 3000
 # Run as non-root (node uid 1000). For Liara Disk mounts that are root-owned,
 # set the mount path env and ensure the volume is writable by uid 1000, or use S3.
 USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v1/health',r=>process.exit(r.statusCode&&r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
 
 # Migrate + idempotent seeds on every boot (Liara single-container pattern).
 # seed-roles is required; seed-catalog is create-only / best-effort — failures are logged, not swallowed silently (#82.16).

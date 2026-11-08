@@ -600,19 +600,24 @@ ${body}`.slice(0, 400);
     ]);
     return {
       campaignId,
-      items: rows.map((r) => ({
-        id: r.id,
-        userId: r.userId,
-        phone: r.user?.phone,
-        displayName: r.user?.profile?.displayName,
-        status:
-          (r.data as any)?.deliveryStatus === 'failed'
-            ? 'failed'
-            : r.readAt
-              ? 'read'
-              : 'sent',
-        createdAt: r.createdAt,
-      })),
+      items: rows.map((r) => {
+        const raw = r.user?.phone || '';
+        const masked =
+          raw.length >= 7 ? raw.slice(0, 4) + '***' + raw.slice(-2) : raw ? '***' : null;
+        return {
+          id: r.id,
+          userId: r.userId,
+          phone: masked, // #r4.M2 — never return full phone in campaign lists
+          displayName: r.user?.profile?.displayName,
+          status:
+            (r.data as any)?.deliveryStatus === 'failed'
+              ? 'failed'
+              : r.readAt
+                ? 'read'
+                : 'sent',
+          createdAt: r.createdAt,
+        };
+      }),
       meta: {
         page,
         limit,

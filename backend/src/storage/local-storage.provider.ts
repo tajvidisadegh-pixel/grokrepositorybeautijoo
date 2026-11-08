@@ -133,7 +133,8 @@ export class LocalStorageProvider implements StorageProvider, OnModuleInit {
   async download(key: string): Promise<{ buffer: Buffer; contentType: string } | null> {
     const safeKey = key.replace(/^\/+/, '').replace(/\.\./g, '');
     const full = path.join(this.basePath, safeKey);
-    if (!full.startsWith(this.basePath)) return null;
+    const baseWithSep = this.basePath.endsWith(path.sep) ? this.basePath : this.basePath + path.sep;
+    if (full !== this.basePath && !full.startsWith(baseWithSep)) return null;
     try {
       const buffer = await fs.readFile(full);
       const lower = safeKey.toLowerCase();

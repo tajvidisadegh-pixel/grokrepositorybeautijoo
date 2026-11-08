@@ -22,7 +22,8 @@
     "db:down": "docker compose -f docker/docker-compose.yml down",
     "prisma:generate": "cd backend && npx prisma generate",
     "prisma:migrate": "cd backend && npx prisma migrate dev",
-    "prisma:seed": "cd backend && npx prisma db seed"
+    "prisma:seed": "cd backend && npx prisma db seed",
+    "workspaces:note": "echo 'Root workspaces are convenience only; install deps inside frontend/ and backend/ with their own package-lock.json'"
   },
   "engines": {
     "node": ">=20"

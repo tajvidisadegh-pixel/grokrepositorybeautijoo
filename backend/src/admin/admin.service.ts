@@ -1325,6 +1325,17 @@ export class AdminService {
     const existing = await this.prisma.mediaAsset.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Media not found');
     const updated = await this.prisma.mediaAsset.update({ where: { id }, data: { status } });
+    // #r4.M4 — purge storage when media is rejected/deleted
+    if (status === MediaStatus.rejected || status === MediaStatus.deleted) {
+      const storageKey = (existing as any).storageKey || (existing as any).key || (existing as any).path;
+      if (storageKey && this.storage.delete) {
+        try {
+          await this.storage.delete(String(storageKey));
+        } catch (e) {
+          this.logger.warn(`setMediaStatus storage delete failed: ${(e as Error)?.message || e}`);
+        }
+      }
+    }
     await this.audit(actorId, 'media.status_change', 'media_asset', id, { status: existing.status }, { status });
     return updated;
   }

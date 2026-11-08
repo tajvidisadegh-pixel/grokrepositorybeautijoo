@@ -28,3 +28,11 @@ backend/prisma/.schema-b64/
 bun.lock
 *.b64
 !**/.github/**/*.b64
+
+# r4 hygiene
+.tmp/
+scripts/b64chunks/
+scripts/buffer82/
+scripts/ci-blobs/
+scripts/patches/
+*.schema-b64

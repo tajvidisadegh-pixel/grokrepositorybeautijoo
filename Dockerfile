@@ -43,13 +43,14 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Support Liara start at /app/standalone/server.js with FULL tree (not nested frontend/)
+# #r4.D2/D3 — Liara may start either /app/server.js or /app/standalone/server.js
+# Prefer symlink for standalone path instead of duplicating node_modules (image size).
 RUN mkdir -p /app/standalone \
-  && cp -a /app/server.js /app/standalone/server.js \
-  && cp -a /app/node_modules /app/standalone/node_modules \
+  && ln -sf /app/server.js /app/standalone/server.js \
+  && ln -sfn /app/node_modules /app/standalone/node_modules \
   && mkdir -p /app/standalone/.next \
-  && cp -a /app/.next/. /app/standalone/.next/ \
-  && cp -a /app/public /app/standalone/public
+  && ln -sfn /app/.next/static /app/standalone/.next/static 2>/dev/null || true \
+  && ln -sfn /app/public /app/standalone/public
 
 # #r4.D1 — run as non-root
 USER node

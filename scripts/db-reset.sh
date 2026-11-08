@@ -2,6 +2,18 @@
 # ریست کامل دیتابیس توسعه: حذف volume → بالا آوردن → migrate → seed
 set -euo pipefail
 
+# #r4.D7 — never run against production
+if [[ "${NODE_ENV:-}" == "production" || "${APP_ENV:-}" == "production" || "${DATABASE_URL:-}" == *"production"* ]]; then
+  echo "ERROR: db-reset.sh is blocked when NODE_ENV/APP_ENV=production or DATABASE_URL looks like production." >&2
+  exit 1
+fi
+if [[ "${ALLOW_DB_RESET:-}" != "yes" ]]; then
+  echo "Set ALLOW_DB_RESET=yes to confirm this is a local/dev database." >&2
+  exit 1
+fi
+
+set -euo pipefail
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 

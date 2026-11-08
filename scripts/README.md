@@ -1,14 +1,10 @@
-# Operational scripts
+# scripts/
 
-Keep only production-safe helpers here.
+> **هشدار امنیتی (r4):** بسیاری از اسکریپت‌های این پوشه یک‌بارمصرف‌اند و با regex/sed
+> سورس یا داده را تغییر می‌دهند. اسکریپت‌هایی مثل `force_payout_*` و `dedupe_payout_*`
+> می‌توانند داده مالی را عوض کنند — **هرگز روی production اجرا نکنید** مگر با پشتیبان و تأیید کتبی.
 
-- `dev-up.sh` — local stack
-- `db-reset.sh` — reset local DB (dev only)
-- `check-env.sh` — validate env
-- `generate-secrets.sh` — generate secrets for deploy
+- `db-reset.sh` فقط با `ALLOW_DB_RESET=yes` و خارج از production اجرا می‌شود.
+- پوشه‌های خالی/موقت (`b64chunks`, `buffer82`, `ci-blobs`, `patches`) نباید در deploy باشند.
+- برای پچ‌های امنیتی از workflowهای `run-fix-*` و اسکریپت‌های `fix-admin-r4-*.py` استفاده شده است.
 
-Temporary one-shot patch scripts for migrations may appear and should be removed after CI is green.
-
-## #80 pricing
-
-Pro pricing API (`pricingMode`, `depositAmount`, `optionDeltas`) is applied on main via services.controller/service.
