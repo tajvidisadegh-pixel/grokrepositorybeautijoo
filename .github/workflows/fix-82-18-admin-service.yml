@@ -1,0 +1,52 @@
+name: fix-82-18-admin-service
+
+"on":
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch impersonateCustomer blocking audit
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/admin/admin.service.ts')
+          text = p.read_text()
+          if 'IMPERSONATION_STARTED audit failed' in text:
+              print('already patched')
+          else:
+              marker = '  async impersonateCustomer(adminId: string, customerId: string) {'
+              if marker not in text:
+                  raise SystemExit('impersonateCustomer not found')
+              # Find end of method: next async method at same indent after start
+              start = text.find(marker)
+              # Look for next "\n  async " after start+10
+              rest = text[start+10:]
+              end_rel = rest.find('\n  async ')
+              if end_rel < 0:
+                  raise SystemExit('method end not found')
+              end = start + 10 + end_rel
+              old = text[start:end]
+              new = '''  /**\n   * #82.18 — Start customer impersonation.\n   * Only SUPER_ADMIN (re-checked against DB, not only JWT roles).\n   * Audit log is required: if audit insert fails, the request fails (no silent start).\n   */\n  async impersonateCustomer(adminId: string, customerId: string) {\n    if (!adminId) {\n      throw new ForbiddenException('SUPER_ADMIN only');\n    }\n    if (adminId === customerId) {\n      throw new BadRequestException('cannot impersonate yourself');\n    }\n    const admin = await this.prisma.user.findUnique({\n      where: { id: adminId },\n      include: { userRoles: { include: { role: true } } },\n    });\n    if (!admin) throw new NotFoundException('admin not found');\n    if (admin.status !== 'active') {\n      throw new ForbiddenException('admin account is not active');\n    }\n    const adminRoles = admin.userRoles.map((ur) => ur.role.name);\n    if (!adminRoles.includes('SUPER_ADMIN')) {\n      throw new ForbiddenException('SUPER_ADMIN only');\n    }\n    const customer = await this.prisma.user.findUnique({\n      where: { id: customerId },\n      include: {\n        profile: true,\n        userRoles: { include: { role: true } },\n        professional: { select: { id: true } },\n      },\n    });\n    if (!customer) throw new NotFoundException('customer not found');\n    if (customer.status !== 'active') {\n      throw new BadRequestException('customer not active');\n    }\n    const customerRoles = customer.userRoles.map((ur) => ur.role.name);\n    if (customerRoles.some((r) => r === 'SUPER_ADMIN' || r === 'admin')) {\n      throw new ForbiddenException('cannot impersonate admin');\n    }\n    if (customer.accountType === 'professional' && !customerRoles.includes('customer')) {\n      throw new BadRequestException('not a customer account');\n    }\n\n    // #82.18 — durable audit BEFORE issuing token; failure blocks impersonation\n    try {\n      await this.prisma.auditLog.create({\n        data: {\n          actorId: adminId,\n          action: 'IMPERSONATION_STARTED',\n          entityType: 'user',\n          entityId: customer.id,\n          before: null,\n          after: {\n            customerUserId: customer.id,\n            customerPhone: customer.phone,\n            customerName: customer.profile?.displayName || null,\n            adminUserId: adminId,\n          } as any,\n        },\n      });\n    } catch (err) {\n      this.logger.error(\n        `IMPERSONATION_STARTED audit failed for admin=${adminId} customer=${customerId}: ${(err as Error).message}`,\n      );\n      throw new BadRequestException(\n        'ثبت لاگ impersonation ناموفق بود؛ برای امنیت عملیات متوقف شد',\n      );\n    }\n\n    const tokens = await this.authService.issueImpersonationAccessToken(\n      customer.id,\n      customer.phone,\n      adminId,\n    );\n    this.logger.warn(\n      `IMPERSONATION_STARTED admin=${adminId} customer=${customer.id}`,\n    );\n    return {\n      accessToken: tokens.accessToken,\n      expiresIn: tokens.expiresIn,\n      customer: {\n        id: customer.id,\n        phone: customer.phone,\n        displayName: customer.profile?.displayName || null,\n        accountType: customer.accountType,\n        roles: customerRoles,\n      },\n    };\n  }'''
+              text = text[:start] + new + text[end:]
+              p.write_text(text)
+              print('patched', len(new))
+          t = p.read_text()
+          assert 'IMPERSONATION_STARTED audit failed' in t
+          assert 'cannot impersonate yourself' in t
+          print('sanity ok')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts
+          if git diff --cached --quiet; then echo noop; exit 0; fi
+          git commit -m "fix(#82.18): blocking audit on impersonation start"
+          git pull --rebase origin main || true
+          git push origin HEAD:main
