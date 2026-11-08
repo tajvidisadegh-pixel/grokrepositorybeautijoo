@@ -370,18 +370,44 @@ export class AdminOpsController {
       });
       const msg = `${title}
 ${body}`.slice(0, 400);
-      for (const u of users) {
-        if (!u.phone) continue;
-        try {
-          await this.sms.sendNotification(u.phone, msg);
-          smsSent++;
-        } catch (e) {
-          smsFailed++;
-          this.logger.warn(`bulk SMS fail user=${u.id}: ${e}`);
+      if (ids.length > maxSms) smsSkippedReason = `capped_at_${maxSms}`;
+      const concurrency = 10;
+      for (let i = 0; i < users.length; i += concurrency) {
+        const slice = users.slice(i, i + concurrency);
+        const results = await Promise.all(
+          slice.map(async (u) => {
+            if (!u.phone) return { ok: false as const, id: u.id };
+            try {
+              await this.sms.sendNotification(u.phone, msg);
+              return { ok: true as const, id: u.id };
+            } catch (e) {
+              this.logger.warn(`bulk SMS fail user=${u.id}: ${e}`);
+              return { ok: false as const, id: u.id };
+            }
+          }),
+        );
+        for (const r of results) {
+          if (r.ok) smsSent++;
+          else smsFailed++;
+          try {
+            await this.prisma.notification.updateMany({
+              where: {
+                userId: r.id,
+                data: { path: ['campaignId'], equals: campaignId },
+              },
+              data: {
+                data: {
+                  campaignId,
+                  deliveryStatus: r.ok ? 'sent' : 'failed',
+                  smsRequested: true,
+                  smsDelivered: r.ok,
+                } as any,
+              },
+            });
+          } catch {
+            /* non-blocking */
+          }
         }
-      }
-      if (ids.length > maxSms) {
-        smsSkippedReason = `capped_at_${maxSms}`;
       }
     }
 
