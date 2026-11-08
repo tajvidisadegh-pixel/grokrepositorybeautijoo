@@ -491,13 +491,17 @@ export class AuthService {
     customerPhone: string | null,
     adminId: string,
   ): Promise<{ accessToken: string; expiresIn: string }> {
-    const accessTtl = this.config.get<string>('jwt.accessTtl') || '30m';
+    // #r4.H9 — impersonation tokens are short-lived and non-refreshable
+    const configured = (this.config.get<string>('jwt.impersonationTtl') || process.env.JWT_IMPERSONATION_TTL || '15m').trim();
+    const accessTtl = configured;
     const accessToken = await this.jwt.signAsync(
       {
         sub: customerId,
         phone: customerPhone ?? undefined,
         imp: adminId,
         impMode: true,
+        // block elevated claims while impersonating
+        roles: ['customer'],
       },
       {
         secret: this.config.get('jwt.accessSecret'),

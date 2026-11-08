@@ -18,7 +18,7 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else echo 'package-lock.json required' >&2; exit 1; fi
 COPY frontend/ ./
 RUN npm run build
 
@@ -49,5 +49,10 @@ RUN mkdir -p /app/standalone \
   && cp -a /app/.next/. /app/standalone/.next/ \
   && cp -a /app/public /app/standalone/public
 
+# #r4.D1 — run as non-root
+USER node
+
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||3000),r=>process.exit(r.statusCode&&r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
 CMD ["node", "server.js"]

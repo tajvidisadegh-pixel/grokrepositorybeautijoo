@@ -44,6 +44,13 @@ export class AdminService {
     private readonly authService: AuthService,
   ) {}
 
+  private maskPhone(phone?: string | null): string | null {
+    if (!phone) return null;
+    const p = String(phone);
+    if (p.length < 7) return '***';
+    return p.slice(0, 4) + '***' + p.slice(-2);
+  }
+
   private async audit(
     actorId: string | undefined,
     action: string,
@@ -223,7 +230,7 @@ export class AdminService {
       recent: {
         users: recentUsers.map((u) => ({
           id: u.id,
-          phone: u.phone,
+          phone: this.maskPhone(u.phone),
           displayName: u.profile?.displayName ?? null,
           createdAt: u.createdAt,
         })),
@@ -276,16 +283,19 @@ export class AdminService {
     const grossRevenue = Number(paidAgg._sum.amount || 0);
     let platformCommission = Number(commissionAgg._sum.platformCommissionAmount || 0);
     let professionalNet = Number(commissionAgg._sum.professionalNetAmount || 0);
+    let commissionEstimated = false;
     if (!platformCommission && grossRevenue) {
       const rate = (await this.getCommissionSetting()).rate;
       platformCommission = Math.round(grossRevenue * (rate / 100));
       professionalNet = Math.max(0, grossRevenue - platformCommission);
+      commissionEstimated = true; // #r4.H7 — historical rows missing snapshot
     }
     return {
       period,
       grossRevenue,
       platformCommission,
       professionalNet,
+      commissionEstimated,
       transactions: {
         paid: paidCount,
         failed: failedCount,
@@ -443,7 +453,11 @@ export class AdminService {
       }),
       this.prisma.user.count({ where }),
     ]);
-    return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
+    const masked = items.map((u) => ({
+      ...u,
+      phone: this.maskPhone(u.phone),
+    }));
+    return { items: masked, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }
 
   async getCustomersStats() {
@@ -561,6 +575,15 @@ export class AdminService {
     }
 
     const beforeRoles = existing.userRoles.map((ur) => ur.role.name);
+    // #r4.H5 — cannot remove last active SUPER_ADMIN
+    if (beforeRoles.includes('SUPER_ADMIN') && !normalized.some((r) => r.toLowerCase() === 'super_admin')) {
+      const superCount = await this.prisma.userRole.count({
+        where: { role: { name: 'SUPER_ADMIN' }, user: { status: UserStatus.active } },
+      });
+      if (superCount <= 1) {
+        throw new BadRequestException('نمی‌توان نقش آخرین SUPER_ADMIN فعال را برداشت');
+      }
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { userId: id } });
@@ -1054,13 +1077,33 @@ export class AdminService {
   async listNotifications(q?: any) {
     const page = Math.max(1, Number(q?.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q?.limit) || 30));
+    const where: Prisma.NotificationWhereInput = {};
+    if (q?.userId?.trim()) where.userId = String(q.userId).trim();
+    if (q?.type) where.type = q.type;
+    if (q?.search?.trim()) {
+      const s = String(q.search).trim();
+      where.OR = [
+        { title: { contains: s, mode: 'insensitive' } },
+        { body: { contains: s, mode: 'insensitive' } },
+      ];
+    }
+    // #r4.M1 — without userId, only return aggregate counts (no full dump)
+    if (!where.userId && !q?.search?.trim()) {
+      const total = await this.prisma.notification.count({ where });
+      return {
+        items: [],
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+        notice: 'برای فهرست کامل، userId را مشخص کنید',
+      };
+    }
     const [items, total] = await Promise.all([
       this.prisma.notification.findMany({
+        where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.notification.count(),
+      this.prisma.notification.count({ where }),
     ]);
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }
@@ -1214,7 +1257,7 @@ export class AdminService {
       before: r.before,
       after: r.after,
       meta: r.after ?? r.before,
-      ipAddress: r.ipAddress,
+      // #r4.M3 — ipAddress omitted from list (privacy); available in detail if needed
       createdAt: r.createdAt,
     }));
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
