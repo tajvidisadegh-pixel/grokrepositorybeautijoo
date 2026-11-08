@@ -1,0 +1,45 @@
+name: apply-high1-4-zlib
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-high1-4-zlib.yml'
+      - '.github/payloads/high1-4/zlib.*'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode script and patch
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          import zlib, base64
+          from pathlib import Path
+          parts = sorted(Path('.github/payloads/high1-4').glob('zlib.*'), key=lambda p: p.name)
+          print('parts', [p.name for p in parts])
+          comp = ''.join(p.read_text().strip() for p in parts)
+          print('comp len', len(comp))
+          raw = zlib.decompress(base64.b64decode(comp))
+          Path('scripts').mkdir(exist_ok=True)
+          Path('scripts/patch_high1_4.py').write_bytes(raw)
+          print('script', len(raw))
+          PY
+          python3 scripts/patch_high1_4.py
+          grep -q 'recent >= 3' backend/src/bookings/bookings.service.ts
+          grep -q 'maskedItems' backend/src/bookings/bookings.service.ts
+          grep -q 'delete_account:' backend/src/auth/auth.service.ts
+          grep -q 'cancelledProCount' backend/src/auth/auth.service.ts
+          grep -q 'class BookingsService' backend/src/bookings/bookings.service.ts
+          grep -q 'class AuthService' backend/src/auth/auth.service.ts
+          echo PATCH_OK
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts backend/src/auth/auth.service.ts
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(#82.high1-4): reportIssue for pro + rate-limit, OTP delete, cancel bookings & hide pro, mask phones, #82.19 cleanup"
+          git push origin HEAD:main
