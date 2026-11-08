@@ -20,7 +20,8 @@ ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 COPY frontend/package.json frontend/package-lock.json* ./
 # Prefer reproducible npm ci when lock exists; fall back so Liara build is not blocked
 # when frontend/package-lock.json is absent from the repo.
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
+# Builder needs devDependencies (typescript, tailwind, postcss) for `next build`
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY frontend/ ./
 RUN npm run build
 

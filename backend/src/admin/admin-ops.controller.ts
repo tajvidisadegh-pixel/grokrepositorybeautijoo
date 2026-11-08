@@ -364,10 +364,22 @@ export class AdminOpsController {
       const envMax = parseInt(process.env.BULK_SMS_MAX || '200', 10);
       const hardMax = Math.min(200, Number.isFinite(envMax) && envMax > 0 ? envMax : 200);
       const maxSms = Math.min(ids.length, hardMax);
-      const users = await this.prisma.user.findMany({
+      const usersRaw = await this.prisma.user.findMany({
         where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null }, status: UserStatus.active },
-        select: { id: true, phone: true },
+        select: {
+          id: true,
+          phone: true,
+          profile: { select: { bio: true } },
+        },
       });
+      // #r4.gap — skip explicit opt-out markers in bio (marketing:optout)
+      const users = usersRaw.filter((u) => {
+        const bio = (u.profile?.bio || '').toLowerCase();
+        return !bio.includes('sms:optout') && !bio.includes('marketing:optout');
+      });
+      if (users.length < usersRaw.length) {
+        smsSkippedReason = (smsSkippedReason ? smsSkippedReason + ',' : '') + 'opt_out_skipped';
+      }
       const msg = `${title}
 ${body}`.slice(0, 400);
       if (ids.length > maxSms) smsSkippedReason = `capped_at_${maxSms}`;
@@ -633,7 +645,6 @@ ${body}`.slice(0, 400);
     @Param('campaignId') campaignId: string,
     @CurrentUser('id') actorId?: string,
   ) {
-    // Re-create notifications marked failed for this campaign
     const failed = await this.prisma.notification.findMany({
       where: {
         AND: [
@@ -641,10 +652,29 @@ ${body}`.slice(0, 400);
           { data: { path: ['deliveryStatus'], equals: 'failed' } },
         ],
       },
-      take: 500,
+      take: 200,
+      include: { user: { select: { id: true, phone: true } } },
     });
     let retried = 0;
+    let stillFailed = 0;
+    const metaRow = await this.prisma.platformSetting.findUnique({
+      where: { key: `campaign_meta_${campaignId}` },
+    });
+    const title = String((metaRow?.value as any)?.title || 'Beautijoo');
+    const body = String((metaRow?.value as any)?.body || '');
+    const msg = `${title}
+${body}`.slice(0, 400);
     for (const n of failed) {
+      let ok = false;
+      const phone = n.user?.phone;
+      if (phone && this.sms?.sendNotification) {
+        try {
+          await this.sms.sendNotification(phone, msg);
+          ok = true;
+        } catch (e) {
+          this.logger.warn(`retry SMS fail notif=${n.id}: ${e}`);
+        }
+      }
       try {
         await this.prisma.notification.update({
           where: { id: n.id },
@@ -652,23 +682,38 @@ ${body}`.slice(0, 400);
             data: {
               ...((n.data as object) || {}),
               campaignId,
-              deliveryStatus: 'sent',
+              deliveryStatus: ok ? 'sent' : 'failed',
               retriedAt: new Date().toISOString(),
+              smsDelivered: ok,
             } as any,
           },
         });
-        retried++;
+        if (ok) retried++;
+        else stillFailed++;
       } catch {
-        /* skip */
+        stillFailed++;
       }
+    }
+    // Update campaign_meta counters
+    if (metaRow?.value) {
+      const v = { ...(metaRow.value as any) };
+      v.smsSent = Number(v.smsSent || 0) + retried;
+      v.smsFailed = stillFailed;
+      v.failed = stillFailed;
+      v.lastRetryAt = new Date().toISOString();
+      await this.prisma.platformSetting
+        .update({ where: { key: `campaign_meta_${campaignId}` }, data: { value: v as object } })
+        .catch(() => undefined);
     }
     await this.audit(actorId, 'admin.notifications.retry_failed', 'campaign', campaignId, {
       retried,
+      stillFailed,
       totalFailed: failed.length,
     });
     return {
       success: true,
       retried,
+      stillFailed,
       campaignId,
       totalFailed: failed.length,
     };

@@ -1347,24 +1347,24 @@ export class AdminService {
     if (existing.professional) {
       throw new BadRequestException('این حساب زیباگر است. برای حذف از بخش زیباگرها اقدام کنید.');
     }
-    const activeBookings = await this.prisma.booking.count({
-      where: { customerId: id, status: { in: [BookingStatus.pending, BookingStatus.confirmed] } },
-    });
-    if (activeBookings > 0) {
-      throw new BadRequestException('کاربر رزرو فعال دارد؛ ابتدا رزروها را لغو کنید');
+    // #r4.gap — preserve financial/booking history: any booking or payment blocks hard delete
+    const anyBookings = await this.prisma.booking.count({ where: { customerId: id } });
+    if (anyBookings > 0) {
+      throw new BadRequestException(
+        'این کاربر سابقه رزرو دارد؛ حذف دائمی مجاز نیست. از تعلیق حساب استفاده کنید',
+      );
     }
-    const paidOpen = await this.prisma.payment.count({
-      where: {
-        status: { in: [PaymentStatus.paid, PaymentStatus.processing, PaymentStatus.pending] },
-        booking: { customerId: id },
-      },
+    const anyPayments = await this.prisma.payment.count({
+      where: { booking: { customerId: id } },
     });
-    if (paidOpen > 0) {
-      throw new BadRequestException('سوابق پرداخت باز/پرداخت‌شده وجود دارد؛ حذف دائمی مجاز نیست');
+    if (anyPayments > 0) {
+      throw new BadRequestException(
+        'سوابق پرداخت وجود دارد؛ حذف دائمی مجاز نیست. از تعلیق حساب استفاده کنید',
+      );
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { customerId: id } });
-      await tx.booking.deleteMany({ where: { customerId: id } });
+      await tx.refreshToken.deleteMany({ where: { userId: id } }).catch(() => undefined as never);
       await tx.user.delete({ where: { id } });
     });
     await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone }, null);
@@ -1376,41 +1376,58 @@ export class AdminService {
     if ((userIds || []).length > 50) {
       throw new BadRequestException('حداکثر ۵۰ کاربر در هر درخواست');
     }
+    // Pre-check all IDs so we fail fast before any delete (best-effort atomicity)
+    const blocked: string[] = [];
+    for (const id of ids) {
+      const [bookings, payments] = await Promise.all([
+        this.prisma.booking.count({ where: { customerId: id } }),
+        this.prisma.payment.count({ where: { booking: { customerId: id } } }),
+      ]);
+      if (bookings > 0 || payments > 0) blocked.push(id);
+    }
+    if (blocked.length) {
+      throw new BadRequestException(
+        `حذف گروهی متوقف شد؛ این کاربران سابقه رزرو/پرداخت دارند: ${blocked.slice(0, 5).join(', ')}`,
+      );
+    }
     let deleted = 0;
     const failed: string[] = [];
-    for (const id of ids) {
-      try {
-        await this.hardDeleteUser(id, actorId);
-        deleted += 1;
-      } catch (e) {
-        failed.push(id);
-        this.logger.warn(`bulkHardDelete fail ${id}: ${(e as Error)?.message || e}`);
+    await this.prisma.$transaction(async () => {
+      for (const id of ids) {
+        try {
+          await this.hardDeleteUser(id, actorId);
+          deleted += 1;
+        } catch (e) {
+          failed.push(id);
+          this.logger.warn(`bulkHardDelete fail ${id}: ${(e as Error)?.message || e}`);
+          throw e; // abort remaining deletes in this batch
+        }
       }
-    }
+    }, { timeout: 60_000 });
     return { deleted, failed, cappedAt: 50 };
   }
 
   async hardDeleteProfessional(id: string, actorId?: string) {
     const pro = await this.prisma.professional.findUnique({ where: { id } });
     if (!pro) throw new NotFoundException('Professional not found');
-    const activeBookings = await this.prisma.booking.count({
-      where: { professionalId: id, status: { in: [BookingStatus.pending, BookingStatus.confirmed] } },
-    });
-    if (activeBookings > 0) {
-      throw new BadRequestException('زیباگر رزرو فعال دارد؛ ابتدا رزروها را مدیریت کنید');
+    // #r4.gap — any historical booking/payment blocks hard delete
+    const anyBookings = await this.prisma.booking.count({ where: { professionalId: id } });
+    if (anyBookings > 0) {
+      throw new BadRequestException(
+        'این زیباگر سابقه رزرو دارد؛ حذف دائمی مجاز نیست. از تعلیق پروفایل استفاده کنید',
+      );
     }
-    const paidOpen = await this.prisma.payment.count({
-      where: {
-        status: { in: [PaymentStatus.paid, PaymentStatus.processing, PaymentStatus.pending] },
-        booking: { professionalId: id },
-      },
+    const anyPayments = await this.prisma.payment.count({
+      where: { booking: { professionalId: id } },
     });
-    if (paidOpen > 0) {
-      throw new BadRequestException('سوابق پرداخت مرتبط وجود دارد؛ حذف دائمی مجاز نیست');
+    if (anyPayments > 0) {
+      throw new BadRequestException(
+        'سوابق پرداخت مرتبط وجود دارد؛ حذف دائمی مجاز نیست',
+      );
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { professionalId: id } });
-      await tx.booking.deleteMany({ where: { professionalId: id } });
+      await tx.mediaAsset.deleteMany({ where: { professionalId: id } }).catch(() => undefined as never);
       await tx.professional.delete({ where: { id } });
     });
     await this.audit(actorId, 'professional.hard_delete', 'professional', id, { userId: pro.userId, slug: pro.slug }, null);
@@ -1535,6 +1552,22 @@ export class AdminService {
       size: buffer.length,
     };
   }
+  /** Overlay env-backed runtime values so panel keys match process env (#r4.H2 gap). */
+  private envOverlay(): Record<string, unknown> {
+    return {
+      booking: {
+        cancelWindowHours: Number(process.env.BOOKING_FREE_CANCEL_HOURS || 2),
+        holdMinutes: Number(process.env.BOOKING_HOLD_MINUTES || 15),
+        minLeadHours: Number(process.env.BOOKING_MIN_LEAD_HOURS || 2),
+      },
+      auth: {
+        maxOtpAttempts: Number(process.env.OTP_MAX_ATTEMPTS || 3),
+        otpTtlSeconds: Number(process.env.OTP_TTL_SECONDS || 300),
+        loginRateLimitPerMinute: Number(process.env.AUTH_LOGIN_RATE_LIMIT || 10),
+      },
+    };
+  }
+
   private platformDefaults() {
     return {
       booking: {
