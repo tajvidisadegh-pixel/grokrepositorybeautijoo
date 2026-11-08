@@ -1,0 +1,163 @@
+name: add-reschedule-method
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/add-reschedule-method.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Append reschedule if missing
+        run: |
+          set -euo pipefail
+          F=backend/src/bookings/bookings.service.ts
+          if grep -q 'async reschedule' "$F"; then
+            echo already has reschedule
+            exit 0
+          fi
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text(encoding='utf-8')
+          if 'async reschedule' in t:
+              print('skip')
+              raise SystemExit(0)
+          method = r'''
+  async reschedule(id: string, userId: string, startAtIso: string) {
+    const startAt = new Date(startAtIso);
+    if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
+      throw new BadRequestException('زمان شروع نامعتبر است');
+    }
+    {
+      const minLead = parseInt(process.env.BOOKING_MIN_LEAD_HOURS || '4', 10);
+      const hours = Number.isFinite(minLead) && minLead >= 0 ? minLead : 4;
+      if (startAt.getTime() - Date.now() < hours * 3600_000) {
+        throw new BadRequestException(
+          hours === 0 ? 'زمان شروع نامعتبر است' : `حداقل ${hours} ساعت قبل از نوبت باید رزرو کنید.`,
+        );
+      }
+    }
+
+    const existing = await this.prisma.booking.findUnique({
+      where: { id },
+      include: { items: { include: { professionalService: true } }, payment: true },
+    });
+    if (!existing) throw new NotFoundException();
+    const pro = await this.prisma.professional.findFirst({ where: { userId } });
+    const isPro = pro?.id === existing.professionalId;
+    const isCustomer = existing.customerId === userId;
+    if (!isPro && !isCustomer) throw new ForbiddenException();
+    if (![BookingStatus.pending, BookingStatus.confirmed].includes(existing.status)) {
+      throw new BadRequestException('این رزرو قابل تغییر زمان نیست');
+    }
+
+    const totalDuration = existing.items.reduce((s, it) => s + (it.durationMin || 0), 0) || 30;
+    const endAt = new Date(startAt.getTime() + totalDuration * 60_000);
+    const newBufferMin = this.maxBufferMin(existing.items as any);
+
+    const dateStr = tehranDateStr(startAt);
+    const startHHMM = tehranHHMM(startAt);
+    const avail = await this.availability.getSlots(
+      existing.professionalId,
+      dateStr,
+      totalDuration,
+      newBufferMin,
+    );
+    const normalizeHhmm = (s: string) => {
+      const m = /^(\d{1,2}):(\d{2})/.exec(String(s).trim());
+      if (!m) return s;
+      return `${m[1].padStart(2, '0')}:${m[2]}`;
+    };
+    const want = normalizeHhmm(startHHMM);
+    const slotOk = avail.slots.some(
+      (s: { start: string; available?: boolean }) =>
+        normalizeHhmm(s.start) === want && s.available !== false,
+    );
+    if (!slotOk) throw new ConflictException('این بازه زمانی در دسترس نیست');
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM professionals WHERE id = ${existing.professionalId}::uuid FOR UPDATE`;
+
+        const padMs = Math.max(newBufferMin, 180) * 60000;
+        const candidates = await tx.booking.findMany({
+          where: {
+            professionalId: existing.professionalId,
+            id: { not: id },
+            status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+            startAt: { lt: new Date(endAt.getTime() + padMs) },
+            endAt: { gt: new Date(startAt.getTime() - padMs) },
+          },
+          include: {
+            items: { select: { professionalService: { select: { bufferMin: true } } } },
+          },
+        });
+        for (const e of candidates) {
+          if (
+            this.bookingRangesConflict(
+              startAt,
+              endAt,
+              newBufferMin,
+              e.startAt,
+              e.endAt,
+              this.maxBufferMin(e.items as any),
+            )
+          ) {
+            throw new ConflictException('این بازه زمانی قبلاً رزرو شده است');
+          }
+        }
+
+        const overlappingTimeOff = await tx.timeOff.count({
+          where: {
+            professionalId: existing.professionalId,
+            startAt: { lt: endAt },
+            endAt: { gt: startAt },
+          },
+        });
+        if (overlappingTimeOff > 0) throw new ConflictException('این بازه زمانی در دسترس نیست');
+
+        const overlappingManual = await tx.manualReservation.count({
+          where: {
+            professionalId: existing.professionalId,
+            startAt: { lt: endAt },
+            endAt: { gt: startAt },
+          },
+        });
+        if (overlappingManual > 0) throw new ConflictException('این بازه زمانی در دسترس نیست');
+
+        return tx.booking.update({
+          where: { id },
+          data: { startAt, endAt },
+          include: { items: true, payment: true },
+        });
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+        maxWait: 5_000,
+        timeout: 15_000,
+      },
+    );
+  }
+'''
+          # insert before final closing brace of class
+          idx = t.rfind('\n}\n')
+          if idx < 0:
+              idx = t.rfind('}')
+              t = t[:idx] + method + '\n}\n'
+          else:
+              t = t[:idx] + '\n' + method + t[idx:]
+          p.write_text(t, encoding='utf-8')
+          print('reschedule appended', 'async reschedule' in t)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix: restore transactional reschedule on bookings.service"
+          git push origin HEAD:main
