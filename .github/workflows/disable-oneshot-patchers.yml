@@ -1,0 +1,98 @@
+name: disable-oneshot-patchers
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/disable-oneshot-patchers.yml'
+jobs:
+  disable:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Convert one-shot patch workflows to dispatch-only
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          keep = {
+            'ci.yml',
+            'gitleaks.yml',
+            'sync-backend-export-root.yml',
+            'disable-oneshot-patchers.yml',
+          }
+          # Prefixes of historical one-shot patchers
+          prefixes = (
+            'apply-', 'restore-', 'fix-82', 'fix-admin', 'ux-', 'booking-offline',
+            'patch_', 'patch-', 'restore_'
+          )
+
+          root = Path('.github/workflows')
+          changed = []
+          for p in sorted(root.glob('*.yml')):
+            name = p.name
+            if name in keep:
+              continue
+            if not any(name.startswith(pref) for pref in prefixes):
+              continue
+            text = p.read_text(encoding='utf-8')
+            # Already dispatch-only?
+            if re.search(r'^on:\s*\n\s*workflow_dispatch\s*$', text, re.M):
+              # might still have push - rewrite whole on block simply
+              pass
+            new_text = re.sub(
+              r'^on:\s*\n(?:(?:  .*)\n)*',
+              'on:\n  workflow_dispatch:\n',
+              text,
+              count=1,
+              flags=re.M,
+            )
+            if new_text == text:
+              # fallback: if starts with on: push
+              if 'on:' in text:
+                  lines = text.splitlines(True)
+                  out = []
+                  i = 0
+                  while i < len(lines):
+                      if lines[i].startswith('on:'):
+                          out.append('on:\n')
+                          out.append('  workflow_dispatch:\n')
+                          i += 1
+                          # skip indented on-block lines and list items under on
+                          while i < len(lines):
+                              ln = lines[i]
+                              if ln.startswith(' ') or ln.startswith('\t') or ln.strip() == '':
+                                  # stop if next top-level key like jobs:
+                                  if ln.strip().startswith('jobs:') or (
+                                      ln and not ln[0].isspace() and ln.strip()
+                                  ):
+                                      break
+                                  i += 1
+                                  continue
+                              if ln.startswith('jobs:') or (ln and not ln[0].isspace()):
+                                  break
+                              i += 1
+                          continue
+                      out.append(lines[i])
+                      i += 1
+                  new_text = ''.join(out)
+            if new_text != text:
+              p.write_text(new_text, encoding='utf-8')
+              changed.append(name)
+
+          print('changed', len(changed))
+          for n in changed:
+              print(' ', n)
+          print('DONE')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "ci: make historical one-shot patch workflows workflow_dispatch only"
+          git push origin HEAD:main
