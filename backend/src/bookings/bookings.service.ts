@@ -75,12 +75,7 @@ export class BookingsService {
       if (sl._pauseBookings === true) {
         throw new BadRequestException('این زیباگر فعلاً نوبت جدید نمی‌پذیرد.');
       }
-      // #72 — pro-initiated customer block no longer enforced
-      const links = (proRow?.socialLinks as { _blockedCustomerIds?: string[] } | null) || null;
-      const blocked = Array.isArray(links?._blockedCustomerIds) ? links!._blockedCustomerIds! : [];
-      if (false && blocked.includes(customerId)) {
-        throw new BadRequestException('متأسفانه امکان رزرو نزد این زیباگر برای شما وجود ندارد.');
-      }
+      // #82.19 / #72 — pro-initiated customer block removed (no longer enforced)
     }
 
     const maxConcurrent = Math.max(1, parseInt(process.env.MAX_CONCURRENT_BOOKINGS || '3', 10) || 3);
@@ -311,10 +306,8 @@ export class BookingsService {
     try {
       const booking = await this.prisma.$transaction(
         async (tx) => {
-          await tx.$queryRawUnsafe(
-            `SELECT id FROM professionals WHERE id = $1::uuid FOR UPDATE`,
-            data.professionalId,
-          );
+          // #82.19 — parameterized row lock (no $queryRawUnsafe)
+          await tx.$queryRaw`SELECT id FROM professionals WHERE id = ${data.professionalId}::uuid FOR UPDATE`;
 
           const padMs=Math.max(newBufferMin,180)*60000;
           const candidates=await tx.booking.findMany({where:{professionalId:data.professionalId,status:{in:[BookingStatus.pending,BookingStatus.confirmed]},startAt:{lt:new Date(endAt.getTime()+padMs)},endAt:{gt:new Date(startAt.getTime()-padMs)}},include:{items:{select:{professionalService:{select:{bufferMin:true}}}}}});
@@ -500,7 +493,21 @@ export class BookingsService {
       }),
       this.prisma.booking.count({ where }),
     ]);
-    return { items, meta: { page, limit, total } };
+    // #82.high4 — mask customer phone for professional list views
+    const maskedItems = items.map((it) => {
+      const phone = it.customer?.phone;
+      if (phone && phone.length >= 4) {
+        return {
+          ...it,
+          customer: {
+            ...it.customer,
+            phone: phone.slice(0, 4) + '***' + phone.slice(-2),
+          },
+        };
+      }
+      return it;
+    });
+    return { items: maskedItems, meta: { page, limit, total } };
   }
 
   async getOne(id: string, userId: string) {
@@ -522,6 +529,21 @@ export class BookingsService {
     const pro = await this.prisma.professional.findFirst({ where: { userId } });
     if (b.customerId !== userId && pro?.id !== b.professionalId) {
       throw new ForbiddenException();
+    }
+    // #82.high4 — mask the other party's phone number
+    const isCustomerView = b.customerId === userId;
+    const maskPhone = (phone?: string | null) => {
+      if (!phone || phone.length < 4) return phone;
+      return phone.slice(0, 4) + '***' + phone.slice(-2);
+    };
+    if (isCustomerView) {
+      if (b.professional?.user) {
+        (b.professional.user as any).phone = maskPhone(b.professional.user.phone);
+      }
+    } else {
+      if (b.customer) {
+        (b.customer as any).phone = maskPhone(b.customer.phone);
+      }
     }
     return b;
   }
@@ -682,22 +704,72 @@ export class BookingsService {
   async reportIssue(id: string, userId: string, message: string) {
     const b = await this.prisma.booking.findUnique({ where: { id } });
     if (!b) throw new NotFoundException();
-    if (b.customerId !== userId) throw new ForbiddenException();
+    // #82.high1 — allow both customer and the professional of this booking
+    const proOfReporter = await this.prisma.professional.findFirst({ where: { userId } });
+    const isCustomer = b.customerId === userId;
+    const isPro = !!proOfReporter && proOfReporter.id === b.professionalId;
+    if (!isCustomer && !isPro) throw new ForbiddenException();
+
+    // Rate-limit: at most 3 reports per booking per hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recent = await this.prisma.auditLog.count({
+      where: {
+        action: 'booking.report_issue',
+        entityType: 'booking',
+        entityId: id,
+        createdAt: { gt: oneHourAgo },
+      },
+    });
+    if (recent >= 3) {
+      throw new BadRequestException(
+        'تعداد گزارش‌های این رزرو در یک ساعت بیش از حد مجاز است. لطفاً بعداً تلاش کنید.',
+      );
+    }
+
     const admins = await this.prisma.user.findMany({
       where: { userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } } },
       select: { id: true },
       take: 20,
     });
+    let notified = 0;
     for (const a of admins) {
-      await this.notifications.notify({
-        userId: a.id,
-        type: NotificationType.system,
-        title: 'گزارش مشکل رزرو',
-        body: message?.slice(0, 500) || 'گزارش بدون متن',
-        data: { bookingId: id },
-        sms: false,
-      });
+      try {
+        await this.notifications.notify({
+          userId: a.id,
+          type: NotificationType.system,
+          title: 'گزارش مشکل رزرو',
+          body: message?.slice(0, 500) || 'گزارش بدون متن',
+          data: {
+            bookingId: id,
+            reporterId: userId,
+            reporterRole: isPro ? 'professional' : 'customer',
+          },
+          sms: false,
+        });
+        notified += 1;
+      } catch (err) {
+        this.logger.warn(
+          `reportIssue notify failed admin=${a.id} booking=${id}: ${(err as Error)?.message || err}`,
+        );
+      }
     }
-    return { message: 'گزارش برای سوپرادمین ارسال شد', notified: admins.length };
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: userId,
+          action: 'booking.report_issue',
+          entityType: 'booking',
+          entityId: id,
+          after: {
+            message: message?.slice(0, 200),
+            reporterRole: isPro ? 'professional' : 'customer',
+            notified,
+          } as any,
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
+    return { message: 'گزارش برای سوپرادمین ارسال شد', notified };
   }
 }

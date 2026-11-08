@@ -11,7 +11,7 @@ import * as argon2 from 'argon2';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
-import { AccountType, ProfessionalStatus, UserStatus } from '@prisma/client';
+import { AccountType, BookingStatus, ProfessionalStatus, UserStatus } from '@prisma/client';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto, UpdateProfileDto, ChangePasswordDto, DeleteAccountDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { userAuthCache } from './user-auth-cache';
 import { runForgotPassword, runResetPassword } from './password-reset.helpers';
@@ -669,6 +669,7 @@ export class AuthService {
     if (!user) {
       throw new BadRequestException('کاربر یافت نشد');
     }
+    // #82.high3 — require password OR OTP depending on account type
     if (user.passwordHash) {
       if (!dto.password) {
         throw new BadRequestException('رمز عبور برای تأیید حذف الزامی است');
@@ -677,8 +678,69 @@ export class AuthService {
       if (!ok) {
         throw new UnauthorizedException('رمز عبور نادرست است');
       }
+    } else {
+      if (!dto.code?.trim()) {
+        throw new BadRequestException(
+          'برای حذف حساب بدون رمز، ابتدا کد تأیید را از /auth/request-otp با purpose=delete_account دریافت و ارسال کنید',
+        );
+      }
+      if (!user.phone) {
+        throw new BadRequestException('شماره موبایل برای تأیید حذف موجود نیست');
+      }
+      const purpose = `delete_account:${user.accountType}`;
+      await this.consumeOtp(user.phone, dto.code.trim(), purpose);
     }
+
     await this.prisma.$transaction(async (tx) => {
+      // #82.high2 — cancel active future bookings owned as customer
+      const activeCustomerBookings = await tx.booking.findMany({
+        where: {
+          customerId: userId,
+          status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+          startAt: { gte: new Date() },
+        },
+        select: { id: true },
+      });
+      if (activeCustomerBookings.length) {
+        await tx.booking.updateMany({
+          where: { id: { in: activeCustomerBookings.map((b) => b.id) } },
+          data: { status: BookingStatus.cancelled },
+        });
+      }
+
+      let cancelledProCount = 0;
+      const pro = await tx.professional.findFirst({ where: { userId } });
+      if (pro) {
+        // #82.high2 — hide professional profile
+        await tx.professional.update({
+          where: { id: pro.id },
+          data: {
+            status: 'suspended',
+            title: 'حساب حذف‌شده',
+            bio: null,
+            logoUrl: null,
+            coverImageUrl: null,
+            isFeatured: false,
+            publishedAt: null,
+          },
+        });
+        const activeProBookings = await tx.booking.findMany({
+          where: {
+            professionalId: pro.id,
+            status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+            startAt: { gte: new Date() },
+          },
+          select: { id: true },
+        });
+        cancelledProCount = activeProBookings.length;
+        if (activeProBookings.length) {
+          await tx.booking.updateMany({
+            where: { id: { in: activeProBookings.map((b) => b.id) } },
+            data: { status: BookingStatus.cancelled },
+          });
+        }
+      }
+
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -704,7 +766,13 @@ export class AuthService {
             action: 'user.account_delete',
             entityType: 'user',
             entityId: userId,
-            after: { anonymized: true, status: 'deleted' } as any,
+            after: {
+              anonymized: true,
+              status: 'deleted',
+              cancelledCustomerBookings: activeCustomerBookings.length,
+              cancelledProBookings: cancelledProCount,
+              proHidden: !!pro,
+            } as any,
           },
         });
       } catch {
