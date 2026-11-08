@@ -387,28 +387,58 @@ export class BookingsService {
       );
 
       // #82.8 — notifications must not fail the booking create path
+      // #82.med13 — copy depends on BOOKING_PAYMENT_MODE / offline
       try {
-        await this.notifications.notify({
-          userId: pro.userId,
-          type: NotificationType.booking_request,
-          title: 'درخواست رزرو (در انتظار پرداخت)',
-          body: 'یک مشتری نوبت رزرو کرده و در حال پرداخت است. تا تأیید پرداخت، نوبت قطعی نیست.',
-          data: {
-            bookingId: booking.id,
-            customerId,
-            professionalId: data.professionalId,
-            href: `/zibagar/bookings?focus=${booking.id}`,
-          },
-          sms: true,
-        });
-        await this.notifications.notify({
-          userId: customerId,
-          type: NotificationType.booking_request,
-          title: 'رزرو در انتظار پرداخت',
-          body: 'رزرو شما ثبت شد. پس از پرداخت موفق، نوبت قطعی می‌شود.',
-          data: { bookingId: booking.id, professionalId: data.professionalId },
-          sms: false,
-        });
+        const payMode = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();
+        const provider = (process.env.PAYMENT_PROVIDER || '').toString().trim().toLowerCase();
+        const offline =
+          payMode === 'offline' ||
+          (payMode === 'auto' && (!provider || provider === 'disabled' || provider === 'none'));
+        if (offline) {
+          await this.notifications.notify({
+            userId: pro.userId,
+            type: NotificationType.booking_request,
+            title: 'رزرو جدید',
+            body: 'یک مشتری نوبت رزرو کرده است.',
+            data: {
+              bookingId: booking.id,
+              customerId,
+              professionalId: data.professionalId,
+              href: `/zibagar/bookings?focus=${booking.id}`,
+            },
+            sms: true,
+          });
+          await this.notifications.notify({
+            userId: customerId,
+            type: NotificationType.booking_request,
+            title: 'رزرو ثبت شد',
+            body: 'رزرو شما با موفقیت ثبت شد.',
+            data: { bookingId: booking.id, professionalId: data.professionalId },
+            sms: false,
+          });
+        } else {
+          await this.notifications.notify({
+            userId: pro.userId,
+            type: NotificationType.booking_request,
+            title: 'درخواست رزرو (در انتظار پرداخت)',
+            body: 'یک مشتری نوبت رزرو کرده و در حال پرداخت است. تا تأیید پرداخت، نوبت قطعی نیست.',
+            data: {
+              bookingId: booking.id,
+              customerId,
+              professionalId: data.professionalId,
+              href: `/zibagar/bookings?focus=${booking.id}`,
+            },
+            sms: true,
+          });
+          await this.notifications.notify({
+            userId: customerId,
+            type: NotificationType.booking_request,
+            title: 'رزرو در انتظار پرداخت',
+            body: 'رزرو شما ثبت شد. پس از پرداخت موفق، نوبت قطعی می‌شود.',
+            data: { bookingId: booking.id, professionalId: data.professionalId },
+            sms: false,
+          });
+        }
       } catch (err) {
         this.logger.warn(`post-create notify failed booking=${booking.id}: ${(err as Error)?.message || err}`);
       }
@@ -433,9 +463,18 @@ export class BookingsService {
   }
 
   async listMineAsCustomer(userId: string, page = 1, limit = 20, status?: string) {
-    const skip = (page - 1) * limit;
+    // #82.med11 — guard against NaN / invalid status (was 500)
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 100) : 20;
+    const skip = (safePage - 1) * safeLimit;
     const where: { customerId: string; status?: BookingStatus } = { customerId: userId };
-    if (status) where.status = status as BookingStatus;
+    if (status) {
+      const allowed = Object.values(BookingStatus) as string[];
+      if (!allowed.includes(status)) {
+        throw new BadRequestException('وضعیت رزرو نامعتبر است');
+      }
+      where.status = status as BookingStatus;
+    }
     const [items, total] = await Promise.all([
       this.prisma.booking.findMany({
         where,
@@ -450,20 +489,31 @@ export class BookingsService {
       }),
       this.prisma.booking.count({ where }),
     ]);
-    return { items, meta: { page, limit, total } };
+    return { items, meta: { page: safePage, limit: safeLimit, total } };
   }
 
   async listMineAsProfessional(userId: string, query: ProBookingListQuery = {}) {
-    const page = query.page || 1;
-    const limit = Math.min(query.limit || 20, 100);
+    // #82.med11 — guard page/limit/status
+    const pageRaw = query.page ?? 1;
+    const limitRaw = query.limit ?? 20;
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 20;
     const skip = (page - 1) * limit;
     const pro = await this.prisma.professional.findFirst({ where: { userId } });
     if (!pro) throw new ForbiddenException();
     const where: Prisma.BookingWhereInput = { professionalId: pro.id };
     if (query.status) {
-      const parts = query.status.split(',').map((s) => s.trim()).filter(Boolean) as BookingStatus[];
+      const allowed = Object.values(BookingStatus) as string[];
+      const parts = query.status
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter((s) => allowed.includes(s)) as BookingStatus[];
+      if (!parts.length) {
+        throw new BadRequestException('وضعیت رزرو نامعتبر است');
+      }
       if (parts.length === 1) where.status = parts[0];
-      else if (parts.length > 1) where.status = { in: parts };
+      else where.status = { in: parts };
     }
     if (query.from || query.to) {
       where.startAt = {};
@@ -582,9 +632,7 @@ export class BookingsService {
         );
       }
       // Unpaid pending: either side may cancel (slot release)
-      if (isPro && !isCustomer && b.status === BookingStatus.pending && !paid) {
-        // allow pro to clear unpaid hold
-      }
+      // unpaid pending: pro may clear hold (fall through to cancel)
       const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
       if (!allowed.includes(b.status)) throw new BadRequestException('این رزرو قابل لغو نیست');
       // #82.7 — customer cancel of paid booking must attempt refund
@@ -660,8 +708,17 @@ export class BookingsService {
     if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
       throw new BadRequestException('زمان نامعتبر');
     }
-    if (startAt.getTime() < Date.now() + 60 * 60 * 1000) {
-      throw new BadRequestException('زمان انتخاب‌شده کمتر از حداقل فاصله مجاز است');
+    // #82.med6 — same lead policy as create (BOOKING_MIN_LEAD_HOURS, default 4h)
+    {
+      const minLead = parseInt(process.env.BOOKING_MIN_LEAD_HOURS || '4', 10);
+      const hours = Number.isFinite(minLead) && minLead >= 0 ? minLead : 4;
+      if (startAt.getTime() - Date.now() < hours * 3600_000) {
+        throw new BadRequestException(
+          hours === 0
+            ? 'زمان انتخاب‌شده نامعتبر است'
+            : `حداقل ${hours} ساعت قبل از نوبت باید جابه‌جا کنید.`,
+        );
+      }
     }
     return this.prisma.$transaction(async (tx) => {
       const b = await tx.booking.findUnique({
@@ -698,6 +755,29 @@ export class BookingsService {
         throw new ConflictException('این بازه توسط رزرو دستی مسدود است');
       }
       return tx.booking.update({ where: { id }, data: { startAt, endAt } });
+    }).then(async (updated) => {
+      // #82.med8 — notify professional of reschedule (non-blocking)
+      try {
+        const pro = await this.prisma.professional.findUnique({
+          where: { id: updated.professionalId },
+          select: { userId: true },
+        });
+        if (pro?.userId) {
+          await this.notifications.notify({
+            userId: pro.userId,
+            type: NotificationType.booking_request,
+            title: 'جابه‌جایی نوبت',
+            body: 'مشتری زمان نوبت را تغییر داد.',
+            data: { bookingId: id, href: `/zibagar/bookings?focus=${id}` },
+            sms: false,
+          });
+        }
+      } catch (err) {
+        this.logger.warn(
+          `reschedule notify failed booking=${id}: ${(err as Error)?.message || err}`,
+        );
+      }
+      return updated;
     });
   }
 

@@ -149,6 +149,10 @@ export class AuthService {
     await this.consumeOtp(dto.phone, dto.code, `register:${accountType}`);
 
     // Password is optional (issue #43) - OTP-only accounts have null passwordHash
+    // #82.med16 — non-empty password shorter than 8 must error (was silently ignored)
+    if (dto.password != null && dto.password !== '' && dto.password.length < 8) {
+      throw new BadRequestException('رمز عبور حداقل ۸ کاراکتر باشد');
+    }
     const passwordHash =
       dto.password && dto.password.length >= 8
         ? await argon2.hash(dto.password)
@@ -541,34 +545,43 @@ export class AuthService {
 
     const emailUpdate = dto.email !== undefined ? dto.email : undefined;
 
-    await this.prisma.$transaction(async (tx) => {
-      if (emailUpdate !== undefined) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { email: emailUpdate },
-        });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (emailUpdate !== undefined) {
+          await tx.user.update({
+            where: { id: userId },
+            data: { email: emailUpdate },
+          });
+        }
+        if (Object.keys(profileData).length > 0) {
+          await tx.profile.upsert({
+            where: { userId },
+            create: { userId, displayName: (dto.displayName as string) || '', ...profileData },
+            update: profileData,
+          });
+        }
+        try {
+          await tx.auditLog.create({
+            data: {
+              actorId: userId,
+              action: 'user.profile_update',
+              entityType: 'user',
+              entityId: userId,
+              after: { email: emailUpdate, ...profileData } as any,
+            },
+          });
+        } catch {
+          /* non-blocking */
+        }
+      });
+    } catch (e: unknown) {
+      // #82.med17 — duplicate email must be 400, not Prisma 500
+      const err = e as { code?: string };
+      if (err?.code === 'P2002') {
+        throw new ConflictException('این ایمیل قبلاً ثبت شده است');
       }
-      if (Object.keys(profileData).length > 0) {
-        await tx.profile.upsert({
-          where: { userId },
-          create: { userId, displayName: (dto.displayName as string) || '', ...profileData },
-          update: profileData,
-        });
-      }
-      try {
-        await tx.auditLog.create({
-          data: {
-            actorId: userId,
-            action: 'user.profile_update',
-            entityType: 'user',
-            entityId: userId,
-            after: { email: emailUpdate, ...profileData } as any,
-          },
-        });
-      } catch {
-        /* non-blocking */
-      }
-    });
+      throw e;
+    }
 
     userAuthCache.invalidate(userId);
     return this.me(userId);
