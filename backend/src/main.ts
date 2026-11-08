@@ -83,17 +83,52 @@ async function bootstrap() {
   });
   logger.log(`CORS origins (${isProd ? 'prod' : 'dev'}): ${corsOrigins.join(', ')}`);
 
-  const smsProvider = (process.env.SMS_PROVIDER || config.get<string>('smsProvider') || 'mock').toLowerCase();
-  if (isProd && (smsProvider === 'mock' || smsProvider === '')) {
+  // #82.17 — production must not boot with mock SMS/payment (fail-fast, not warn-only)
+  const smsProvider = (
+    process.env.SMS_PROVIDER ||
+    config.get<string>('smsProvider') ||
+    'mock'
+  )
+    .trim()
+    .toLowerCase();
+  const allowMockSms =
+    (process.env.ALLOW_MOCK_SMS || '').toLowerCase() === 'true' ||
+    config.get<boolean>('allowMockSms') === true;
+  if (isProd && (smsProvider === 'mock' || smsProvider === '' || smsProvider === 'none')) {
+    if (!allowMockSms) {
+      throw new Error(
+        'FATAL: SMS_PROVIDER is mock/empty in production — OTP would not reach real phones. ' +
+          'Set SMS_PROVIDER=smsir with SMSIR_API_KEY and SMSIR_OTP_TEMPLATE_ID, ' +
+          'or set ALLOW_MOCK_SMS=true only for emergency diagnostics.',
+      );
+    }
     logger.warn(
-      'SMS_PROVIDER is mock/empty in production — OTP codes will NOT be delivered to real phones. Set SMS_PROVIDER to your live provider.',
+      'ALLOW_MOCK_SMS=true — mock/empty SMS allowed in production (diagnostics only). OTP will not be delivered to real phones.',
     );
   }
 
-  const paymentProvider = (process.env.PAYMENT_PROVIDER || config.get<string>('paymentProvider') || '').toLowerCase();
-  if (isProd && (!paymentProvider || paymentProvider === 'mock')) {
+  const paymentProvider = (
+    process.env.PAYMENT_PROVIDER ||
+    config.get<string>('paymentProvider') ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+  if (isProd && paymentProvider === 'mock') {
+    throw new Error(
+      'FATAL: PAYMENT_PROVIDER=mock is forbidden in production (fake PAID risk). ' +
+        'Set PAYMENT_PROVIDER=zarinpal (live gateway) or disabled (online payment off).',
+    );
+  }
+  if (
+    isProd &&
+    (!paymentProvider ||
+      paymentProvider === 'disabled' ||
+      paymentProvider === 'none' ||
+      paymentProvider === 'off')
+  ) {
     logger.warn(
-      'PAYMENT_PROVIDER is empty/mock in production — online payments are disabled or test-only.',
+      'PAYMENT_PROVIDER is empty/disabled in production — online payments are off (safe). Set zarinpal when ready.',
     );
   }
 
