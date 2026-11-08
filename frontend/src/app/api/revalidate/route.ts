@@ -4,10 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 /**
  * On-demand revalidation after CMS publish.
  * Auth: Bearer REVALIDATE_SECRET or query ?secret=
+ * Never expose the secret via NEXT_PUBLIC_* (#82.final).
  */
 export async function POST(req: NextRequest) {
-  const secret =
-    process.env.REVALIDATE_SECRET || process.env.NEXT_PUBLIC_REVALIDATE_SECRET || '';
+  const secret = process.env.REVALIDATE_SECRET || '';
   const auth = req.headers.get('authorization') || '';
   const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   const body = await req.json().catch(() => ({} as { secret?: string; path?: string }));
