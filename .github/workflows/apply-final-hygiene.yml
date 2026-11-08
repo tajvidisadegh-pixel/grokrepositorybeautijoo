@@ -17,7 +17,6 @@ jobs:
           python3 << 'PY'
           from pathlib import Path
 
-          # 1) Fix revalidate: never use NEXT_PUBLIC_ for secret
           r = Path('frontend/src/app/api/revalidate/route.ts')
           t = r.read_text(encoding='utf-8')
           old = "process.env.REVALIDATE_SECRET || process.env.NEXT_PUBLIC_REVALIDATE_SECRET || '';"
@@ -29,7 +28,6 @@ jobs:
           else:
               print('revalidate skip')
 
-          # 2) Also accept BOOKING_FREE_CANCEL_HOURS alias CANCEL_MIN_HOURS_BEFORE in cancel
           b = Path('backend/src/bookings/bookings.service.ts')
           bt = b.read_text(encoding='utf-8')
           if "BOOKING_FREE_CANCEL_HOURS || '24'" in bt and 'CANCEL_MIN_HOURS_BEFORE' not in bt:
@@ -43,88 +41,54 @@ jobs:
           else:
               print('cancel env skip')
 
-          # 3) backend/.env.example refresh
           env = Path('backend/.env.example')
           e = env.read_text(encoding='utf-8') if env.exists() else ''
-          extras = '''
-
-# ---- OTP limits (#82.med15) ----
-# OTP_MAX_PER_IP_10M=20
-# per-phone limits via OTP_MAX_PER_HOUR / OTP_MAX_PER_DAY in configuration
-
-# ---- Cancel policy (#82.med9) ----
-# Free full refund window (hours before start). Alias: CANCEL_MIN_HOURS_BEFORE
-# BOOKING_FREE_CANCEL_HOURS=24
-# CANCEL_MIN_HOURS_BEFORE=24
-
-# ---- Boot seeds (#82.infra20) ----
-# seed-catalog only when explicitly enabled (default off)
-# RUN_SEED_CATALOG_ON_BOOT=false
-
-# ---- Storage (#82.infra19) ----
-# Prefer object storage in production
-# STORAGE_PROVIDER=s3
-# STORAGE_LOCAL_PATH=/app/uploads
-# S3_ENDPOINT=
-# S3_BUCKET=
-# S3_ACCESS_KEY=
-# S3_SECRET_KEY=
-# S3_REGION=
-
-# ---- Payment mode (when gateway ready) ----
-# BOOKING_PAYMENT_MODE=auto
-# PAYMENT_PROVIDER=zarinpal
-'''
+          extras = "\n\n# ---- OTP limits (#82.med15) ----\n# OTP_MAX_PER_IP_10M=20\n\n# ---- Cancel policy (#82.med9) ----\n# BOOKING_FREE_CANCEL_HOURS=24\n# CANCEL_MIN_HOURS_BEFORE=24\n\n# ---- Boot seeds (#82.infra20) ----\n# RUN_SEED_CATALOG_ON_BOOT=false\n\n# ---- Storage (#82.infra19) ----\n# STORAGE_PROVIDER=s3\n# STORAGE_LOCAL_PATH=/app/uploads\n\n# ---- Payment mode (when gateway ready) ----\n# BOOKING_PAYMENT_MODE=auto\n# PAYMENT_PROVIDER=zarinpal\n"
           if 'BOOKING_FREE_CANCEL_HOURS' not in e:
-              e = e.rstrip() + extras
-              env.write_text(e, encoding='utf-8')
+              env.write_text(e.rstrip() + extras, encoding='utf-8')
               print('env.example ok')
           else:
               print('env.example skip')
 
-          # 4) gitleaks workflow
+          # Write gitleaks.yml WITHOUT nested ${{ }} in THIS workflow file
           gl = Path('.github/workflows/gitleaks.yml')
-          gl.write_text('''name: gitleaks
-on:
-  push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-''', encoding='utf-8')
+          gl.write_text(
+              "name: gitleaks\n"
+              "on:\n"
+              "  push:\n"
+              "    branches: [main]\n"
+              "  pull_request:\n"
+              "  workflow_dispatch:\n"
+              "jobs:\n"
+              "  scan:\n"
+              "    runs-on: ubuntu-latest\n"
+              "    steps:\n"
+              "      - uses: actions/checkout@v4\n"
+              "        with:\n"
+              "          fetch-depth: 0\n"
+              "      - name: Gitleaks\n"
+              "        uses: gitleaks/gitleaks-action@v2\n",
+              encoding='utf-8',
+          )
           print('gitleaks workflow ok')
 
-          # 5) strengthen SECURITY doc
           sec = Path('docs/SECURITY_ISSUE_82_9.md')
-          sec.write_text('''# Security hygiene (#82.9 / #82.infra21)
-
-## Done in code
-- Image-only `/uploads` (no directory listing, path traversal blocked)
-- OTP purpose whitelist + per-IP rate limit
-- Auth throttles tightened
-- `REVALIDATE_SECRET` must not be `NEXT_PUBLIC_*`
-- Gitleaks workflow on push/PR (`.github/workflows/gitleaks.yml`)
-- Seed catalog gated by `RUN_SEED_CATALOG_ON_BOOT`
-
-## Owner actions (required)
-1. **Make the repository private** — GitHub → Settings → Danger Zone → Change visibility → Private.
-2. After first gitleaks run, open the Actions log. If findings exist, **rotate** every exposed secret (JWT, DB, SMS, payment, S3, REVALIDATE_SECRET).
-3. Confirm production env uses `STORAGE_PROVIDER=s3` when multi-instance.
-4. When payment gateway is ready: set `BOOKING_PAYMENT_MODE` + `PAYMENT_PROVIDER` together and lock NOK callback auth.
-
-## Env reference
-See `backend/.env.example` for `BOOKING_FREE_CANCEL_HOURS`, `OTP_MAX_PER_IP_10M`, `RUN_SEED_CATALOG_ON_BOOT`.
-''', encoding='utf-8')
+          sec.write_text(
+              "# Security hygiene (#82.9 / #82.infra21)\n\n"
+              "## Done in code\n"
+              "- Image-only `/uploads`\n"
+              "- OTP purpose whitelist + per-IP rate limit\n"
+              "- Auth throttles tightened\n"
+              "- `REVALIDATE_SECRET` must not be `NEXT_PUBLIC_*`\n"
+              "- Gitleaks workflow on push/PR\n"
+              "- Seed catalog gated by `RUN_SEED_CATALOG_ON_BOOT`\n\n"
+              "## Owner actions (required)\n"
+              "1. Make the repository **private** (GitHub Settings → Danger Zone).\n"
+              "2. Check Actions → gitleaks; rotate any leaked secrets.\n"
+              "3. Prefer `STORAGE_PROVIDER=s3` in production.\n"
+              "4. When gateway is ready: set BOOKING_PAYMENT_MODE + PAYMENT_PROVIDER; lock NOK callback.\n",
+              encoding='utf-8',
+          )
           print('security doc ok')
           print('ALL_OK')
           PY
