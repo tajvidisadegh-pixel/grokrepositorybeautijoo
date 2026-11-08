@@ -1034,7 +1034,6 @@ export class AdminService {
           action: 'IMPERSONATION_STARTED',
           entityType: 'user',
           entityId: customer.id,
-          before: null,
           after: {
             customerUserId: customer.id,
             customerPhone: customer.phone,
