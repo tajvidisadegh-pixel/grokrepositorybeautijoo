@@ -25,6 +25,13 @@ import {
 } from '../storage/storage.provider';
 import { AppCacheService } from '../cache/app-cache.service';
 import { userAuthCache } from '../auth/user-auth-cache';
+import { assertNotSuspicious, assertUploadSize } from '../media/upload-security';
+import { sniffImage } from '../media/image-sniff';
+
+/** Whitelist root keys for platform_config (#r4.H2). */
+const ALLOWED_PLATFORM_ROOT_KEYS = new Set([
+  'booking', 'commission', 'professionals', 'reviews', 'search', 'auth', 'privacy',
+]);
 
 @Injectable()
 export class AdminService {
@@ -1360,6 +1367,14 @@ export class AdminService {
     const existing = await this.prisma.mediaAsset.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Media not found');
     await this.prisma.mediaAsset.delete({ where: { id } });
+    const storageKey = (existing as any).storageKey || (existing as any).key || (existing as any).path;
+    if (storageKey && this.storage.delete) {
+      try {
+        await this.storage.delete(String(storageKey));
+      } catch (e) {
+        this.logger.warn(`storage delete failed key=${storageKey}: ${(e as Error)?.message || e}`);
+      }
+    }
     await this.audit(actorId, 'media.delete', 'media_asset', id, existing, null);
     return { success: true, id };
   }
@@ -1429,14 +1444,21 @@ export class AdminService {
     if (file.buffer?.length) {
       buffer = file.buffer;
     } else if (file.path) {
+      // Cap read to 12MB to avoid memory blow (#r4.M5)
+      const st = fs.statSync(file.path);
+      if (st.size > 12 * 1024 * 1024) throw new BadRequestException('حجم فایل بیش از حد مجاز است');
       buffer = fs.readFileSync(file.path);
     } else {
       throw new BadRequestException('فایل خالی است');
     }
-    const safeName = (file.originalname || 'img').replace(/[^\w.\-]+/g, '_').slice(0, 80);
-    const ext = (safeName.split('.').pop() || 'jpg').toLowerCase();
-    const key = `cms/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const mime = file.mimetype || 'application/octet-stream';
+    assertUploadSize(buffer.length, file.mimetype);
+    assertNotSuspicious(buffer, file.mimetype);
+    const sniffed = sniffImage(buffer);
+    if (!sniffed || sniffed.kind === 'heic') {
+      throw new BadRequestException('فقط تصویر JPEG/PNG/WebP/GIF مجاز است');
+    }
+    const key = `cms/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${sniffed.ext}`;
+    const mime = sniffed.mime;
     let storageKey: string;
     try {
       storageKey = await this.storage.upload(key, buffer, mime);
@@ -1448,14 +1470,15 @@ export class AdminService {
     await this.audit(actorId, 'site_cms.upload', 'platform_setting', storageKey, null, {
       url,
       slot: slot || 'generic',
-      size: file.size,
+      size: buffer.length,
+      mime,
     });
     return {
       url,
       key: storageKey,
       slot: slot || 'generic',
       mimeType: mime,
-      size: file.size,
+      size: buffer.length,
     };
   }
   private platformDefaults() {
@@ -1537,7 +1560,11 @@ export class AdminService {
     actorId?: string,
   ) {
     const current = await this.getPlatformSettings();
-    const next = this.deepMerge(current as Record<string, unknown>, partial || {});
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(partial || {})) {
+      if (ALLOWED_PLATFORM_ROOT_KEYS.has(k)) cleaned[k] = v;
+    }
+    const next = this.deepMerge(current as Record<string, unknown>, cleaned);
 
     const commission = next.commission as { ratePercent?: number } | undefined;
     if (commission && typeof commission.ratePercent === 'number') {

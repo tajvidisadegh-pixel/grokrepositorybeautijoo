@@ -73,7 +73,8 @@ export class LocalStorageProvider implements StorageProvider, OnModuleInit {
     const safeKey = key.replace(/^\/+/, '').replace(/\.\./g, '');
     const full = path.join(this.basePath, safeKey);
 
-    if (!full.startsWith(this.basePath)) {
+    const baseWithSep = this.basePath.endsWith(path.sep) ? this.basePath : this.basePath + path.sep;
+    if (full !== this.basePath && !full.startsWith(baseWithSep)) {
       throw new InternalServerErrorException('مسیر ذخیره‌سازی نامعتبر است.');
     }
 
@@ -144,7 +145,11 @@ export class LocalStorageProvider implements StorageProvider, OnModuleInit {
             ? 'image/gif'
             : lower.endsWith('.mp4')
               ? 'video/mp4'
-              : 'image/jpeg';
+              : lower.endsWith('.webm')
+                ? 'video/webm'
+                : lower.endsWith('.jpg') || lower.endsWith('.jpeg')
+                  ? 'image/jpeg'
+                  : 'application/octet-stream';
       return { buffer, contentType };
     } catch {
       return null;
