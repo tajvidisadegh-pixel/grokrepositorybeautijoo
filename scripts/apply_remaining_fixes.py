@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
+"""Apply remaining production-hardening fixes on top of a known-good bookings.service."""
 from pathlib import Path
 import subprocess
 
 def main():
-    # Restore bookings from known good commit
     raw = subprocess.check_output([
         'git', 'show',
         '2b44ecd8075297c7fb81736921bbefa8558db5ef:backend/src/bookings/bookings.service.ts',
