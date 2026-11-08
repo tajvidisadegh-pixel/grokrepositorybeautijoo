@@ -267,13 +267,13 @@ export class AdminOpsController {
       const nextPhone = normalizeIranPhone(dto.phone);
       if (
         await this.prisma.user.findFirst({
-          where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } },
+          where: { phone: nextPhone, NOT: { id } },
         })
       ) {
         throw new ConflictException('phone exists');
       }
       dto.phone = nextPhone;
-      await this.prisma.user.update({ where: { id }, data: { phone: dto.phone.trim() } });
+      await this.prisma.user.update({ where: { id }, data: { phone: nextPhone, phoneVerified: false } }); await this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
     }
     const profileData: any = {};
     if (dto.displayName !== undefined) profileData.displayName = dto.displayName.trim() || existing.phone || 'User';
@@ -291,7 +291,7 @@ export class AdminOpsController {
         },
       });
     }
-    await this.audit(actorId, 'admin.user.profile.update', 'user', id, dto);
+    await this.audit(actorId, 'admin.user.profile.update', 'user', id, { phoneChanged: !!dto.phone, fieldKeys: Object.keys(dto || {}) });
     return this.prisma.user.findUnique({
       where: { id },
       include: { profile: true, userRoles: { include: { role: true } } },

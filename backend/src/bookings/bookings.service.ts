@@ -361,7 +361,20 @@ export class BookingsService {
       } catch (err) {
         this.logger.warn(`post-create notify failed booking=${booking.id}: ${(err as Error)?.message || err}`);
       }
-      return booking;
+      
+      try {
+        const payMode = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();
+        const provider = (process.env.PAYMENT_PROVIDER || '').toString().trim().toLowerCase();
+        const offline = payMode === 'offline' || payMode === 'no_gateway' || payMode === 'pay_later' || (payMode === 'auto' && (!provider || provider === 'disabled' || provider === 'none'));
+        if (offline) {
+          await this.payments.initiate(customerId, booking.id, 'https://localhost/offline');
+          const refreshed = await this.prisma.booking.findUnique({ where: { id: booking.id }, include: { items: true, payment: true } });
+          if (refreshed) return refreshed;
+        }
+      } catch (err) {
+        this.logger.warn('offline auto-confirm failed: ' + ((err as Error)?.message || err));
+      }
+return booking;
     } catch (e: unknown) {
       if (e instanceof ConflictException || e instanceof BadRequestException) throw e;
       const err = e as { code?: string; message?: string };
@@ -415,8 +428,8 @@ export class BookingsService {
     }
     if (query.from || query.to) {
       where.startAt = {};
-      if (query.from) (where.startAt as any).gte = new Date(query.from);
-      if (query.to) (where.startAt as any).lte = new Date(query.to);
+      if (query.from) { const from = new Date(query.from); if (isNaN(from.getTime())) throw new BadRequestException("invalid from"); (where.startAt as any).gte = from; }
+      if (query.to) { const to = new Date(query.to); if (isNaN(to.getTime())) throw new BadRequestException("invalid to"); (where.startAt as any).lte = to; }
     }
     const [items, total] = await Promise.all([
       this.prisma.booking.findMany({
@@ -655,11 +668,10 @@ export class BookingsService {
     if (recent >= 3) {
       throw new BadRequestException('تعداد گزارش‌های این رزرو در یک ساعت بیش از حد مجاز است. لطفاً بعداً تلاش کنید.');
     }
-    const admins = await this.prisma.user.findMany({
+    const admins = await this downstreamprisma.user.findMany({
       where: { userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } } },
       select: { id: true },
-      take: 20,
-    });
+          });
     let notified = 0;
     for (const a of admins) {
       try {

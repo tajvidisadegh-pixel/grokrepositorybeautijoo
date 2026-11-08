@@ -217,7 +217,7 @@ export class PaymentsService {
         professionalNetAmount: professionalNetAmount,
         metadata: {
           mode: 'offline',
-          note: 'Confirmed without online gateway. Not a bank settlement.',
+          note: 'Confirmed without online gateway. Not a bank settlement.', settlementEligible: false, realMoney: false,
         },
       },
     });
