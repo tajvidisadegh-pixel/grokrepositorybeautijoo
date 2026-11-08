@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Put } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DEFAULT_PLATFORM_SETTINGS,
@@ -29,7 +30,22 @@ export class AdminSettingsController {
   @RequirePermissions('admin.settings.write')
   @Put('settings')
   @ApiOperation({ summary: 'Update platform settings (partial groups allowed)' })
-  async putSettings(@Body() body: Partial<PlatformSettingsV1>) {
+  async putSettings(
+    @Body() body: Partial<PlatformSettingsV1>,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    // #82.r2.4 — validate commission.ratePercent
+    if (body.commission?.ratePercent != null) {
+      const rate = Number(body.commission.ratePercent);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+        throw new BadRequestException('نرخ کمیسیون باید بین ۰ تا ۱۰۰ باشد');
+      }
+      body = {
+        ...body,
+        commission: { ...body.commission, ratePercent: rate },
+      };
+    }
+
     const current = await this.getSettings();
     const next = mergePlatformSettings({
       ...current,
@@ -56,6 +72,20 @@ export class AdminSettingsController {
         update: { value: rate as unknown as object },
       });
     }
+    // #82.r2.4 — audit settings changes
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId || null,
+          action: 'admin.settings.update',
+          entityType: 'platform_setting',
+          entityId: PLATFORM_SETTINGS_KEY,
+          after: body as object,
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
     return next;
   }
 
@@ -79,7 +109,10 @@ export class AdminSettingsController {
   @RequirePermissions('admin.settings.write')
   @Put('events')
   @ApiOperation({ summary: 'Replace marketing/site events list (#65.10)' })
-  async putEvents(@Body() body: { items?: Array<Record<string, unknown>> }) {
+  async putEvents(
+    @Body() body: { items?: Array<Record<string, unknown>> },
+    @CurrentUser('id') actorId?: string,
+  ) {
     const items = Array.isArray(body?.items) ? body.items.slice(0, 100) : [];
     const value = { items };
     await this.prisma.platformSetting.upsert({
@@ -87,6 +120,19 @@ export class AdminSettingsController {
       create: { key: 'marketing_events_v1', value: value as object },
       update: { value: value as object },
     });
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId || null,
+          action: 'admin.events.update',
+          entityType: 'platform_setting',
+          entityId: 'marketing_events_v1',
+          after: { count: items.length } as object,
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
     return { items };
   }
 }
