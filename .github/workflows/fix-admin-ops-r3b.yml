@@ -1,6 +1,9 @@
 name: fix-admin-ops-r3b
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-admin-ops-r3b.yml'
 jobs:
   fix:
     runs-on: ubuntu-latest
@@ -54,20 +57,8 @@ jobs:
               t = t.replace(old, new, 1)
               print('hardcap')
 
-          # Replace sequential SMS loop with concurrent batches + deliveryStatus update
-          old_loop = '''      const msg = `${title}\n${body}`.slice(0, 400);
-      for (const u of users) {
-        if (!u.phone) continue;
-        try {
-          await this.sms.sendNotification(u.phone, msg);
-          smsSent++;
-        } catch (e) {
-          smsFailed++;
-          this.logger.warn(`bulk SMS fail user=${u.id}: ${e}`);
-        }
-      }'''
-          new_loop = '''      const msg = `${title}\n${body}`.slice(0, 400);
-      const concurrency = 10;
+          old_loop_start = '      for (const u of users) {\n        if (!u.phone) continue;\n        try {\n          await this.sms.sendNotification(u.phone, msg);\n          smsSent++;\n        } catch (e) {\n          smsFailed++;\n          this.logger.warn(`bulk SMS fail user=${u.id}: ${e}`);\n        }\n      }'
+          new_loop = '''      const concurrency = 10;
       for (let i = 0; i < users.length; i += concurrency) {
         const slice = users.slice(i, i + concurrency);
         const results = await Promise.all(
@@ -100,13 +91,12 @@ jobs:
           } catch { /* non-blocking */ }
         }
       }'''
-          if old_loop in t:
-              t = t.replace(old_loop, new_loop, 1)
+          if old_loop_start in t:
+              t = t.replace(old_loop_start, new_loop, 1)
               print('sms loop')
           else:
               print('sms loop miss')
 
-          # also filter active users only
           t = t.replace(
               'where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null } },',
               'where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null }, status: UserStatus.active },',
@@ -119,21 +109,6 @@ jobs:
               t = t.replace(old_idx, new_idx, 1)
               print('idx')
 
-          # prune after index upsert
-          needle = "update: { value: { ids: idsList } as object },\n      });\n    } catch {"
-          insert = (
-              "update: { value: { ids: idsList, updatedAt: new Date().toISOString() } as object },\n"
-              "      });\n"
-              "      const dropped = (Array.isArray(prev) ? prev : []).filter((x: string) => !idsList.includes(x)).slice(0, 50);\n"
-              "      for (const d of dropped) {\n"
-              "        try { await this.prisma.platformSetting.delete({ where: { key: `campaign_meta_${d}` } }); } catch { /* ignore */ }\n"
-              "      }\n"
-              "    } catch {"
-          )
-          if needle in t and 'campaign_meta_${d}' not in t and 'campaign_meta_' in insert:
-              t = t.replace(needle, insert, 1)
-              print('prune')
-
           p.write_text(t, encoding='utf-8')
           print('done', 'hardMax' in t, '400_000' in t, 'smsDelivered' in t)
           PY
@@ -143,5 +118,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/admin/admin-ops.controller.ts
           if git diff --staged --quiet; then echo no-change; exit 0; fi
-          git commit -m "fix(#82.r3): bulk SMS hardcap+status, CMS payload limits, campaign prune"
+          git commit -m "fix(#82.r3): bulk SMS hardcap+status, CMS payload limits, campaign index"
           git push origin HEAD:main
