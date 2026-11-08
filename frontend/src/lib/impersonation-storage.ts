@@ -1,9 +1,13 @@
 /**
- * Impersonation state — memory only (aligned with auth-storage).
- * Never put access tokens in sessionStorage/localStorage (XSS risk).
+ * Impersonation state.
+ * Admin access backup uses sessionStorage so a page reload does not trap the
+ * admin inside the customer session (memory-only was lost on reload).
+ * sessionStorage is tab-scoped and cleared when the tab closes — better than
+ * localStorage, and required for practical exit-impersonation UX.
  */
 
-let adminAccessBackupMemory: string | null = null;
+const ADMIN_BACKUP_KEY = 'bj_imp_admin_access_v1';
+const META_KEY = 'bj_imp_meta_v1';
 
 export type ImpersonationMeta = {
   customerId: string;
@@ -12,36 +16,64 @@ export type ImpersonationMeta = {
   startedAt: string;
 };
 
-let metaMemory: ImpersonationMeta | null = null;
+function canUseSession(): boolean {
+  return typeof window !== 'undefined' && typeof sessionStorage !== 'undefined';
+}
 
 export function saveAdminAccessBackup(accessToken: string) {
-  if (typeof window === 'undefined') return;
-  adminAccessBackupMemory = accessToken;
+  if (!canUseSession()) return;
+  try {
+    sessionStorage.setItem(ADMIN_BACKUP_KEY, accessToken);
+  } catch {
+    /* private mode / quota */
+  }
 }
 
 export function takeAdminAccessBackup(): string | null {
-  if (typeof window === 'undefined') return null;
-  const v = adminAccessBackupMemory;
-  adminAccessBackupMemory = null;
-  return v;
+  if (!canUseSession()) return null;
+  try {
+    const v = sessionStorage.getItem(ADMIN_BACKUP_KEY);
+    sessionStorage.removeItem(ADMIN_BACKUP_KEY);
+    return v;
+  } catch {
+    return null;
+  }
 }
 
 export function peekAdminAccessBackup(): string | null {
-  if (typeof window === 'undefined') return null;
-  return adminAccessBackupMemory;
+  if (!canUseSession()) return null;
+  try {
+    return sessionStorage.getItem(ADMIN_BACKUP_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function setImpersonationMeta(meta: ImpersonationMeta) {
-  if (typeof window === 'undefined') return;
-  metaMemory = meta;
+  if (!canUseSession()) return;
+  try {
+    sessionStorage.setItem(META_KEY, JSON.stringify(meta));
+  } catch {
+    /* ignore */
+  }
 }
 
 export function getImpersonationMeta(): ImpersonationMeta | null {
-  if (typeof window === 'undefined') return null;
-  return metaMemory;
+  if (!canUseSession()) return null;
+  try {
+    const raw = sessionStorage.getItem(META_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ImpersonationMeta;
+  } catch {
+    return null;
+  }
 }
 
 export function clearImpersonationMeta() {
-  if (typeof window === 'undefined') return;
-  metaMemory = null;
+  if (!canUseSession()) return;
+  try {
+    sessionStorage.removeItem(META_KEY);
+  } catch {
+    /* ignore */
+  }
 }
