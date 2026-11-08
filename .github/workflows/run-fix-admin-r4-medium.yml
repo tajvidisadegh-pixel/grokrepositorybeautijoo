@@ -1,0 +1,29 @@
+name: run-fix-admin-r4-medium
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/run-fix-admin-r4-medium.yml'
+      - 'scripts/fix-admin-r4-medium.py'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          set -euo pipefail
+          python3 scripts/fix-admin-r4-medium.py
+          grep -n sniffImage backend/src/admin/admin.service.ts | head -3
+          grep -n ALLOWED_PLATFORM_ROOT_KEYS backend/src/admin/admin.service.ts | head -2
+          grep -n application/octet-stream backend/src/storage/local-storage.provider.ts | head -2
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts backend/src/storage/local-storage.provider.ts
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(security): r4 medium — CMS upload sniff, platform whitelist, storage MIME/path"
+          git push origin HEAD:main
