@@ -1391,13 +1391,25 @@ export class AdminService {
       );
     }
     // Sequential deletes after precheck (each hardDeleteUser has its own tx).
-    // Not a single multi-user DB transaction — precheck prevents partial history loss.
     const deletedIds: string[] = [];
+    const failed: { id: string; error: string }[] = [];
     for (const id of ids) {
-      await this.hardDeleteUser(id, actorId);
-      deletedIds.push(id);
+      try {
+        await this.hardDeleteUser(id, actorId);
+        deletedIds.push(id);
+      } catch (e) {
+        failed.push({ id, error: (e as Error)?.message || String(e) });
+        // Stop further deletes; report partial success accurately
+        break;
+      }
     }
-    return { deleted: deletedIds.length, failed: [] as string[], cappedAt: 50, deletedIds };
+    return {
+      deleted: deletedIds.length,
+      failed,
+      cappedAt: 50,
+      deletedIds,
+      partial: failed.length > 0,
+    };
   }
 
   async hardDeleteProfessional(id: string, actorId?: string) {
@@ -1644,12 +1656,12 @@ export class AdminService {
       row?.value && typeof row.value === 'object' && !Array.isArray(row.value)
         ? (row.value as Record<string, unknown>)
         : {};
-    // defaults <- stored panel <- env overlay (env wins for ops-critical knobs)
-    const merged = this.deepMerge(
+    // defaults <- env fallbacks <- stored panel (panel wins when set)
+    const withEnv = this.deepMerge(
       this.platformDefaults() as unknown as Record<string, unknown>,
-      stored,
+      this.envOverlay(),
     );
-    return this.deepMerge(merged, this.envOverlay());
+    return this.deepMerge(withEnv, stored);
   }
 
   async updatePlatformSettings(

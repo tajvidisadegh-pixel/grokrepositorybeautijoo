@@ -486,6 +486,26 @@ export class AuthService {
     return { ok: true };
   }
 
+
+  async setSmsOptOut(userId: string, optOut: boolean) {
+    const key = 'sms_opt_out_user_ids';
+    const row = await this.prisma.platformSetting.findUnique({ where: { key } });
+    const prev = Array.isArray(row?.value)
+      ? (row!.value as string[])
+      : Array.isArray((row?.value as any)?.ids)
+        ? ((row!.value as any).ids as string[])
+        : [];
+    let ids = prev.map(String);
+    if (optOut) ids = Array.from(new Set([...ids, userId]));
+    else ids = ids.filter((x) => x !== userId);
+    await this.prisma.platformSetting.upsert({
+      where: { key },
+      create: { key, value: ids as any },
+      update: { value: ids as any },
+    });
+    return { ok: true, optOut, idsCount: ids.length };
+  }
+
   async issueImpersonationAccessToken(
     customerId: string,
     customerPhone: string | null,

@@ -118,6 +118,18 @@ export class AuthController {
   }
 
   @Public()
+
+  /** User self-service: opt out of marketing/bulk SMS. */
+  @Post('me/sms-opt-out')
+  async smsOptOut(@CurrentUser('id') userId: string) {
+    return this.authService.setSmsOptOut(userId, true);
+  }
+
+  @Post('me/sms-opt-in')
+  async smsOptIn(@CurrentUser('id') userId: string) {
+    return this.authService.setSmsOptOut(userId, false);
+  }
+
   @Post('logout')
   @HttpCode(200)
   @UseGuards(CsrfOriginGuard)

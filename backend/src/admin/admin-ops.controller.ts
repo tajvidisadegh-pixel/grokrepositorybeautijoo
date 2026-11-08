@@ -277,7 +277,16 @@ export class AdminOpsController {
         throw new ConflictException('phone exists');
       }
       dto.phone = nextPhone;
-      await this.prisma.user.update({ where: { id }, data: { phone: nextPhone, phoneVerified: false } }); await this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+      await this.prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id },
+          data: { phone: nextPhone, phoneVerified: false },
+        });
+        await tx.refreshToken.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      });
     }
     const profileData: any = {};
     if (dto.displayName !== undefined) profileData.displayName = dto.displayName.trim() || existing.phone || 'User';
@@ -724,6 +733,62 @@ ${body}`.slice(0, 400);
       campaignId,
       totalFailed: failed.length,
     };
+  }
+
+
+  /** Read SMS opt-out user id list (#r4). */
+  @RequirePermissions('admin.users.read')
+  @Get('sms-opt-out')
+  async listSmsOptOut() {
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'sms_opt_out_user_ids' } });
+    const ids = Array.isArray(row?.value)
+      ? (row!.value as string[])
+      : Array.isArray((row?.value as any)?.ids)
+        ? ((row!.value as any).ids as string[])
+        : [];
+    return { ids };
+  }
+
+  /** Add user to SMS opt-out list. */
+  @RequirePermissions('admin.users.write')
+  @Post('users/:id/sms-opt-out')
+  async addSmsOptOut(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('not found');
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'sms_opt_out_user_ids' } });
+    const prev = Array.isArray(row?.value)
+      ? (row!.value as string[])
+      : Array.isArray((row?.value as any)?.ids)
+        ? ((row!.value as any).ids as string[])
+        : [];
+    const ids = Array.from(new Set([...prev.map(String), id]));
+    await this.prisma.platformSetting.upsert({
+      where: { key: 'sms_opt_out_user_ids' },
+      create: { key: 'sms_opt_out_user_ids', value: ids as any },
+      update: { value: ids as any },
+    });
+    await this.audit(actorId, 'admin.sms.opt_out.add', 'user', id, { ids: ids.length });
+    return { ok: true, ids };
+  }
+
+  /** Remove user from SMS opt-out list. */
+  @RequirePermissions('admin.users.write')
+  @Post('users/:id/sms-opt-in')
+  async removeSmsOptOut(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'sms_opt_out_user_ids' } });
+    const prev = Array.isArray(row?.value)
+      ? (row!.value as string[])
+      : Array.isArray((row?.value as any)?.ids)
+        ? ((row!.value as any).ids as string[])
+        : [];
+    const ids = prev.map(String).filter((x) => x !== id);
+    await this.prisma.platformSetting.upsert({
+      where: { key: 'sms_opt_out_user_ids' },
+      create: { key: 'sms_opt_out_user_ids', value: ids as any },
+      update: { value: ids as any },
+    });
+    await this.audit(actorId, 'admin.sms.opt_out.remove', 'user', id, { ids: ids.length });
+    return { ok: true, ids };
   }
 
   @RequirePermissions('admin.professionals.write')
