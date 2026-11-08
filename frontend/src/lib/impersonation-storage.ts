@@ -1,5 +1,9 @@
-const BACKUP_KEY = 'bj_imp_admin_access';
-const META_KEY = 'bj_imp_meta';
+/**
+ * Impersonation state — memory only (aligned with auth-storage).
+ * Never put access tokens in sessionStorage/localStorage (XSS risk).
+ */
+
+let adminAccessBackupMemory: string | null = null;
 
 export type ImpersonationMeta = {
   customerId: string;
@@ -8,40 +12,36 @@ export type ImpersonationMeta = {
   startedAt: string;
 };
 
+let metaMemory: ImpersonationMeta | null = null;
+
 export function saveAdminAccessBackup(accessToken: string) {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem(BACKUP_KEY, accessToken);
+  adminAccessBackupMemory = accessToken;
 }
 
 export function takeAdminAccessBackup(): string | null {
   if (typeof window === 'undefined') return null;
-  const v = sessionStorage.getItem(BACKUP_KEY);
-  sessionStorage.removeItem(BACKUP_KEY);
+  const v = adminAccessBackupMemory;
+  adminAccessBackupMemory = null;
   return v;
 }
 
 export function peekAdminAccessBackup(): string | null {
   if (typeof window === 'undefined') return null;
-  return sessionStorage.getItem(BACKUP_KEY);
+  return adminAccessBackupMemory;
 }
 
 export function setImpersonationMeta(meta: ImpersonationMeta) {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem(META_KEY, JSON.stringify(meta));
+  metaMemory = meta;
 }
 
 export function getImpersonationMeta(): ImpersonationMeta | null {
   if (typeof window === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(META_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as ImpersonationMeta;
-  } catch {
-    return null;
-  }
+  return metaMemory;
 }
 
 export function clearImpersonationMeta() {
   if (typeof window === 'undefined') return;
-  sessionStorage.removeItem(META_KEY);
+  metaMemory = null;
 }
