@@ -66,7 +66,11 @@ export class FilesController {
       k.includes('/document') ||
       k.includes('/docs/') ||
       k.includes('/national') ||
-      k.includes('/verification')
+      k.includes('/verification') ||
+      k.includes('/passport') ||
+      k.includes('/nid') ||
+      k.includes('/license') ||
+      k.includes('/certificate')
     ) {
       return false;
     }

@@ -63,7 +63,7 @@ function normalizeIranPhone(raw: string): string {
 
 /** Strip HTML/script from CMS strings to mitigate stored XSS (#82.r2.5). */
 function stripHtmlDeep(value: unknown, depth = 0): unknown {
-  if (depth > 12) return null;
+  if (depth > 12) return typeof value === 'string' ? value.replace(/<[^>]*>/g, '').slice(0, 5000) : value;
   if (typeof value === 'string') {
     return value
       .replace(/<\s*(script|iframe|object|embed|link|meta|style)[\s\S]*?>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
@@ -170,6 +170,8 @@ export class AdminOpsController {
   @RequirePermissions('admin.site_builder.manage')
   @Put('content')
   async putContent(@Body() body: any, @CurrentUser('id') actorId?: string) {
+    const rawSize = Buffer.byteLength(JSON.stringify(body ?? {}), 'utf8');
+    if (rawSize > 400_000) throw new BadRequestException('payload too large');
     const cleaned = stripHtmlDeep({
       hero: body?.hero ?? {},
       texts: body?.texts ?? {},
@@ -214,6 +216,8 @@ export class AdminOpsController {
   async putSiteBuilder(@Body() body: any, @CurrentUser('id') actorId?: string) {
     const listRaw = Array.isArray(body) ? body : body?.sections ?? [];
     if (!Array.isArray(listRaw)) throw new BadRequestException('sections must be an array');
+    const sbSize = Buffer.byteLength(JSON.stringify(listRaw), 'utf8');
+    if (sbSize > 400_000) throw new BadRequestException('payload too large');
     if (listRaw.length > 200) throw new BadRequestException('حداکثر ۲۰۰ بخش مجاز است');
     const list = stripHtmlDeep(listRaw) as any[];
     await this.prisma.platformSetting.upsert({
@@ -267,13 +271,22 @@ export class AdminOpsController {
       const nextPhone = normalizeIranPhone(dto.phone);
       if (
         await this.prisma.user.findFirst({
-          where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } },
+          where: { phone: nextPhone, NOT: { id } },
         })
       ) {
         throw new ConflictException('phone exists');
       }
       dto.phone = nextPhone;
-      await this.prisma.user.update({ where: { id }, data: { phone: dto.phone.trim() } });
+      await this.prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id },
+          data: { phone: nextPhone, phoneVerified: false },
+        });
+        await tx.refreshToken.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      });
     }
     const profileData: any = {};
     if (dto.displayName !== undefined) profileData.displayName = dto.displayName.trim() || existing.phone || 'User';
@@ -291,7 +304,7 @@ export class AdminOpsController {
         },
       });
     }
-    await this.audit(actorId, 'admin.user.profile.update', 'user', id, dto);
+    await this.audit(actorId, 'admin.user.profile.update', 'user', id, { phoneChanged: !!dto.phone, fieldKeys: Object.keys(dto || {}) });
     return this.prisma.user.findUnique({
       where: { id },
       include: { profile: true, userRoles: { include: { role: true } } },
@@ -323,7 +336,7 @@ export class AdminOpsController {
             body,
             data: {
               campaignId,
-              deliveryStatus: 'sent',
+              deliveryStatus: dto.sms ? 'pending' : 'sent',
               smsRequested: !!dto.sms,
             } as any,
           })),
@@ -341,7 +354,7 @@ export class AdminOpsController {
                 type: 'system' as any,
                 title,
                 body,
-                data: { campaignId, deliveryStatus: 'sent', smsRequested: !!dto.sms } as any,
+                data: { campaignId, deliveryStatus: dto.sms ? 'pending' : 'sent', smsRequested: !!dto.sms } as any,
               },
             });
             notified++;
@@ -357,25 +370,72 @@ export class AdminOpsController {
     let smsFailed = 0;
     let smsSkippedReason: string | undefined;
     if (dto.sms) {
-      const maxSms = Math.min(ids.length, Number(process.env.BULK_SMS_MAX || 200));
-      const users = await this.prisma.user.findMany({
-        where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null } },
+      const envMax = parseInt(process.env.BULK_SMS_MAX || '200', 10);
+      const hardMax = Math.min(200, Number.isFinite(envMax) && envMax > 0 ? envMax : 200);
+      const maxSms = Math.min(ids.length, hardMax);
+      const usersRaw = await this.prisma.user.findMany({
+        where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null }, status: UserStatus.active },
         select: { id: true, phone: true },
       });
+      // #r4.bugfix — opt-out list in platform_setting (not free-text bio)
+      let optOutIds = new Set<string>();
+      try {
+        const optRow = await this.prisma.platformSetting.findUnique({
+          where: { key: 'sms_opt_out_user_ids' },
+        });
+        const arr = Array.isArray(optRow?.value)
+          ? (optRow!.value as unknown[])
+          : Array.isArray((optRow?.value as any)?.ids)
+            ? (optRow!.value as any).ids
+            : [];
+        optOutIds = new Set(arr.map((x) => String(x)));
+      } catch {
+        /* ignore */
+      }
+      const users = usersRaw.filter((u) => !optOutIds.has(u.id));
+      if (users.length < usersRaw.length) {
+        smsSkippedReason = (smsSkippedReason ? smsSkippedReason + ',' : '') + 'opt_out_skipped';
+      }
       const msg = `${title}
 ${body}`.slice(0, 400);
-      for (const u of users) {
-        if (!u.phone) continue;
-        try {
-          await this.sms.sendNotification(u.phone, msg);
-          smsSent++;
-        } catch (e) {
-          smsFailed++;
-          this.logger.warn(`bulk SMS fail user=${u.id}: ${e}`);
+      if (ids.length > maxSms) smsSkippedReason = `capped_at_${maxSms}`;
+      const concurrency = 10;
+      for (let i = 0; i < users.length; i += concurrency) {
+        const slice = users.slice(i, i + concurrency);
+        const results = await Promise.all(
+          slice.map(async (u) => {
+            if (!u.phone) return { ok: false as const, id: u.id };
+            try {
+              await this.sms.sendNotification(u.phone, msg);
+              return { ok: true as const, id: u.id };
+            } catch (e) {
+              this.logger.warn(`bulk SMS fail user=${u.id}: ${e}`);
+              return { ok: false as const, id: u.id };
+            }
+          }),
+        );
+        for (const r of results) {
+          if (r.ok) smsSent++;
+          else smsFailed++;
+          try {
+            await this.prisma.notification.updateMany({
+              where: {
+                userId: r.id,
+                data: { path: ['campaignId'], equals: campaignId },
+              },
+              data: {
+                data: {
+                  campaignId,
+                  deliveryStatus: r.ok ? 'sent' : 'failed',
+                  smsRequested: true,
+                  smsDelivered: r.ok,
+                } as any,
+              },
+            });
+          } catch {
+            /* non-blocking */
+          }
         }
-      }
-      if (ids.length > maxSms) {
-        smsSkippedReason = `capped_at_${maxSms}`;
       }
     }
 
@@ -404,7 +464,8 @@ ${body}`.slice(0, 400);
       const idxKey = 'campaign_index_v1';
       const idxRow = await this.prisma.platformSetting.findUnique({ where: { key: idxKey } });
       const prev = (idxRow?.value as any)?.ids as string[] | undefined;
-      const idsList = [campaignId, ...(Array.isArray(prev) ? prev : [])].slice(0, 500);
+      const prevIds = Array.isArray(prev) ? prev.filter((x: string) => x !== campaignId) : [];
+      const idsList = [campaignId, ...prevIds].slice(0, 500);
       await this.prisma.platformSetting.upsert({
         where: { key: idxKey },
         create: { key: idxKey, value: { ids: idsList } as object },
@@ -567,19 +628,24 @@ ${body}`.slice(0, 400);
     ]);
     return {
       campaignId,
-      items: rows.map((r) => ({
-        id: r.id,
-        userId: r.userId,
-        phone: r.user?.phone,
-        displayName: r.user?.profile?.displayName,
-        status:
-          (r.data as any)?.deliveryStatus === 'failed'
-            ? 'failed'
-            : r.readAt
-              ? 'read'
-              : 'sent',
-        createdAt: r.createdAt,
-      })),
+      items: rows.map((r) => {
+        const raw = r.user?.phone || '';
+        const masked =
+          raw.length >= 7 ? raw.slice(0, 4) + '***' + raw.slice(-2) : raw ? '***' : null;
+        return {
+          id: r.id,
+          userId: r.userId,
+          phone: masked, // #r4.M2 — never return full phone in campaign lists
+          displayName: r.user?.profile?.displayName,
+          status:
+            (r.data as any)?.deliveryStatus === 'failed'
+              ? 'failed'
+              : r.readAt
+                ? 'read'
+                : 'sent',
+          createdAt: r.createdAt,
+        };
+      }),
       meta: {
         page,
         limit,
@@ -595,7 +661,6 @@ ${body}`.slice(0, 400);
     @Param('campaignId') campaignId: string,
     @CurrentUser('id') actorId?: string,
   ) {
-    // Re-create notifications marked failed for this campaign
     const failed = await this.prisma.notification.findMany({
       where: {
         AND: [
@@ -603,10 +668,29 @@ ${body}`.slice(0, 400);
           { data: { path: ['deliveryStatus'], equals: 'failed' } },
         ],
       },
-      take: 500,
+      take: 200,
+      include: { user: { select: { id: true, phone: true } } },
     });
     let retried = 0;
+    let stillFailed = 0;
+    const metaRow = await this.prisma.platformSetting.findUnique({
+      where: { key: `campaign_meta_${campaignId}` },
+    });
+    const title = String((metaRow?.value as any)?.title || 'Beautijoo');
+    const body = String((metaRow?.value as any)?.body || '');
+    const msg = `${title}
+${body}`.slice(0, 400);
     for (const n of failed) {
+      let ok = false;
+      const phone = n.user?.phone;
+      if (phone && this.sms?.sendNotification) {
+        try {
+          await this.sms.sendNotification(phone, msg);
+          ok = true;
+        } catch (e) {
+          this.logger.warn(`retry SMS fail notif=${n.id}: ${e}`);
+        }
+      }
       try {
         await this.prisma.notification.update({
           where: { id: n.id },
@@ -614,26 +698,105 @@ ${body}`.slice(0, 400);
             data: {
               ...((n.data as object) || {}),
               campaignId,
-              deliveryStatus: 'sent',
+              deliveryStatus: ok ? 'sent' : 'failed',
               retriedAt: new Date().toISOString(),
+              smsDelivered: ok,
             } as any,
           },
         });
-        retried++;
+        if (ok) retried++;
+        else stillFailed++;
       } catch {
-        /* skip */
+        stillFailed++;
       }
+    }
+    // Update campaign_meta counters
+    if (metaRow?.value) {
+      const v = { ...(metaRow.value as any) };
+      v.smsSent = Number(v.smsSent || 0) + retried;
+      v.smsFailed = stillFailed;
+      v.failed = stillFailed;
+      v.lastRetryAt = new Date().toISOString();
+      await this.prisma.platformSetting
+        .update({ where: { key: `campaign_meta_${campaignId}` }, data: { value: v as object } })
+        .catch(() => undefined);
     }
     await this.audit(actorId, 'admin.notifications.retry_failed', 'campaign', campaignId, {
       retried,
+      stillFailed,
       totalFailed: failed.length,
     });
     return {
       success: true,
       retried,
+      stillFailed,
       campaignId,
       totalFailed: failed.length,
     };
+  }
+
+
+  /** Read SMS opt-out user id list (#r4). */
+  @RequirePermissions('admin.users.read')
+  @Get('sms-opt-out')
+
+  private async mutateSmsOptOut(userId: string, optOut: boolean) {
+    const key = 'sms_opt_out_user_ids';
+    const MAX = 50_000;
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.platformSetting.findUnique({ where: { key } });
+      const prev = Array.isArray(row?.value)
+        ? (row!.value as string[])
+        : Array.isArray((row?.value as any)?.ids)
+          ? ((row!.value as any).ids as string[])
+          : [];
+      let ids = prev.map(String);
+      if (optOut) {
+        if (!ids.includes(userId)) ids.push(userId);
+      } else {
+        ids = ids.filter((x) => x !== userId);
+      }
+      if (ids.length > MAX) {
+        // drop oldest entries (front of array)
+        ids = ids.slice(ids.length - MAX);
+      }
+      await tx.platformSetting.upsert({
+        where: { key },
+        create: { key, value: ids as any },
+        update: { value: ids as any },
+      });
+      return ids;
+    });
+  }
+
+  async listSmsOptOut() {
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'sms_opt_out_user_ids' } });
+    const ids = Array.isArray(row?.value)
+      ? (row!.value as string[])
+      : Array.isArray((row?.value as any)?.ids)
+        ? ((row!.value as any).ids as string[])
+        : [];
+    return { ids };
+  }
+
+  /** Add user to SMS opt-out list. */
+  @RequirePermissions('admin.users.write')
+  @Post('users/:id/sms-opt-out')
+  async addSmsOptOut(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('not found');
+    const ids = await this.mutateSmsOptOut(id, true);
+    await this.audit(actorId, 'admin.sms.opt_out.add', 'user', id, { ids: ids.length });
+    return { ok: true, ids };
+  }
+
+  /** Remove user from SMS opt-out list. */
+  @RequirePermissions('admin.users.write')
+  @Post('users/:id/sms-opt-in')
+  async removeSmsOptOut(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    const ids = await this.mutateSmsOptOut(id, false);
+    await this.audit(actorId, 'admin.sms.opt_out.remove', 'user', id, { ids: ids.length });
+    return { ok: true, ids };
   }
 
   @RequirePermissions('admin.professionals.write')

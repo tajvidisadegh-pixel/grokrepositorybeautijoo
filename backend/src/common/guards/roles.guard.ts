@@ -64,8 +64,9 @@ export class RolesGuard implements CanActivate {
     const permsRequired = !!requiredPermissions?.length;
 
     if (rolesRequired && permsRequired) {
-      if (hasRole || hasPerms) return true;
-      throw new ForbiddenException('دسترسی مجاز نیست: نقش یا مجوز لازم یافت نشد');
+      // #r4.M9 — both declared => require BOTH (stricter)
+      if (hasRole && hasPerms) return true;
+      throw new ForbiddenException('دسترسی مجاز نیست: نقش و مجوز لازم یافت نشد');
     }
 
     if (rolesRequired && !hasRole) {

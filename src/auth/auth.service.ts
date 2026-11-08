@@ -486,18 +486,50 @@ export class AuthService {
     return { ok: true };
   }
 
+
+  async setSmsOptOut(userId: string, optOut: boolean) {
+    const key = 'sms_opt_out_user_ids';
+    const MAX = 50_000;
+    const ids = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.platformSetting.findUnique({ where: { key } });
+      const prev = Array.isArray(row?.value)
+        ? (row!.value as string[])
+        : Array.isArray((row?.value as any)?.ids)
+          ? ((row!.value as any).ids as string[])
+          : [];
+      let next = prev.map(String);
+      if (optOut) {
+        if (!next.includes(userId)) next.push(userId);
+      } else {
+        next = next.filter((x) => x !== userId);
+      }
+      if (next.length > MAX) next = next.slice(next.length - MAX);
+      await tx.platformSetting.upsert({
+        where: { key },
+        create: { key, value: next as any },
+        update: { value: next as any },
+      });
+      return next;
+    });
+    return { ok: true, optOut, idsCount: ids.length };
+  }
+
   async issueImpersonationAccessToken(
     customerId: string,
     customerPhone: string | null,
     adminId: string,
   ): Promise<{ accessToken: string; expiresIn: string }> {
-    const accessTtl = this.config.get<string>('jwt.accessTtl') || '30m';
+    // #r4.H9 — impersonation tokens are short-lived and non-refreshable
+    const configured = (this.config.get<string>('jwt.impersonationTtl') || process.env.JWT_IMPERSONATION_TTL || '15m').trim();
+    const accessTtl = configured;
     const accessToken = await this.jwt.signAsync(
       {
         sub: customerId,
         phone: customerPhone ?? undefined,
         imp: adminId,
         impMode: true,
+        // block elevated claims while impersonating
+        roles: ['customer'],
       },
       {
         secret: this.config.get('jwt.accessSecret'),

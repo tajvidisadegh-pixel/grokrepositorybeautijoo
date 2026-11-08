@@ -126,3 +126,9 @@ export function tehranDayBounds(dateStr: string): {
 export function minutesSinceTehranMidnight(instant: Date, dayStart: Date): number {
   return (instant.getTime() - dayStart.getTime()) / 60_000;
 }
+
+/** Weekday in Asia/Tehran for YYYY-MM-DD: 0=Sunday … 6=Saturday. */
+export function tehranWeekdaySun0(dateStr: string): number {
+  return tehranDayBounds(dateStr).dayOfWeek;
+}
+

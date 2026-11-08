@@ -99,8 +99,24 @@ export class NotificationsService {
       (process.env.FRONTEND_URL || process.env.APP_URL || process.env.PUBLIC_WEB_URL || '').replace(/\/$/, '');
     if (!base) return message;
     const path = href.startsWith('/') ? href : `/${href}`;
-    return `${message}
-${base}${path}`;
+    return `${message}\n${base}${path}`;
+  }
+
+  /** True if user opted out of marketing/bulk notification SMS (not OTP). */
+  private async isSmsOptedOut(userId: string): Promise<boolean> {
+    try {
+      const row = await this.prisma.platformSetting.findUnique({
+        where: { key: 'sms_opt_out_user_ids' },
+      });
+      const ids = Array.isArray(row?.value)
+        ? (row!.value as string[])
+        : Array.isArray((row?.value as any)?.ids)
+          ? ((row!.value as any).ids as string[])
+          : [];
+      return ids.map(String).includes(userId);
+    } catch {
+      return false;
+    }
   }
 
   private async sendSmsSafe(
@@ -109,6 +125,10 @@ ${base}${path}`;
     data?: Record<string, unknown>,
   ): Promise<void> {
     try {
+      if (await this.isSmsOptedOut(userId)) {
+        this.logger.debug(`SMS skipped (opt-out) user=${userId}`);
+        return;
+      }
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         select: { phone: true },

@@ -25,6 +25,13 @@ import {
 } from '../storage/storage.provider';
 import { AppCacheService } from '../cache/app-cache.service';
 import { userAuthCache } from '../auth/user-auth-cache';
+import { assertNotSuspicious, assertUploadSize } from '../media/upload-security';
+import { sniffImage } from '../media/image-sniff';
+
+/** Whitelist root keys for platform_config (#r4.H2). */
+const ALLOWED_PLATFORM_ROOT_KEYS = new Set([
+  'booking', 'commission', 'professionals', 'reviews', 'search', 'auth', 'privacy',
+]);
 
 @Injectable()
 export class AdminService {
@@ -36,6 +43,13 @@ export class AdminService {
     private readonly cache: AppCacheService,
     private readonly authService: AuthService,
   ) {}
+
+  private maskPhone(phone?: string | null): string | null {
+    if (!phone) return null;
+    const p = String(phone);
+    if (p.length < 7) return '***';
+    return p.slice(0, 4) + '***' + p.slice(-2);
+  }
 
   private async audit(
     actorId: string | undefined,
@@ -216,7 +230,7 @@ export class AdminService {
       recent: {
         users: recentUsers.map((u) => ({
           id: u.id,
-          phone: u.phone,
+          phone: this.maskPhone(u.phone),
           displayName: u.profile?.displayName ?? null,
           createdAt: u.createdAt,
         })),
@@ -269,16 +283,19 @@ export class AdminService {
     const grossRevenue = Number(paidAgg._sum.amount || 0);
     let platformCommission = Number(commissionAgg._sum.platformCommissionAmount || 0);
     let professionalNet = Number(commissionAgg._sum.professionalNetAmount || 0);
+    let commissionEstimated = false;
     if (!platformCommission && grossRevenue) {
       const rate = (await this.getCommissionSetting()).rate;
       platformCommission = Math.round(grossRevenue * (rate / 100));
       professionalNet = Math.max(0, grossRevenue - platformCommission);
+      commissionEstimated = true; // #r4.H7 — historical rows missing snapshot
     }
     return {
       period,
       grossRevenue,
       platformCommission,
       professionalNet,
+      commissionEstimated,
       transactions: {
         paid: paidCount,
         failed: failedCount,
@@ -436,7 +453,11 @@ export class AdminService {
       }),
       this.prisma.user.count({ where }),
     ]);
-    return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
+    const masked = items.map((u) => ({
+      ...u,
+      phone: this.maskPhone(u.phone),
+    }));
+    return { items: masked, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }
 
   async getCustomersStats() {
@@ -462,8 +483,23 @@ export class AdminService {
   }
 
   async setUserStatus(id: string, status: UserStatus | string, actorId?: string, reason?: string) {
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      include: { userRoles: { include: { role: true } } },
+    });
     if (!existing) throw new NotFoundException('User not found');
+    if (actorId && actorId === id && status !== UserStatus.active) {
+      throw new BadRequestException('نمی‌توانید وضعیت حساب خودتان را غیرفعال کنید');
+    }
+    const targetIsSuper = (existing.userRoles || []).some((ur) => ur.role.name === 'SUPER_ADMIN');
+    if (targetIsSuper && status !== UserStatus.active) {
+      const superCount = await this.prisma.userRole.count({
+        where: { role: { name: 'SUPER_ADMIN' }, user: { status: UserStatus.active } },
+      });
+      if (superCount <= 1) {
+        throw new BadRequestException('نمی‌توان آخرین SUPER_ADMIN فعال را غیرفعال کرد');
+      }
+    }
     const updated = await this.prisma.user.update({ where: { id }, data: { status: status as UserStatus } });
     await this.audit(actorId, 'user.status_change', 'user', id, { status: existing.status }, { status, reason });
     // #82.15 — drop in-memory JWT user cache so suspended/inactive takes effect immediately on this instance
@@ -505,6 +541,23 @@ export class AdminService {
       }
     }
 
+    // #r4.C2 — non-SUPER_ADMIN may only assign roles they themselves hold
+    if (actorId) {
+      const actor = await this.prisma.user.findUnique({
+        where: { id: actorId },
+        include: { userRoles: { include: { role: true } } },
+      });
+      const actorRoles = (actor?.userRoles || []).map((ur) => ur.role.name);
+      const isSuper = actorRoles.includes('SUPER_ADMIN');
+      if (!isSuper) {
+        const actorLower = new Set(actorRoles.map((r) => r.toLowerCase()));
+        const forbidden = normalized.filter((r) => !actorLower.has(r.toLowerCase()));
+        if (forbidden.length) {
+          throw new ForbiddenException(`نمی‌توانید نقش‌هایی که خودتان ندارید اعطا کنید: ${forbidden.join(', ')}`);
+        }
+      }
+    }
+
     const roleRows = await this.prisma.role.findMany({
       where: {
         OR: [
@@ -522,6 +575,15 @@ export class AdminService {
     }
 
     const beforeRoles = existing.userRoles.map((ur) => ur.role.name);
+    // #r4.H5 — cannot remove last active SUPER_ADMIN
+    if (beforeRoles.includes('SUPER_ADMIN') && !normalized.some((r) => r.toLowerCase() === 'super_admin')) {
+      const superCount = await this.prisma.userRole.count({
+        where: { role: { name: 'SUPER_ADMIN' }, user: { status: UserStatus.active } },
+      });
+      if (superCount <= 1) {
+        throw new BadRequestException('نمی‌توان نقش آخرین SUPER_ADMIN فعال را برداشت');
+      }
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { userId: id } });
@@ -708,6 +770,16 @@ export class AdminService {
 
     // Public catalog requires status=approved AND publishedAt != null
     if (status === ProfessionalStatus.approved) {
+      const [svcCount, locCount] = await Promise.all([
+        this.prisma.professionalService.count({ where: { professionalId: id, isActive: true } }),
+        this.prisma.professionalLocation.count({ where: { professionalId: id } }),
+      ]);
+      if (svcCount < 1) {
+        throw new BadRequestException('برای تأیید، حداقل یک خدمت فعال لازم است');
+      }
+      if (locCount < 1) {
+        throw new BadRequestException('برای تأیید، ثبت آدرس لازم است');
+      }
       data.publishedAt = existing.publishedAt || new Date();
       data.verifiedAt = existing.verifiedAt || new Date();
     } else if (
@@ -733,15 +805,7 @@ export class AdminService {
     const updated = await this.prisma.professional.update({ where: { id }, data });
     this.cache.invalidateCatalog();
 
-    // On approve, publish draft portfolio media so it becomes visible
-    if (status === ProfessionalStatus.approved) {
-      await this.prisma.mediaAsset
-        .updateMany({
-          where: { professionalId: id, status: MediaStatus.draft },
-          data: { status: MediaStatus.published },
-        })
-        .catch(() => undefined);
-    }
+    // Media stays draft until explicitly moderated (#r4.H4)
 
     // In-app notification for the professional
     try {
@@ -805,7 +869,7 @@ export class AdminService {
       this.prisma.payment.count({ where: { status: PaymentStatus.failed } }),
     ]);
     const grossRevenue = Number(paidAgg._sum.amount || 0);
-    const commissionRate = 10;
+    const commissionRate = (await this.getCommissionSetting()).rate;
     return {
       total,
       today,
@@ -823,8 +887,18 @@ export class AdminService {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const where: Prisma.BookingWhereInput = {};
-    if (q.status) where.status = q.status;
-    if (q.paymentStatus) where.payment = { status: q.paymentStatus };
+    if (q.status) {
+      if (!Object.values(BookingStatus).includes(q.status)) {
+        throw new BadRequestException('status نامعتبر');
+      }
+      where.status = q.status;
+    }
+    if (q.paymentStatus) {
+      if (!Object.values(PaymentStatus).includes(q.paymentStatus)) {
+        throw new BadRequestException('paymentStatus نامعتبر');
+      }
+      where.payment = { status: q.paymentStatus };
+    }
     if (q.startDate || q.endDate) {
       where.startAt = {};
       if (q.startDate) (where.startAt as any).gte = new Date(q.startDate);
@@ -875,15 +949,48 @@ export class AdminService {
   }
 
   async updateBookingStatus(id: string, status: BookingStatus, actorId?: string, reason?: string) {
-    const existing = await this.prisma.booking.findUnique({ where: { id } });
+    const existing = await this.prisma.booking.findUnique({
+      where: { id },
+      include: { payment: true },
+    });
     if (!existing) throw new NotFoundException('Booking not found');
+
+    const from = existing.status;
+    const allowed: Record<string, BookingStatus[]> = {
+      [BookingStatus.pending]: [BookingStatus.confirmed, BookingStatus.rejected, BookingStatus.cancelled, BookingStatus.expired],
+      [BookingStatus.confirmed]: [BookingStatus.completed, BookingStatus.cancelled, BookingStatus.no_show],
+      [BookingStatus.rejected]: [],
+      [BookingStatus.cancelled]: [],
+      [BookingStatus.completed]: [],
+      [BookingStatus.expired]: [],
+      [BookingStatus.no_show]: [],
+    };
+    const nextOk = (allowed[from] || []).includes(status);
+    if (!nextOk) {
+      throw new BadRequestException(`انتقال وضعیت از ${from} به ${status} مجاز نیست`);
+    }
+
+    // Payment = confirmed slot: cannot confirm/complete unpaid; cancel paid needs explicit reason
+    const payStatus = existing.payment?.status;
+    if (status === BookingStatus.confirmed || status === BookingStatus.completed) {
+      if (payStatus && payStatus !== PaymentStatus.paid && payStatus !== PaymentStatus.refunded) {
+        throw new BadRequestException('بدون پرداخت موفق نمی‌توان رزرو را تأیید یا تکمیل کرد');
+      }
+    }
+    if (status === BookingStatus.cancelled && payStatus === PaymentStatus.paid) {
+      if (!reason || !String(reason).trim()) {
+        throw new BadRequestException('لغو رزرو پرداخت‌شده نیازمند دلیل است (استرداد جداگانه انجام شود)');
+      }
+    }
+
     const data: Prisma.BookingUpdateInput = { status };
     if (reason) data.cancelReason = reason;
     if (status === BookingStatus.cancelled) data.cancelledAt = new Date();
     if (status === BookingStatus.confirmed) data.confirmedAt = new Date();
     if (status === BookingStatus.completed) data.completedAt = new Date();
+    if (status === BookingStatus.no_show) data.noShowAt = new Date();
     const updated = await this.prisma.booking.update({ where: { id }, data });
-    await this.audit(actorId, 'booking.status_change', 'booking', id, { status: existing.status }, { status, reason });
+    await this.audit(actorId, 'booking.status_change', 'booking', id, { status: from, payStatus }, { status, reason });
     return updated;
   }
 
@@ -970,13 +1077,33 @@ export class AdminService {
   async listNotifications(q?: any) {
     const page = Math.max(1, Number(q?.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q?.limit) || 30));
+    const where: Prisma.NotificationWhereInput = {};
+    if (q?.userId?.trim()) where.userId = String(q.userId).trim();
+    if (q?.type) where.type = q.type;
+    if (q?.search?.trim()) {
+      const s = String(q.search).trim();
+      where.OR = [
+        { title: { contains: s, mode: 'insensitive' } },
+        { body: { contains: s, mode: 'insensitive' } },
+      ];
+    }
+    // #r4.M1 — without userId, only return aggregate counts (no full dump)
+    if (!where.userId && !q?.search?.trim()) {
+      const total = await this.prisma.notification.count({ where });
+      return {
+        items: [],
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 },
+        notice: 'برای فهرست کامل، userId را مشخص کنید',
+      };
+    }
     const [items, total] = await Promise.all([
       this.prisma.notification.findMany({
+        where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.notification.count(),
+      this.prisma.notification.count({ where }),
     ]);
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
   }
@@ -1130,7 +1257,7 @@ export class AdminService {
       before: r.before,
       after: r.after,
       meta: r.after ?? r.before,
-      ipAddress: r.ipAddress,
+      // #r4.M3 — ipAddress omitted from list (privacy); available in detail if needed
       createdAt: r.createdAt,
     }));
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
@@ -1198,6 +1325,17 @@ export class AdminService {
     const existing = await this.prisma.mediaAsset.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Media not found');
     const updated = await this.prisma.mediaAsset.update({ where: { id }, data: { status } });
+    // #r4.M4 — purge storage when media is rejected/deleted
+    if (status === MediaStatus.rejected || status === MediaStatus.deleted) {
+      const storageKey = (existing as any).storageKey || (existing as any).key || (existing as any).path;
+      if (storageKey && this.storage.delete) {
+        try {
+          await this.storage.delete(String(storageKey));
+        } catch (e) {
+          this.logger.warn(`setMediaStatus storage delete failed: ${(e as Error)?.message || e}`);
+        }
+      }
+    }
     await this.audit(actorId, 'media.status_change', 'media_asset', id, { status: existing.status }, { status });
     return updated;
   }
@@ -1209,9 +1347,24 @@ export class AdminService {
     if (existing.professional) {
       throw new BadRequestException('این حساب زیباگر است. برای حذف از بخش زیباگرها اقدام کنید.');
     }
+    // #r4.gap — preserve financial/booking history: any booking or payment blocks hard delete
+    const anyBookings = await this.prisma.booking.count({ where: { customerId: id } });
+    if (anyBookings > 0) {
+      throw new BadRequestException(
+        'این کاربر سابقه رزرو دارد؛ حذف دائمی مجاز نیست. از تعلیق حساب استفاده کنید',
+      );
+    }
+    const anyPayments = await this.prisma.payment.count({
+      where: { booking: { customerId: id } },
+    });
+    if (anyPayments > 0) {
+      throw new BadRequestException(
+        'سوابق پرداخت وجود دارد؛ حذف دائمی مجاز نیست. از تعلیق حساب استفاده کنید',
+      );
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { customerId: id } });
-      await tx.booking.deleteMany({ where: { customerId: id } });
+      await tx.refreshToken.deleteMany({ where: { userId: id } }).catch(() => undefined as never);
       await tx.user.delete({ where: { id } });
     });
     await this.audit(actorId, 'user.hard_delete', 'user', id, { phone: existing.phone }, null);
@@ -1219,26 +1372,86 @@ export class AdminService {
   }
 
   async bulkHardDeleteUsers(userIds: string[], actorId?: string) {
-    const ids = Array.from(new Set((userIds || []).filter(Boolean)));
-    let deleted = 0;
-    const failed: string[] = [];
+    const ids = Array.from(new Set((userIds || []).filter(Boolean))).slice(0, 50);
+    if ((userIds || []).length > 50) {
+      throw new BadRequestException('حداکثر ۵۰ کاربر در هر درخواست');
+    }
+    // All-or-nothing precheck: if any ID has history, delete none
+    const blocked: string[] = [];
     for (const id of ids) {
+      const [bookings, payments] = await Promise.all([
+        this.prisma.booking.count({ where: { customerId: id } }),
+        this.prisma.payment.count({ where: { booking: { customerId: id } } }),
+      ]);
+      if (bookings > 0 || payments > 0) blocked.push(id);
+    }
+    if (blocked.length) {
+      throw new BadRequestException(
+        `حذف گروهی متوقف شد؛ این کاربران سابقه رزرو/پرداخت دارند: ${blocked.slice(0, 5).join(', ')}`,
+      );
+    }
+    // Sequential deletes after precheck (each hardDeleteUser has its own tx).
+    const deletedIds: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+    let stopAt = -1;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
       try {
         await this.hardDeleteUser(id, actorId);
-        deleted += 1;
-      } catch {
-        failed.push(id);
+        deletedIds.push(id);
+      } catch (e) {
+        failed.push({ id, error: (e as Error)?.message || String(e) });
+        stopAt = i;
+        break;
       }
     }
-    return { deleted, failed };
+    const skipped =
+      stopAt >= 0 ? ids.slice(stopAt + 1).map((id) => ({ id, reason: 'not_attempted_after_error' })) : [];
+    return {
+      deleted: deletedIds.length,
+      failed,
+      skipped,
+      cappedAt: 50,
+      deletedIds,
+      partial: failed.length > 0 || skipped.length > 0,
+    };
   }
 
   async hardDeleteProfessional(id: string, actorId?: string) {
     const pro = await this.prisma.professional.findUnique({ where: { id } });
     if (!pro) throw new NotFoundException('Professional not found');
+    // #r4.gap — any historical booking/payment blocks hard delete
+    const anyBookings = await this.prisma.booking.count({ where: { professionalId: id } });
+    if (anyBookings > 0) {
+      throw new BadRequestException(
+        'این زیباگر سابقه رزرو دارد؛ حذف دائمی مجاز نیست. از تعلیق پروفایل استفاده کنید',
+      );
+    }
+    const anyPayments = await this.prisma.payment.count({
+      where: { booking: { professionalId: id } },
+    });
+    if (anyPayments > 0) {
+      throw new BadRequestException(
+        'سوابق پرداخت مرتبط وجود دارد؛ حذف دائمی مجاز نیست',
+      );
+    }
+    const media = await this.prisma.mediaAsset.findMany({
+      where: { professionalId: id },
+      select: { id: true, storageKey: true, url: true },
+    });
+    for (const m of media) {
+      const key = m.storageKey || null;
+      if (key && this.storage.delete) {
+        try {
+          await this.storage.delete(key);
+        } catch (e) {
+          this.logger.warn(`hardDeleteProfessional storage delete ${key}: ${(e as Error)?.message || e}`);
+        }
+      }
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { professionalId: id } });
-      await tx.booking.deleteMany({ where: { professionalId: id } });
+      await tx.mediaAsset.deleteMany({ where: { professionalId: id } });
       await tx.professional.delete({ where: { id } });
     });
     await this.audit(actorId, 'professional.hard_delete', 'professional', id, { userId: pro.userId, slug: pro.slug }, null);
@@ -1249,6 +1462,14 @@ export class AdminService {
     const existing = await this.prisma.mediaAsset.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Media not found');
     await this.prisma.mediaAsset.delete({ where: { id } });
+    const storageKey = (existing as any).storageKey || (existing as any).key || (existing as any).path;
+    if (storageKey && this.storage.delete) {
+      try {
+        await this.storage.delete(String(storageKey));
+      } catch (e) {
+        this.logger.warn(`storage delete failed key=${storageKey}: ${(e as Error)?.message || e}`);
+      }
+    }
     await this.audit(actorId, 'media.delete', 'media_asset', id, existing, null);
     return { success: true, id };
   }
@@ -1297,11 +1518,7 @@ export class AdminService {
       create: { key: 'site_cms_published', value },
       update: { value },
     });
-    await this.prisma.platformSetting.upsert({
-      where: { key: 'site_cms_draft' },
-      create: { key: 'site_cms_draft', value },
-      update: { value },
-    });
+    // Keep draft as-is so unpublished edits are not wiped (#r4.C7)
     await this.audit(actorId, 'site_cms.publish', 'platform_setting', 'site_cms_published', null, value);
     return { success: true, publishedAt: value.publishedAt };
   }
@@ -1322,14 +1539,21 @@ export class AdminService {
     if (file.buffer?.length) {
       buffer = file.buffer;
     } else if (file.path) {
+      // Cap read to 12MB to avoid memory blow (#r4.M5)
+      const st = fs.statSync(file.path);
+      if (st.size > 12 * 1024 * 1024) throw new BadRequestException('حجم فایل بیش از حد مجاز است');
       buffer = fs.readFileSync(file.path);
     } else {
       throw new BadRequestException('فایل خالی است');
     }
-    const safeName = (file.originalname || 'img').replace(/[^\w.\-]+/g, '_').slice(0, 80);
-    const ext = (safeName.split('.').pop() || 'jpg').toLowerCase();
-    const key = `cms/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const mime = file.mimetype || 'application/octet-stream';
+    assertUploadSize(buffer.length, file.mimetype);
+    assertNotSuspicious(buffer, file.mimetype);
+    const sniffed = sniffImage(buffer);
+    if (!sniffed || sniffed.kind === 'heic') {
+      throw new BadRequestException('فقط تصویر JPEG/PNG/WebP/GIF مجاز است');
+    }
+    const key = `cms/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${sniffed.ext}`;
+    const mime = sniffed.mime;
     let storageKey: string;
     try {
       storageKey = await this.storage.upload(key, buffer, mime);
@@ -1341,22 +1565,40 @@ export class AdminService {
     await this.audit(actorId, 'site_cms.upload', 'platform_setting', storageKey, null, {
       url,
       slot: slot || 'generic',
-      size: file.size,
+      size: buffer.length,
+      mime,
     });
     return {
       url,
       key: storageKey,
       slot: slot || 'generic',
       mimeType: mime,
-      size: file.size,
+      size: buffer.length,
     };
   }
+  /** Overlay env-backed runtime values so panel keys match process env (#r4.H2 gap). */
+  private envOverlay(): Record<string, unknown> {
+    // Defaults aligned with bookings/auth runtime env fallbacks
+    return {
+      booking: {
+        cancelWindowHours: Number(process.env.BOOKING_FREE_CANCEL_HOURS || 24),
+        holdMinutes: Number(process.env.BOOKING_HOLD_MINUTES || 15),
+        minLeadHours: Number(process.env.BOOKING_MIN_LEAD_HOURS || 4),
+      },
+      auth: {
+        maxOtpAttempts: Number(process.env.OTP_MAX_ATTEMPTS || 3),
+        otpTtlSeconds: Number(process.env.OTP_TTL_SECONDS || 300),
+        loginRateLimitPerMinute: Number(process.env.AUTH_LOGIN_RATE_LIMIT || 10),
+      },
+    };
+  }
+
   private platformDefaults() {
     return {
       booking: {
         slotStepMin: 30,
         holdMinutes: 15,
-        cancelWindowHours: 2,
+        cancelWindowHours: 24,
         allowSameDay: true,
       },
       commission: { ratePercent: 10 },
@@ -1373,8 +1615,8 @@ export class AdminService {
         featuredBoost: true,
       },
       auth: {
-        otpTtlSeconds: 120,
-        maxOtpAttempts: 5,
+        otpTtlSeconds: 300,
+        maxOtpAttempts: 3,
         loginRateLimitPerMinute: 10,
       },
       privacy: {
@@ -1411,6 +1653,17 @@ export class AdminService {
     return out;
   }
 
+  /** Raw panel JSON only (no env merge) — safe for read-modify-write saves. */
+  private async getStoredPlatformConfig(): Promise<Record<string, unknown>> {
+    const row = await this.prisma.platformSetting.findUnique({
+      where: { key: 'platform_config' },
+    });
+    if (row?.value && typeof row.value === 'object' && !Array.isArray(row.value)) {
+      return row.value as Record<string, unknown>;
+    }
+    return {};
+  }
+
   async getPlatformSettings() {
     const row = await this.prisma.platformSetting.findUnique({
       where: { key: 'platform_config' },
@@ -1419,18 +1672,28 @@ export class AdminService {
       row?.value && typeof row.value === 'object' && !Array.isArray(row.value)
         ? (row.value as Record<string, unknown>)
         : {};
-    return this.deepMerge(
+    // defaults <- env fallbacks <- stored panel (panel wins when set)
+    const withEnv = this.deepMerge(
       this.platformDefaults() as unknown as Record<string, unknown>,
-      stored,
+      this.envOverlay(),
     );
+    return this.deepMerge(withEnv, stored);
   }
 
   async updatePlatformSettings(
     partial: Record<string, unknown>,
     actorId?: string,
   ) {
-    const current = await this.getPlatformSettings();
-    const next = this.deepMerge(current as Record<string, unknown>, partial || {});
+    const current = this.deepMerge(
+      this.platformDefaults() as unknown as Record<string, unknown>,
+      await this.getStoredPlatformConfig(),
+    ); // never seed DB with env snapshot
+
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(partial || {})) {
+      if (ALLOWED_PLATFORM_ROOT_KEYS.has(k)) cleaned[k] = v;
+    }
+    const next = this.deepMerge(current as Record<string, unknown>, cleaned);
 
     const commission = next.commission as { ratePercent?: number } | undefined;
     if (commission && typeof commission.ratePercent === 'number') {
@@ -1438,8 +1701,8 @@ export class AdminService {
       (next.commission as { ratePercent: number }).ratePercent = rate;
       await this.prisma.platformSetting.upsert({
         where: { key: 'commission_rate' },
-        create: { key: 'commission_rate', value: rate as unknown as object },
-        update: { value: rate as unknown as object },
+        create: { key: 'commission_rate', value: { rate } as object },
+        update: { value: { rate } as object },
       });
     }
 
@@ -1537,6 +1800,17 @@ export class AdminService {
   ) {
     const row = await this.prisma.payoutRequest.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('درخواست تسویه یافت نشد');
+    const from = String(row.status);
+    const allowed: Record<string, string[]> = {
+      pending: ['approved', 'rejected'],
+      approved: ['paid', 'rejected'],
+      paid: [],
+      rejected: [],
+      cancelled: [],
+    };
+    if (!(allowed[from] || []).includes(status)) {
+      throw new BadRequestException(`انتقال وضعیت تسویه از ${from} به ${status} مجاز نیست`);
+    }
     const updated = await this.prisma.payoutRequest.update({
       where: { id },
       data: {

@@ -98,6 +98,16 @@ class RolesDto {
   roles: string[];
 }
 
+class PayoutStatusDto {
+  @ApiProperty({ enum: ['approved', 'paid', 'rejected'] })
+  @IsString()
+  status!: 'approved' | 'paid' | 'rejected';
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 class BulkDeleteUsersDto {
   @IsArray()
   @ArrayMinSize(1)
@@ -123,6 +133,7 @@ export class AdminController {
     return this.service.stats();
   }
 
+  @RequirePermissions('admin.dashboard.read')
   @Get('dashboard')
   dashboard() {
     return this.service.dashboard();
@@ -199,7 +210,7 @@ export class AdminController {
   updatePayoutRequest(
     @CurrentUser('id') adminUserId: string,
     @Param('id') id: string,
-    @Body() body: { status: 'approved' | 'paid' | 'rejected'; note?: string },
+    @Body() body: PayoutStatusDto,
   ) {
     return this.service.updatePayoutRequest(adminUserId, id, body.status, body.note);
   }
@@ -269,19 +280,19 @@ export class AdminController {
     return this.service.setUserRoles(id, dto.roles, actorId);
   }
 
-  @RequirePermissions('admin.users.write')
+  @Roles('SUPER_ADMIN')
   @Delete('users/:id')
   hardDeleteUser(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.hardDeleteUser(id, actorId);
   }
 
-  @RequirePermissions('admin.users.write')
+  @Roles('SUPER_ADMIN')
   @Post('users/bulk-delete')
   bulkHardDeleteUsers(@Body() dto: BulkDeleteUsersDto, @CurrentUser('id') actorId?: string) {
     return this.service.bulkHardDeleteUsers(dto.userIds, actorId);
   }
 
-  @RequirePermissions('admin.professionals.write')
+  @Roles('SUPER_ADMIN')
   @Delete('professionals/:id')
   hardDeleteProfessional(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
     return this.service.hardDeleteProfessional(id, actorId);
