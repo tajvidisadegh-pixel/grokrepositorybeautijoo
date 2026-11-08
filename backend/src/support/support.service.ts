@@ -143,6 +143,7 @@ export class SupportService {
   ) {
     const msg = (body || '').trim();
     if (msg.length < 1) throw new BadRequestException('متن پیام خالی است');
+    if (msg.length > 5000) throw new BadRequestException('متن پیام بیش از حد طولانی است');
 
     const src = (source || '').trim().toLowerCase();
     const sourceLabel =
@@ -215,6 +216,7 @@ export class SupportService {
     }
     const msg = (body || '').trim();
     if (msg.length < 1) throw new BadRequestException('پیام خالی است');
+    if (msg.length > 5000) throw new BadRequestException('پیام بیش از حد طولانی است');
     const message = await this.prisma.supportTicketMessage.create({
       data: {
         ticketId,
