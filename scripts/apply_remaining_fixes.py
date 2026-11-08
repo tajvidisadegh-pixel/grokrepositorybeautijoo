@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Apply remaining production-hardening fixes on top of a known-good bookings.service."""
 from pathlib import Path
 import subprocess
+import re
 
 def main():
     raw = subprocess.check_output([
@@ -10,7 +10,17 @@ def main():
     ])
     t = raw.decode('utf-8')
     assert 'BookingsService' in t and len(t) > 10000
+    # typo variants
+    t = t.replace('this downstreamprisma', 'this.prisma')
     t = t.replace('this.downstreamprisma', 'this.prisma')
+    # reportIssue admins block
+    t = re.sub(
+        r"const admins = await this\.prisma\.user\.findMany\(\{\s*where: \{ userRoles: \{ some: \{ role: \{ name: \{ in: \['admin', 'SUPER_ADMIN'\] \} \} \} \},\s*select: \{ id: true \},\s*take: 20,\s*\}\);",
+        "const admins = await this.prisma.user.findMany({\n      where: {\n        status: 'active',\n        userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } },\n      },\n      select: { id: true },\n    });",
+        t,
+        count=1,
+    )
+    # fallback if take already gone but typo remains handled above
     t = t.replace('take: 20,\n', '', 1)
     t = t.replace(
         'if (query.from) (where.startAt as any).gte = new Date(query.from);',
@@ -42,6 +52,8 @@ def main():
                 "      }\n"
             )
             t = t[:r] + inj + t[r:]
+    assert 'downstreamprisma' not in t
+    assert 'BookingsService' in t
     Path('backend/src/bookings/bookings.service.ts').write_text(t, encoding='utf-8')
     print('bookings', len(t))
 
