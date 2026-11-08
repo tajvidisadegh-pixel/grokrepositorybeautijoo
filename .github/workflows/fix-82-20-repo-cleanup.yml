@@ -1,0 +1,94 @@
+name: fix-82-20-repo-cleanup
+
+"on":
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repo cleanup (#82.20)
+        run: |
+          set -euo pipefail
+          rm -rf backend/prisma/.schema-b64
+          rm -f backend/prisma/seed-roles.ts
+          rm -f backend/scripts/seed-roles.cjs
+          rm -rf backend/tmp
+          rm -f bun.lock
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path(".gitignore")
+          text = p.read_text()
+          additions = [
+            "",
+            "# #82.20 repo cleanup — never re-commit these",
+            "backend/tmp/",
+            "backend/prisma/.schema-b64/",
+            "bun.lock",
+            "*.b64",
+            "!**/.github/**/*.b64",
+          ]
+          for line in additions:
+            if line and line in text.splitlines():
+              continue
+            text = text.rstrip() + "\n" + line
+          if not text.endswith("\n"):
+            text += "\n"
+          p.write_text(text)
+          print("gitignore updated")
+          Path("docs/DOCKERFILES.md").write_text(
+              "# Dockerfiles — intentional dual targets (#82.20)\n\n"
+              "| Path | Purpose | Build context |\n"
+              "|------|---------|---------------|\n"
+              "| `Dockerfile` (repo root) | Frontend image when Liara/Git connects at **repo root** | copies `frontend/` |\n"
+              "| `frontend/Dockerfile` | Frontend image when build context is **`frontend/`** | local to frontend |\n"
+              "| `backend/Dockerfile` | Backend NestJS image (Liara backend / export branch) | `backend/` |\n\n"
+              "They are **not** duplicates. Prefer the path that matches the platform build context.\n\n"
+              "Canonical deploy rules: `docs/BRANCH_AND_DEPLOY.md` · `DEPLOY_LIARA.md` · `DEPLOYMENT.md`.\n"
+          )
+          dep = Path("DEPLOYMENT.md")
+          d = dep.read_text()
+          banner = (
+              "> **مرجع الزامی برنچ و لیارا:** "
+              "[`docs/BRANCH_AND_DEPLOY.md`](./docs/BRANCH_AND_DEPLOY.md) · "
+              "خلاصه عملیاتی: [`DEPLOY_LIARA.md`](./DEPLOY_LIARA.md) · "
+              "Dockerfiles: [`docs/DOCKERFILES.md`](./docs/DOCKERFILES.md)\n\n"
+          )
+          if "BRANCH_AND_DEPLOY.md" not in d[:500]:
+              dep.write_text(banner + d)
+              print("DEPLOYMENT.md banner added")
+          else:
+              print("DEPLOYMENT.md already linked")
+          assert not Path("backend/prisma/seed-roles.ts").exists()
+          assert not Path("backend/scripts/seed-roles.cjs").exists()
+          assert not Path("bun.lock").exists()
+          assert not Path("backend/tmp").exists()
+          assert not Path("backend/prisma/.schema-b64").exists()
+          assert Path("backend/prisma/seed-roles.cjs").is_file()
+          assert Path("backend/Dockerfile").is_file()
+          assert Path("Dockerfile").is_file()
+          print("sanity ok #82.20")
+          PY
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo noop; exit 0; fi
+          git status
+          git commit -m "chore(#82.20): repo cleanup — remove junk duplicates and scratch
+
+- Delete backend/prisma/.schema-b64 (b64 scratch)
+- Delete backend/prisma/seed-roles.ts and backend/scripts/seed-roles.cjs
+  (keep backend/prisma/seed-roles.cjs used by Dockerfile)
+- Delete backend/tmp/ patch artifacts
+- Remove bun.lock (npm + package-lock is the source of truth)
+- Ignore backend/tmp, .schema-b64, bun.lock, stray *.b64
+- Document intentional dual Dockerfiles; link deploy docs
+
+No change to payment, booking, offline, or confirmed flows."
+          git push
