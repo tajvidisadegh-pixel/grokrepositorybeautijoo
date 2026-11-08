@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString, IsUUID, ArrayMinSize, MinLength, MaxLength } from 'class-validator';
+import { IsArray, IsOptional, IsString, IsUUID, ArrayMinSize, MinLength, MaxLength, IsISO8601 } from 'class-validator';
 import { BookingsService } from './bookings.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -17,9 +17,11 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 class CreateBookingDto {
   @IsUUID() professionalId!: string;
   @IsArray() @ArrayMinSize(1) @IsUUID('4', { each: true }) serviceIds!: string[];
-  @IsString() startAt!: string;
+  /** #82.med12 — require ISO-8601 datetime */
+  @IsISO8601({ strict: true })
+  startAt!: string;
   @IsOptional() @IsUUID() locationId?: string;
-  @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
   @IsOptional() @IsArray() @IsUUID('4', { each: true }) addOnIds?: string[];
   @IsOptional() @IsUUID() priceRuleId?: string;
   @IsOptional() @IsUUID() durationRuleId?: string;
@@ -28,7 +30,8 @@ class CreateBookingDto {
 }
 
 class RescheduleDto {
-  @IsString()
+  /** #82.med12 — require ISO-8601 datetime */
+  @IsISO8601({ strict: true })
   startAt!: string;
 }
 
@@ -65,10 +68,12 @@ export class BookingsController {
     @Query('limit') limit?: string,
     @Query('status') status?: string,
   ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 20;
     return this.service.listMineAsCustomer(
       userId,
-      page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      Number.isFinite(pageNum) ? pageNum : 1,
+      Number.isFinite(limitNum) ? limitNum : 20,
       status,
     );
   }
@@ -85,9 +90,11 @@ export class BookingsController {
     @Query('to') to?: string,
     @Query('serviceId') serviceId?: string,
   ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 20;
     return this.service.listMineAsProfessional(userId, {
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 20,
+      page: Number.isFinite(pageNum) ? pageNum : 1,
+      limit: Number.isFinite(limitNum) ? limitNum : 20,
       q,
       status,
       from,
