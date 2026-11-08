@@ -982,12 +982,26 @@ export class AdminService {
   }
 
 
+  /**
+   * #82.18 — Start customer impersonation.
+   * Only SUPER_ADMIN (re-checked against DB, not only JWT roles).
+   * Audit log is required: if audit insert fails, the request fails (no silent start).
+   */
   async impersonateCustomer(adminId: string, customerId: string) {
+    if (!adminId) {
+      throw new ForbiddenException('SUPER_ADMIN only');
+    }
+    if (adminId === customerId) {
+      throw new BadRequestException('cannot impersonate yourself');
+    }
     const admin = await this.prisma.user.findUnique({
       where: { id: adminId },
       include: { userRoles: { include: { role: true } } },
     });
     if (!admin) throw new NotFoundException('admin not found');
+    if (admin.status !== 'active') {
+      throw new ForbiddenException('admin account is not active');
+    }
     const adminRoles = admin.userRoles.map((ur) => ur.role.name);
     if (!adminRoles.includes('SUPER_ADMIN')) {
       throw new ForbiddenException('SUPER_ADMIN only');
@@ -1011,22 +1025,40 @@ export class AdminService {
     if (customer.accountType === 'professional' && !customerRoles.includes('customer')) {
       throw new BadRequestException('not a customer account');
     }
+
+    // #82.18 — durable audit BEFORE issuing token; failure blocks impersonation
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: adminId,
+          action: 'IMPERSONATION_STARTED',
+          entityType: 'user',
+          entityId: customer.id,
+          before: null,
+          after: {
+            customerUserId: customer.id,
+            customerPhone: customer.phone,
+            customerName: customer.profile?.displayName || null,
+            adminUserId: adminId,
+          } as any,
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `IMPERSONATION_STARTED audit failed for admin=${adminId} customer=${customerId}: ${(err as Error).message}`,
+      );
+      throw new BadRequestException(
+        'ثبت لاگ impersonation ناموفق بود؛ برای امنیت عملیات متوقف شد',
+      );
+    }
+
     const tokens = await this.authService.issueImpersonationAccessToken(
       customer.id,
       customer.phone,
       adminId,
     );
-    await this.audit(
-      adminId,
-      'IMPERSONATION_STARTED',
-      'user',
-      customer.id,
-      null,
-      {
-        customerUserId: customer.id,
-        customerPhone: customer.phone,
-        customerName: customer.profile?.displayName || null,
-      },
+    this.logger.warn(
+      `IMPERSONATION_STARTED admin=${adminId} customer=${customer.id}`,
     );
     return {
       accessToken: tokens.accessToken,
@@ -1040,7 +1072,6 @@ export class AdminService {
       },
     };
   }
-
   async listAuditLogs(q?: any) {
     const page = Math.max(1, Number(q?.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q?.limit) || 50));
