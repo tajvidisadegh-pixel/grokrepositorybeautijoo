@@ -11,81 +11,97 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Restore from dd6a621 and apply batch fixes
+      - name: Restore bookings from dd6a621 + safe patches
         run: |
           set -euo pipefail
           git show dd6a621521a497cc29e81bfc50b5062c11bc7666:backend/src/bookings/bookings.service.ts > backend/src/bookings/bookings.service.ts
-          python3 << 'PY'
+          python3 -c "
           from pathlib import Path
           p = Path('backend/src/bookings/bookings.service.ts')
-          text = p.read_text(encoding='utf-8')
-          assert 'export class BookingsService' in text and len(text) > 10000
-
-          # remove dead if(false) if present
-          dead = """      // #72 — pro-initiated customer block no longer enforced\n      const links = (proRow?.socialLinks as { _blockedCustomerIds?: string[] } | null) || null;\n      const blocked = Array.isArray(links?._blockedCustomerIds) ? links!._blockedCustomerIds! : [];\n      if (false && blocked.includes(customerId)) {\n        throw new BadRequestException('متأسفانه امکان رزرو نزد این زیباگر برای شما وجود ندارد.');\n      }\n"""
-          if dead in text:
-              text = text.replace(dead, '      // #82.19 / #72 — pro-initiated customer block removed\n', 1)
-
-          old_qr = """          await tx.$queryRawUnsafe(\n            `SELECT id FROM professionals WHERE id = $1::uuid FOR UPDATE`,\n            data.professionalId,\n          );"""
-          new_qr = """          await tx.$queryRaw`SELECT id FROM professionals WHERE id = ${data.professionalId}::uuid FOR UPDATE`;"""
-          if old_qr in text:
-              text = text.replace(old_qr, new_qr, 1)
-
-          o = """    const admins = await this.prisma.user.findMany({\n      where: { userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } } },\n      select: { id: true },\n      take: 20,\n    });"""
-          n = """    const admins = await this.prisma.user.findMany({\n      where: {\n        status: 'active',\n        userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } },\n      },\n      select: { id: true },\n    });"""
-          if o in text:
-              text = text.replace(o, n, 1)
-
-          o = """    if (query.from || query.to) {\n      where.startAt = {};\n      if (query.from) (where.startAt as Prisma.DateTimeFilter).gte = new Date(query.from);\n      if (query.to) (where.startAt as Prisma.DateTimeFilter).lte = new Date(query.to);\n    }"""
-          n = """    if (query.from || query.to) {\n      where.startAt = {};\n      if (query.from) {\n        const from = new Date(query.from);\n        if (isNaN(from.getTime())) throw new BadRequestException('پارامتر from تاریخ معتبر نیست');\n        (where.startAt as Prisma.DateTimeFilter).gte = from;\n      }\n      if (query.to) {\n        const to = new Date(query.to);\n        if (isNaN(to.getTime())) throw new BadRequestException('پارامتر to تاریخ معتبر نیست');\n        (where.startAt as Prisma.DateTimeFilter).lte = to;\n      }\n    }"""
-          if o in text:
-              text = text.replace(o, n, 1)
-
-          o = """    if (!existing) throw new NotFoundException();\n    if (existing.customerId !== userId) throw new ForbiddenException();\n    const allowedPre: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];"""
-          n = """    if (!existing) throw new NotFoundException();\n    {\n      const pro = await this.prisma.professional.findFirst({ where: { userId } });\n      const isCustomer = existing.customerId === userId;\n      const isPro = !!pro && pro.id === existing.professionalId;\n      if (!isCustomer && !isPro) throw new ForbiddenException();\n    }\n    const allowedPre: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];"""
-          if o in text:
-              text = text.replace(o, n, 1)
-
-          o = """      } catch (err) {\n        this.logger.warn(`post-create notify failed booking=${booking.id}: ${(err as Error)?.message || err}`);\n      }\n      return booking;"""
-          n = """      } catch (err) {\n        this.logger.warn(`post-create notify failed booking=${booking.id}: ${(err as Error)?.message || err}`);\n      }\n      try {\n        const payMode = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();\n        const provider = (process.env.PAYMENT_PROVIDER || '').toString().trim().toLowerCase();\n        const offline =\n          payMode === 'offline' || payMode === 'no_gateway' || payMode === 'pay_later' ||\n          (payMode === 'auto' && (!provider || provider === 'disabled' || provider === 'none'));\n        if (offline) {\n          await this.payments.initiate(customerId, booking.id, 'https://localhost/offline');\n          const refreshed = await this.prisma.booking.findUnique({\n            where: { id: booking.id }, include: { items: true, payment: true },\n          });\n          if (refreshed) return refreshed;\n        }\n      } catch (err) {\n        this.logger.warn(`offline auto-confirm failed booking=${booking.id}: ${(err as Error)?.message || err}`);\n      }\n      return booking;"""
-          if o in text:
-              text = text.replace(o, n, 1)
-
-          p.write_text(text, encoding='utf-8')
-          print('bookings restored+patched', p.stat().st_size)
-
-          # payments metadata
-          pp = Path('backend/src/payments/payments.service.ts')
-          t = pp.read_text(encoding='utf-8')
-          o = """        metadata: {\n          mode: 'offline',\n          note: 'Confirmed without online gateway. Not a bank settlement.',\n        },"""
-          n = """        metadata: {\n          mode: 'offline',\n          note: 'Confirmed without online gateway. Not a bank settlement.',\n          settlementEligible: false,\n          realMoney: false,\n        },"""
-          if o in t:
-              pp.write_text(t.replace(o, n, 1), encoding='utf-8')
-              print('payments patched')
-
-          # admin-ops phone
-          ap = Path('backend/src/admin/admin-ops.controller.ts')
-          t = ap.read_text(encoding='utf-8')
-          o = """    await this.audit(actorId, 'admin.user.profile.update', 'user', id, dto);"""
-          if o in t and 'phoneChanged' not in t:
-              # full replace of updateUserProfile is long; do targeted hardening around phone update
-              o2 = """      dto.phone = nextPhone;\n      await this.prisma.user.update({ where: { id }, data: { phone: dto.phone.trim() } });"""
-              n2 = """      // ownership already checked above; revoke sessions after phone change\n      await this.prisma.user.update({ where: { id }, data: { phone: nextPhone, phoneVerified: false } });\n      await this.prisma.refreshToken.updateMany({\n        where: { userId: id, revokedAt: null },\n        data: { revokedAt: new Date() },\n      });\n      try {\n        const { userAuthCache } = await import('../auth/user-auth-cache');\n        userAuthCache.invalidate(id);\n      } catch { /* optional */ }"""
-              if o2 in t:
-                  t = t.replace(o2, n2, 1)
-              t = t.replace(\n                  """    await this.audit(actorId, 'admin.user.profile.update', 'user', id, dto);""",\n                  """    await this.audit(actorId, 'admin.user.profile.update', 'user', id, {\n      phoneChanged: !!dto.phone,\n      fields: Object.keys(dto || {}),\n    });""",\n                  1,\n              )
-              # broaden phone ownership check
-              t = t.replace(\n                  "where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } },",\n                  "where: { phone: nextPhone, NOT: { id } },",\n                  1,\n              )
-              ap.write_text(t, encoding='utf-8')
-              print('admin-ops patched')
-          PY
-      - name: Commit and push
+          t = p.read_text(encoding='utf-8')
+          assert 'export class BookingsService' in t
+          # reportIssue: remove take 20
+          t = t.replace(\"take: 20,\n\", '', 1) if 'take: 20' in t else t
+          # pro reschedule
+          old = 'if (existing.customerId !== userId) throw new ForbiddenException();'
+          new = '''{
+      const pro = await this.prisma.professional.findFirst({ where: { userId } });
+      const isCustomer = existing.customerId === userId;
+      const isPro = !!pro && pro.id === existing.professionalId;
+      if (!isCustomer && !isPro) throw new ForbiddenException();
+    }'''
+          if old in t:
+              t = t.replace(old, new, 1)
+          # date validation
+          old = \"if (query.from) (where.startAt as Prisma.DateTimeFilter).gte = new Date(query.from);\"
+          new = \"if (query.from) { const from = new Date(query.from); if (isNaN(from.getTime())) throw new BadRequestException('invalid from'); (where.startAt as Prisma.DateTimeFilter).gte = from; }\"
+          if old in t:
+              t = t.replace(old, new, 1)
+          old = \"if (query.to) (where.startAt as Prisma.DateTimeFilter).lte = new Date(query.to);\"
+          new = \"if (query.to) { const to = new Date(query.to); if (isNaN(to.getTime())) throw new BadRequestException('invalid to'); (where.startAt as Prisma.DateTimeFilter).lte = to; }\"
+          if old in t:
+              t = t.replace(old, new, 1)
+          # offline auto-confirm before return booking after notify
+          needle = 'return booking;'
+          # only first post-create return is harder; append helper comment near end of create
+          if 'offline auto-confirm' not in t and 'await this.payments.initiate(customerId, booking.id' not in t:
+              marker = \"this.logger.warn(\`post-create notify failed booking=\$\{booking.id\}: \$\{(err as Error)?.message || err\}\`);\"
+              # simpler: inject after post-create catch by unique string
+              uniq = 'post-create notify failed booking='
+              idx = t.find(uniq)
+              if idx > 0:
+                  # find return booking after this
+                  ridx = t.find('return booking;', idx)
+                  if ridx > 0:
+                      inject = '''
+      try {
+        const payMode = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();
+        const provider = (process.env.PAYMENT_PROVIDER || '').toString().trim().toLowerCase();
+        const offline = payMode === 'offline' || payMode === 'no_gateway' || payMode === 'pay_later' || (payMode === 'auto' && (!provider || provider === 'disabled' || provider === 'none'));
+        if (offline) {
+          await this.payments.initiate(customerId, booking.id, 'https://localhost/offline');
+          const refreshed = await this.prisma.booking.findUnique({ where: { id: booking.id }, include: { items: true, payment: true } });
+          if (refreshed) return refreshed;
+        }
+      } catch (err) {
+        this.logger.warn('offline auto-confirm failed: ' + ((err as Error)?.message || err));
+      }
+'''
+                      t = t[:ridx] + inject + t[ridx:]
+          p.write_text(t, encoding='utf-8')
+          print('ok', p.stat().st_size)
+          "
+          # payments
+          python3 -c "
+          from pathlib import Path
+          p = Path('backend/src/payments/payments.service.ts')
+          t = p.read_text(encoding='utf-8')
+          if 'settlementEligible' not in t:
+              t = t.replace(\"note: 'Confirmed without online gateway. Not a bank settlement.',\", \"note: 'Confirmed without online gateway. Not a bank settlement.', settlementEligible: false, realMoney: false,\", 1)
+              p.write_text(t, encoding='utf-8')
+              print('payments ok')
+          "
+          # admin-ops
+          python3 -c "
+          from pathlib import Path
+          p = Path('backend/src/admin/admin-ops.controller.ts')
+          t = p.read_text(encoding='utf-8')
+          t2 = t.replace('where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } },', 'where: { phone: nextPhone, NOT: { id } },', 1)
+          t2 = t2.replace(\"await this.audit(actorId, 'admin.user.profile.update', 'user', id, dto);\", \"await this.audit(actorId, 'admin.user.profile.update', 'user', id, { phoneChanged: !!dto.phone, fieldKeys: Object.keys(dto||{}) });\", 1)
+          old = \"await this.prisma.user.update({ where: { id }, data: { phone: dto.phone.trim() } });\"
+          new = \"await this.prisma.user.update({ where: { id }, data: { phone: nextPhone, phoneVerified: false } }); await this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });\"
+          if old in t2:
+              t2 = t2.replace(old, new, 1)
+          if t2 != t:
+              p.write_text(t2, encoding='utf-8')
+              print('admin-ops ok')
+          "
+      - name: Commit
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts backend/src/admin/admin-ops.controller.ts
-          git status
+          git add backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts backend/src/admin/admin-ops.controller.ts || true
           if git diff --cached --quiet; then echo nochange; exit 0; fi
-          git commit -m "fix: restore bookings + offline auto-confirm, pro reschedule, reportIssue, dates, admin phone sessions, offline settlementEligible"
+          git commit -m "fix: restore bookings + offline auto-confirm, pro reschedule, reportIssue, dates, admin phone, settlementEligible"
           git push origin HEAD:main
