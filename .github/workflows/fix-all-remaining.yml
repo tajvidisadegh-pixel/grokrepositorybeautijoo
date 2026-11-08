@@ -1,0 +1,159 @@
+name: fix-all-remaining
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-all-remaining.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore and patch
+        run: |
+          set -euo pipefail
+          python3 <<'ENDPY'
+          from pathlib import Path
+          import subprocess
+
+          raw = subprocess.check_output([
+              'git', 'show', '3d78a0f3bcd7ab7487d08659f62222017ca1df47:backend/src/bookings/bookings.service.ts'
+          ])
+          t = raw.decode('utf-8')
+          assert 'export class BookingsService' in t and len(t) > 30000
+
+          o = """    const admins = await this.prisma.user.findMany({
+      where: { userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } } },
+      select: { id: true },
+      take: 20,
+    });"""
+          n = """    const admins = await this.prisma.user.findMany({
+      where: {
+        status: 'active',
+        userRoles: { some: { role: { name: { in: ['admin', 'SUPER_ADMIN'] } } } },
+      },
+      select: { id: true },
+    });"""
+          if o in t:
+              t = t.replace(o, n, 1)
+
+          o = """    if (query.from || query.to) {
+      where.startAt = {};
+      if (query.from) (where.startAt as Prisma.DateTimeFilter).gte = new Date(query.from);
+      if (query.to) (where.startAt as Prisma.DateTimeFilter).lte = new Date(query.to);
+    }"""
+          n = """    if (query.from || query.to) {
+      where.startAt = {};
+      if (query.from) {
+        const from = new Date(query.from);
+        if (isNaN(from.getTime())) {
+          throw new BadRequestException('پارامتر from تاریخ معتبر نیست');
+        }
+        (where.startAt as Prisma.DateTimeFilter).gte = from;
+      }
+      if (query.to) {
+        const to = new Date(query.to);
+        if (isNaN(to.getTime())) {
+          throw new BadRequestException('پارامتر to تاریخ معتبر نیست');
+        }
+        (where.startAt as Prisma.DateTimeFilter).lte = to;
+      }
+    }"""
+          if o in t:
+              t = t.replace(o, n, 1)
+
+          o = """    if (existing.customerId !== userId) throw new ForbiddenException();
+    const allowedPre: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];"""
+          n = """    {
+      const pro = await this.prisma.professional.findFirst({ where: { userId } });
+      const isCustomer = existing.customerId === userId;
+      const isPro = !!pro && pro.id === existing.professionalId;
+      if (!isCustomer && !isPro) throw new ForbiddenException();
+    }
+    const allowedPre: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];"""
+          if o in t:
+              t = t.replace(o, n, 1)
+
+          o = """      } catch (err) {
+        this.logger.warn(`post-create notify failed booking=${booking.id}: ${(err as Error)?.message || err}`);
+      }
+      return booking;"""
+          n = """      } catch (err) {
+        this.logger.warn(`post-create notify failed booking=${booking.id}: ${(err as Error)?.message || err}`);
+      }
+      try {
+        const payMode = (process.env.BOOKING_PAYMENT_MODE || 'auto').toString().trim().toLowerCase();
+        const provider = (process.env.PAYMENT_PROVIDER || '').toString().trim().toLowerCase();
+        const offline =
+          payMode === 'offline' ||
+          payMode === 'no_gateway' ||
+          payMode === 'pay_later' ||
+          (payMode === 'auto' && (!provider || provider === 'disabled' || provider === 'none'));
+        if (offline) {
+          await this.payments.initiate(customerId, booking.id, 'https://localhost/offline');
+          const refreshed = await this.prisma.booking.findUnique({
+            where: { id: booking.id },
+            include: { items: true, payment: true },
+          });
+          if (refreshed) return refreshed;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `offline auto-confirm failed booking=${booking.id}: ${(err as Error)?.message || err}`,
+        );
+      }
+      return booking;"""
+          if o in t:
+              t = t.replace(o, n, 1)
+
+          assert 'PLACEHOLDER' not in t
+          Path('backend/src/bookings/bookings.service.ts').write_text(t, encoding='utf-8')
+          print('bookings', len(t))
+
+          p = Path('backend/src/payments/payments.service.ts')
+          pt = p.read_text(encoding='utf-8')
+          if 'settlementEligible' not in pt:
+              pt = pt.replace(
+                  "note: 'Confirmed without online gateway. Not a bank settlement.',",
+                  "note: 'Confirmed without online gateway. Not a bank settlement.',\n          settlementEligible: false,\n          realMoney: false,",
+                  1,
+              )
+              p.write_text(pt, encoding='utf-8')
+              print('payments patched')
+
+          p = Path('backend/src/admin/admin-ops.controller.ts')
+          at = p.read_text(encoding='utf-8')
+          at2 = at.replace(
+              'where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } },',
+              'where: { phone: nextPhone, NOT: { id } },',
+              1,
+          )
+          at2 = at2.replace(
+              'await this.prisma.user.update({ where: { id }, data: { phone: dto.phone.trim() } });',
+              'await this.prisma.user.update({ where: { id }, data: { phone: nextPhone, phoneVerified: false } });\n      await this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });',
+              1,
+          )
+          at2 = at2.replace(
+              "await this.audit(actorId, 'admin.user.profile.update', 'user', id, dto);",
+              "await this.audit(actorId, 'admin.user.profile.update', 'user', id, { phoneChanged: !!dto.phone, fieldKeys: Object.keys(dto || {}) });",
+              1,
+          )
+          if at2 != at:
+              p.write_text(at2, encoding='utf-8')
+              print('admin-ops patched')
+          print('DONE')
+          ENDPY
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts backend/src/payments/payments.service.ts backend/src/admin/admin-ops.controller.ts
+          if git diff --cached --quiet; then echo nochange; exit 0; fi
+          git commit -m "fix: restore bookings + offline auto-confirm, pro reschedule, reportIssue, dates, admin phone, settlementEligible"
+          git push origin HEAD:main
