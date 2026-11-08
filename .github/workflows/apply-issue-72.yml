@@ -1,8 +1,0 @@
-name: noop-apply-issue-72
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo retired

@@ -1,8 +1,0 @@
-name: noop-fix-report-button-72
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo retired

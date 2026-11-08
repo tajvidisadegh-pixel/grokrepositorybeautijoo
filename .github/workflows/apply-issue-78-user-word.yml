@@ -1,9 +1,0 @@
-name: apply-issue-78-user-word
-# Completed one-shot for #78 — disabled
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo disabled

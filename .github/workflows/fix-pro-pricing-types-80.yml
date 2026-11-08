@@ -1,8 +1,0 @@
-name: noop-fix-pro-pricing-types-80
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo retired

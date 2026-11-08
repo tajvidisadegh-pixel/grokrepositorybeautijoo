@@ -1,8 +1,0 @@
-name: noop-clean-bookings-72-final
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo retired

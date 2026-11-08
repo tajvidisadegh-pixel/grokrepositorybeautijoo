@@ -1,8 +1,0 @@
-name: noop-apply-forces-deposit-checkbox-80
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo retired

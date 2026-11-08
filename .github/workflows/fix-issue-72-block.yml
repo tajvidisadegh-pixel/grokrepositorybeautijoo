@@ -1,8 +1,0 @@
-name: noop-fix-issue-72-block
-on:
-  workflow_dispatch:
-jobs:
-  noop:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo retired

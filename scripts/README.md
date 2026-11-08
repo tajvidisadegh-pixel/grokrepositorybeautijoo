@@ -1,10 +1,11 @@
 # scripts/
 
-> **هشدار امنیتی (r4):** بسیاری از اسکریپت‌های این پوشه یک‌بارمصرف‌اند و با regex/sed
-> سورس یا داده را تغییر می‌دهند. اسکریپت‌هایی مثل `force_payout_*` و `dedupe_payout_*`
-> می‌توانند داده مالی را عوض کنند — **هرگز روی production اجرا نکنید** مگر با پشتیبان و تأیید کتبی.
+Operational scripts only. One-shot regex patchers were retired (issue #82 hygiene).
 
-- `db-reset.sh` فقط با `ALLOW_DB_RESET=yes` و خارج از production اجرا می‌شود.
-- پوشه‌های خالی/موقت (`b64chunks`, `buffer82`, `ci-blobs`, `patches`) نباید در deploy باشند.
-- برای پچ‌های امنیتی از workflowهای `run-fix-*` و اسکریپت‌های `fix-admin-r4-*.py` استفاده شده است.
+| Script | Purpose |
+|--------|--------|
+| `check-env.sh` | Validate required env vars |
+| `db-reset.sh` | Local DB reset (blocked in production; needs `ALLOW_DB_RESET=yes`) |
+| `dev-up.sh` | Local docker compose up |
 
+Do **not** re-add `fix-*.py` / `apply-*.py` one-shot patchers that rewrite source with regex.
