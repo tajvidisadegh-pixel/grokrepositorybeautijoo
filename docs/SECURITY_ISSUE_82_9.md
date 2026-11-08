@@ -8,6 +8,7 @@
 - Gitleaks workflow on push/PR (`.github/workflows/gitleaks.yml`)
 - Seed catalog gated by `RUN_SEED_CATALOG_ON_BOOT`
 - Impersonation start: `POST /admin/users/:id/impersonate` (SUPER_ADMIN only, audited)
+- Template-literal syntax fix in booking cancelReason (build green path)
 
 ## Owner actions (required)
 1. **Make the repository private** — GitHub → Settings → Danger Zone → Change visibility → Private.
