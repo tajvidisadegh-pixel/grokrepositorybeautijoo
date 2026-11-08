@@ -1,25 +1,83 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
 import { PaymentStatus, UserStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { Roles } from '../common/decorators/roles.decorator';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
-class CreateCustomerDto { @IsString() phone!: string; @IsOptional() @IsString() displayName?: string; @IsOptional() @IsString() firstName?: string; @IsOptional() @IsString() lastName?: string; }
-class UpdateUserProfileDto { @IsOptional() @IsString() displayName?: string; @IsOptional() @IsString() firstName?: string; @IsOptional() @IsString() lastName?: string; @IsOptional() @IsString() phone?: string; }
-class NotifyUsersDto { @IsArray() @IsString({ each: true }) userIds!: string[]; @IsString() title!: string; @IsString() body!: string; @IsOptional() @IsBoolean() sms?: boolean; }
-class NotifyByFilterDto { @IsString() title!: string; @IsString() body!: string; @IsOptional() @IsBoolean() sms?: boolean; @IsOptional() @IsNumber() limit?: number; @IsOptional() filters?: Record<string, unknown>; }
-class FeaturedDto { @IsBoolean() isFeatured!: boolean; }
+class CreateCustomerDto {
+  @IsString() phone!: string;
+  @IsOptional() @IsString() displayName?: string;
+  @IsOptional() @IsString() firstName?: string;
+  @IsOptional() @IsString() lastName?: string;
+}
+class UpdateUserProfileDto {
+  @IsOptional() @IsString() displayName?: string;
+  @IsOptional() @IsString() firstName?: string;
+  @IsOptional() @IsString() lastName?: string;
+  @IsOptional() @IsString() phone?: string;
+}
+class NotifyUsersDto {
+  @IsArray() @IsString({ each: true }) userIds!: string[];
+  @IsString() title!: string;
+  @IsString() body!: string;
+  @IsOptional() @IsBoolean() sms?: boolean;
+}
+class NotifyByFilterDto {
+  @IsString() title!: string;
+  @IsString() body!: string;
+  @IsOptional() @IsBoolean() sms?: boolean;
+  @IsOptional() @IsNumber() limit?: number;
+  @IsOptional() filters?: Record<string, unknown>;
+}
+class FeaturedDto {
+  @IsBoolean() isFeatured!: boolean;
+}
 
 /** Normalize Iranian mobile to 09xxxxxxxxx (#82.r2.8). */
 function normalizeIranPhone(raw: string): string {
-  let s = String(raw || '').trim().replace(/[\s-]/g, '');
+  let s = String(raw || '')
+    .trim()
+    .replace(/[\s-]/g, '');
   if (s.startsWith('+98')) s = '0' + s.slice(3);
   else if (s.startsWith('98') && s.length >= 12) s = '0' + s.slice(2);
   else if (s.startsWith('9') && s.length === 10) s = '0' + s;
   return s;
+}
+
+/** Strip HTML/script from CMS strings to mitigate stored XSS (#82.r2.5). */
+function stripHtmlDeep(value: unknown, depth = 0): unknown {
+  if (depth > 12) return null;
+  if (typeof value === 'string') {
+    return value
+      .replace(/<\s*(script|iframe|object|embed|link|meta|style)[\s\S]*?>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+      .replace(/<\s*(script|iframe|object|embed|link|meta|style)[^>]*>/gi, '')
+      .replace(/on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      .replace(/javascript\s*:/gi, '')
+      .replace(/<\/?[^>]+>/g, '');
+  }
+  if (Array.isArray(value)) return value.map((v) => stripHtmlDeep(v, depth + 1));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = stripHtmlDeep(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
 }
 
 @ApiTags('admin-ops')
@@ -27,6 +85,28 @@ function normalizeIranPhone(raw: string): string {
 @Controller('admin')
 export class AdminOpsController {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async audit(
+    actorId: string | undefined,
+    action: string,
+    entityType: string,
+    entityId: string,
+    after?: unknown,
+  ) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actorId || null,
+          action,
+          entityType,
+          entityId,
+          after: (after ?? {}) as object,
+        },
+      });
+    } catch {
+      /* non-blocking */
+    }
+  }
 
   @RequirePermissions('admin.site_builder.manage')
   @Get('content')
@@ -37,7 +117,6 @@ export class AdminOpsController {
     ]);
     const empty = { hero: {}, texts: {}, features: {} };
     const draftRaw = (draftRow?.value as any) || {};
-    // Accept either flat {hero,texts,features} or nested {content:{...}}
     const draft = {
       hero: draftRaw.hero ?? draftRaw.content?.hero ?? {},
       texts: draftRaw.texts ?? draftRaw.content?.texts ?? {},
@@ -70,10 +149,12 @@ export class AdminOpsController {
         texts: published?.texts || {},
         features: published?.features || {},
       });
+    const hasDraft =
+      Object.keys(draft.hero || {}).length ||
+      Object.keys(draft.texts || {}).length ||
+      Object.keys(draft.features || {}).length;
     return {
-      draft: Object.keys(draft.hero || {}).length || Object.keys(draft.texts || {}).length || Object.keys(draft.features || {}).length
-        ? draft
-        : (Object.keys(empty).length ? { ...empty, ...draft } : empty),
+      draft: hasDraft ? draft : { ...empty, ...draft },
       published,
       hasUnpublishedChanges: published ? hasUnpublishedChanges : true,
     };
@@ -81,10 +162,22 @@ export class AdminOpsController {
 
   @RequirePermissions('admin.site_builder.manage')
   @Put('content')
-  async putContent(@Body() body: any) {
-    const value = { hero: body?.hero ?? {}, texts: body?.texts ?? {}, features: body?.features ?? {} } as any;
-    await this.prisma.platformSetting.upsert({ where: { key: 'site_cms_content' }, create: { key: 'site_cms_content', value }, update: { value } });
-    return value;
+  async putContent(@Body() body: any, @CurrentUser('id') actorId?: string) {
+    const cleaned = stripHtmlDeep({
+      hero: body?.hero ?? {},
+      texts: body?.texts ?? {},
+      features: body?.features ?? {},
+      updatedAt: new Date().toISOString(),
+    }) as any;
+    await this.prisma.platformSetting.upsert({
+      where: { key: 'site_cms_content' },
+      create: { key: 'site_cms_content', value: cleaned },
+      update: { value: cleaned },
+    });
+    await this.audit(actorId, 'admin.cms.content.update', 'platform_setting', 'site_cms_content', {
+      keys: Object.keys(cleaned),
+    });
+    return cleaned;
   }
 
   @RequirePermissions('admin.site_builder.manage')
@@ -101,8 +194,7 @@ export class AdminOpsController {
     };
     const draftSections = normalize(draftRow?.value);
     const publishedSections = normalize((publishedRow?.value as any)?.sections);
-    const hasUnpublishedChanges =
-      JSON.stringify(draftSections) !== JSON.stringify(publishedSections);
+    const hasUnpublishedChanges = JSON.stringify(draftSections) !== JSON.stringify(publishedSections);
     return {
       draft: { sections: draftSections },
       published: publishedRow ? { sections: publishedSections } : null,
@@ -112,9 +204,19 @@ export class AdminOpsController {
 
   @RequirePermissions('admin.site_builder.manage')
   @Put('site-builder')
-  async putSiteBuilder(@Body() body: any) {
-    const list = Array.isArray(body) ? body : body?.sections ?? [];
-    await this.prisma.platformSetting.upsert({ where: { key: 'site_cms_sections' }, create: { key: 'site_cms_sections', value: list as any }, update: { value: list as any } });
+  async putSiteBuilder(@Body() body: any, @CurrentUser('id') actorId?: string) {
+    const listRaw = Array.isArray(body) ? body : body?.sections ?? [];
+    if (!Array.isArray(listRaw)) throw new BadRequestException('sections must be an array');
+    if (listRaw.length > 200) throw new BadRequestException('حداکثر ۲۰۰ بخش مجاز است');
+    const list = stripHtmlDeep(listRaw) as any[];
+    await this.prisma.platformSetting.upsert({
+      where: { key: 'site_cms_sections' },
+      create: { key: 'site_cms_sections', value: list as any },
+      update: { value: list as any },
+    });
+    await this.audit(actorId, 'admin.cms.site_builder.update', 'platform_setting', 'site_cms_sections', {
+      sections: list.length,
+    });
     return list;
   }
 
@@ -123,33 +225,46 @@ export class AdminOpsController {
   async createCustomer(@Body() dto: CreateCustomerDto, @CurrentUser('id') actorId?: string) {
     const phone = normalizeIranPhone(dto.phone || '');
     if (!phone || phone.length < 10) throw new BadRequestException('phone required');
-    // #82.r2.8 — dual-role: uniqueness is (phone, accountType)
     if (await this.prisma.user.findFirst({ where: { phone, accountType: 'customer' as any } })) {
       throw new ConflictException('phone exists');
     }
     const user = await this.prisma.user.create({
       data: {
-        phone, accountType: 'customer' as any, status: UserStatus.active,
-        profile: { create: { displayName: (dto.displayName || dto.firstName || phone).trim(), firstName: dto.firstName?.trim() || null, lastName: dto.lastName?.trim() || null } },
+        phone,
+        accountType: 'customer' as any,
+        status: UserStatus.active,
+        profile: {
+          create: {
+            displayName: (dto.displayName || dto.firstName || phone).trim(),
+            firstName: dto.firstName?.trim() || null,
+            lastName: dto.lastName?.trim() || null,
+          },
+        },
       },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
-    try {
-      await this.prisma.auditLog.create({
-        data: { actorId: actorId || null, action: 'admin.customer.create', entityType: 'user', entityId: user.id, after: { phone } as any },
-      });
-    } catch { /* non-blocking */ }
+    await this.audit(actorId, 'admin.customer.create', 'user', user.id, { phone });
     return user;
   }
 
   @RequirePermissions('admin.users.write')
   @Patch('users/:id/profile')
-  async updateUserProfile(@Param('id') id: string, @Body() dto: UpdateUserProfileDto) {
+  async updateUserProfile(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserProfileDto,
+    @CurrentUser('id') actorId?: string,
+  ) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('not found');
     if (dto.phone?.trim() && normalizeIranPhone(dto.phone) !== normalizeIranPhone(existing.phone || '')) {
       const nextPhone = normalizeIranPhone(dto.phone);
-      if (await this.prisma.user.findFirst({ where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } } })) throw new ConflictException('phone exists');
+      if (
+        await this.prisma.user.findFirst({
+          where: { phone: nextPhone, accountType: existing.accountType, NOT: { id } },
+        })
+      ) {
+        throw new ConflictException('phone exists');
+      }
       dto.phone = nextPhone;
       await this.prisma.user.update({ where: { id }, data: { phone: dto.phone.trim() } });
     }
@@ -159,39 +274,139 @@ export class AdminOpsController {
     if (dto.lastName !== undefined) profileData.lastName = dto.lastName.trim() || null;
     if (Object.keys(profileData).length) {
       await this.prisma.profile.upsert({
-        where: { userId: id }, update: profileData,
-        create: { userId: id, displayName: profileData.displayName || existing.phone || 'User', firstName: profileData.firstName ?? null, lastName: profileData.lastName ?? null },
+        where: { userId: id },
+        update: profileData,
+        create: {
+          userId: id,
+          displayName: profileData.displayName || existing.phone || 'User',
+          firstName: profileData.firstName ?? null,
+          lastName: profileData.lastName ?? null,
+        },
       });
     }
-    return this.prisma.user.findUnique({ where: { id }, include: { profile: true, userRoles: { include: { role: true } } } });
+    await this.audit(actorId, 'admin.user.profile.update', 'user', id, dto);
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { profile: true, userRoles: { include: { role: true } } },
+    });
   }
 
   @RequirePermissions('admin.notifications.send')
   @Post('notifications/notify')
-  async notifyUsers(@Body() dto: NotifyUsersDto) {
-    const title = String(dto.title || '').trim();
-    const body = String(dto.body || '').trim();
+  async notifyUsers(@Body() dto: NotifyUsersDto, @CurrentUser('id') actorId?: string) {
+    const title = String(dto.title || '').trim().slice(0, 200);
+    const body = String(dto.body || '').trim().slice(0, 2000);
     if (!title || !body) throw new BadRequestException('title/body required');
-    const ids = Array.from(new Set((dto.userIds || []).filter(Boolean)));
-    const campaignId = `cmp_${Date.now().toString(36)}`;
-    let notified = 0, failed = 0;
-    for (const userId of ids) {
+    const ids = Array.from(new Set((dto.userIds || []).filter(Boolean))).slice(0, 5000);
+    if (!ids.length) throw new BadRequestException('userIds required');
+
+    const campaignId = `cmp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const batchSize = 100;
+    let notified = 0;
+    let failed = 0;
+
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const chunk = ids.slice(i, i + batchSize);
       try {
-        await this.prisma.notification.create({ data: { userId, type: 'system' as any, title, body, data: { campaignId } } });
-        notified++;
-      } catch { failed++; }
+        const result = await this.prisma.notification.createMany({
+          data: chunk.map((userId) => ({
+            userId,
+            type: 'system' as any,
+            title,
+            body,
+            data: {
+              campaignId,
+              deliveryStatus: 'sent',
+              smsRequested: !!dto.sms,
+            } as any,
+          })),
+          skipDuplicates: true,
+        });
+        notified += result.count;
+        failed += chunk.length - result.count;
+      } catch {
+        // fallback per-user
+        for (const userId of chunk) {
+          try {
+            await this.prisma.notification.create({
+              data: {
+                userId,
+                type: 'system' as any,
+                title,
+                body,
+                data: { campaignId, deliveryStatus: 'sent', smsRequested: !!dto.sms } as any,
+              },
+            });
+            notified++;
+          } catch {
+            failed++;
+          }
+        }
+      }
     }
-    return { success: true, notified, smsSent: 0, campaignId, failed };
+
+    // Honest SMS: bulk SMS is not wired in this controller (avoids silent smsSent:0 lie).
+    const smsSent = 0;
+    const smsSkippedReason = dto.sms
+      ? 'bulk_sms_not_wired_use_provider_queue'
+      : undefined;
+
+    // Persist campaign summary for listCampaigns (survives beyond last 1500 notifs)
+    const campaignMeta = {
+      campaignId,
+      title,
+      body,
+      createdAt: new Date().toISOString(),
+      total: ids.length,
+      sent: notified,
+      failed,
+      smsRequested: !!dto.sms,
+      smsSent,
+      smsSkippedReason,
+      actorId: actorId || null,
+    };
+    try {
+      await this.prisma.platformSetting.upsert({
+        where: { key: `campaign_meta_${campaignId}` },
+        create: { key: `campaign_meta_${campaignId}`, value: campaignMeta as object },
+        update: { value: campaignMeta as object },
+      });
+      // maintain index of recent campaign ids
+      const idxKey = 'campaign_index_v1';
+      const idxRow = await this.prisma.platformSetting.findUnique({ where: { key: idxKey } });
+      const prev = (idxRow?.value as any)?.ids as string[] | undefined;
+      const idsList = [campaignId, ...(Array.isArray(prev) ? prev : [])].slice(0, 500);
+      await this.prisma.platformSetting.upsert({
+        where: { key: idxKey },
+        create: { key: idxKey, value: { ids: idsList } as object },
+        update: { value: { ids: idsList } as object },
+      });
+    } catch {
+      /* non-blocking */
+    }
+
+    await this.audit(actorId, 'admin.notifications.notify', 'campaign', campaignId, {
+      notified,
+      failed,
+      smsRequested: !!dto.sms,
+    });
+
+    return {
+      success: true,
+      notified,
+      smsSent,
+      smsSkippedReason,
+      campaignId,
+      failed,
+    };
   }
 
   @RequirePermissions('admin.notifications.send')
   @Post('notifications/notify-by-filter')
-  async notifyByFilter(@Body() dto: NotifyByFilterDto) {
+  async notifyByFilter(@Body() dto: NotifyByFilterDto, @CurrentUser('id') actorId?: string) {
     const limit = Math.min(5000, Math.max(1, Number(dto.limit) || 500));
     const filters = dto.filters || {};
-    const where: Prisma.UserWhereInput = {
-      status: UserStatus.active,
-    };
+    const where: Prisma.UserWhereInput = { status: UserStatus.active };
     const accountType = filters.accountType;
     if (accountType === 'customer' || accountType === 'professional') {
       where.accountType = accountType as any;
@@ -208,12 +423,15 @@ export class AdminOpsController {
       select: { id: true },
       orderBy: { createdAt: 'desc' },
     });
-    return this.notifyUsers({
-      userIds: users.map((u) => u.id),
-      title: dto.title,
-      body: dto.body,
-      sms: dto.sms,
-    });
+    return this.notifyUsers(
+      {
+        userIds: users.map((u) => u.id),
+        title: dto.title,
+        body: dto.body,
+        sms: dto.sms,
+      },
+      actorId,
+    );
   }
 
   @RequirePermissions('admin.notifications.send')
@@ -221,42 +439,191 @@ export class AdminOpsController {
   async listCampaigns(@Query('page') pageStr?: string, @Query('limit') limitStr?: string) {
     const page = Math.max(1, Number(pageStr) || 1);
     const limit = Math.min(50, Math.max(1, Number(limitStr) || 20));
-    const rows = await this.prisma.notification.findMany({ orderBy: { createdAt: 'desc' }, take: 1500, select: { id: true, title: true, body: true, createdAt: true, readAt: true, data: true } });
+
+    // Prefer campaign index + meta rows (#82.r2.11)
+    const idxRow = await this.prisma.platformSetting.findUnique({
+      where: { key: 'campaign_index_v1' },
+    });
+    const ids = ((idxRow?.value as any)?.ids as string[]) || [];
+    if (ids.length) {
+      const slice = ids.slice((page - 1) * limit, page * limit);
+      const metas = await Promise.all(
+        slice.map(async (cid) => {
+          const row = await this.prisma.platformSetting.findUnique({
+            where: { key: `campaign_meta_${cid}` },
+          });
+          return (row?.value as any) || {
+            campaignId: cid,
+            title: '',
+            body: '',
+            createdAt: null,
+            total: 0,
+            sent: 0,
+            failed: 0,
+            read: 0,
+          };
+        }),
+      );
+      return {
+        items: metas,
+        meta: {
+          page,
+          limit,
+          total: ids.length,
+          totalPages: Math.ceil(ids.length / limit) || 0,
+        },
+      };
+    }
+
+    // Fallback: derive from recent notifications (legacy)
+    const rows = await this.prisma.notification.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 1500,
+      select: { id: true, title: true, body: true, createdAt: true, readAt: true, data: true },
+    });
     const map = new Map<string, any>();
     for (const r of rows) {
-      const cid = (r.data as any)?.campaignId || `legacy_${r.id}`;
-      if (!map.has(cid)) map.set(cid, { campaignId: cid, title: r.title, body: r.body, createdAt: r.createdAt, total: 0, sent: 0, failed: 0, read: 0 });
-      const c = map.get(cid); c.total++; c.sent++; if (r.readAt) c.read++;
+      const data = (r.data as any) || {};
+      const cid = data.campaignId || `legacy_${r.id}`;
+      if (!map.has(cid)) {
+        map.set(cid, {
+          campaignId: cid,
+          title: r.title,
+          body: r.body,
+          createdAt: r.createdAt,
+          total: 0,
+          sent: 0,
+          failed: 0,
+          read: 0,
+        });
+      }
+      const c = map.get(cid);
+      c.total++;
+      if (data.deliveryStatus === 'failed') c.failed++;
+      else c.sent++;
+      if (r.readAt) c.read++;
     }
     const all = Array.from(map.values());
-    return { items: all.slice((page - 1) * limit, page * limit), meta: { page, limit, total: all.length, totalPages: Math.ceil(all.length / limit) || 0 } };
+    return {
+      items: all.slice((page - 1) * limit, page * limit),
+      meta: {
+        page,
+        limit,
+        total: all.length,
+        totalPages: Math.ceil(all.length / limit) || 0,
+      },
+    };
   }
 
   @RequirePermissions('admin.notifications.send')
   @Get('notifications/campaigns/:campaignId')
-  async campaignRecipients(@Param('campaignId') campaignId: string, @Query('page') pageStr?: string, @Query('limit') limitStr?: string) {
+  async campaignRecipients(
+    @Param('campaignId') campaignId: string,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+  ) {
     const page = Math.max(1, Number(pageStr) || 1);
     const limit = Math.min(100, Math.max(1, Number(limitStr) || 50));
     const where: any = { data: { path: ['campaignId'], equals: campaignId } };
     const [rows, total] = await Promise.all([
-      this.prisma.notification.findMany({ where, skip: (page - 1) * limit, take: limit, include: { user: { select: { phone: true, profile: { select: { displayName: true } } } } } }),
+      this.prisma.notification.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          user: { select: { phone: true, profile: { select: { displayName: true } } } },
+        },
+      }),
       this.prisma.notification.count({ where }),
     ]);
-    return { campaignId, items: rows.map(r => ({ id: r.id, userId: r.userId, phone: r.user?.phone, displayName: r.user?.profile?.displayName, status: r.readAt ? 'read' : 'sent', createdAt: r.createdAt })), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 0 } };
+    return {
+      campaignId,
+      items: rows.map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        phone: r.user?.phone,
+        displayName: r.user?.profile?.displayName,
+        status:
+          (r.data as any)?.deliveryStatus === 'failed'
+            ? 'failed'
+            : r.readAt
+              ? 'read'
+              : 'sent',
+        createdAt: r.createdAt,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 0,
+      },
+    };
   }
 
   @RequirePermissions('admin.notifications.send')
   @Post('notifications/campaigns/:campaignId/retry-failed')
-  retryCampaign(@Param('campaignId') campaignId: string) {
-    return { success: true, retried: 0, campaignId, totalFailed: 0 };
+  async retryCampaign(
+    @Param('campaignId') campaignId: string,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    // Re-create notifications marked failed for this campaign
+    const failed = await this.prisma.notification.findMany({
+      where: {
+        AND: [
+          { data: { path: ['campaignId'], equals: campaignId } },
+          { data: { path: ['deliveryStatus'], equals: 'failed' } },
+        ],
+      },
+      take: 500,
+    });
+    let retried = 0;
+    for (const n of failed) {
+      try {
+        await this.prisma.notification.update({
+          where: { id: n.id },
+          data: {
+            data: {
+              ...((n.data as object) || {}),
+              campaignId,
+              deliveryStatus: 'sent',
+              retriedAt: new Date().toISOString(),
+            } as any,
+          },
+        });
+        retried++;
+      } catch {
+        /* skip */
+      }
+    }
+    await this.audit(actorId, 'admin.notifications.retry_failed', 'campaign', campaignId, {
+      retried,
+      totalFailed: failed.length,
+    });
+    return {
+      success: true,
+      retried,
+      campaignId,
+      totalFailed: failed.length,
+    };
   }
 
   @RequirePermissions('admin.professionals.write')
   @Patch('professionals/:id/feature')
-  async setFeaturedAlias(@Param('id') id: string, @Body() dto: FeaturedDto) {
+  async setFeaturedAlias(
+    @Param('id') id: string,
+    @Body() dto: FeaturedDto,
+    @CurrentUser('id') actorId?: string,
+  ) {
     const pro = await this.prisma.professional.findUnique({ where: { id } });
     if (!pro) throw new NotFoundException('not found');
-    return this.prisma.professional.update({ where: { id }, data: { isFeatured: !!dto.isFeatured } });
+    const updated = await this.prisma.professional.update({
+      where: { id },
+      data: { isFeatured: !!dto.isFeatured },
+    });
+    await this.audit(actorId, 'admin.professional.featured', 'professional', id, {
+      isFeatured: !!dto.isFeatured,
+    });
+    return updated;
   }
 
   @RequirePermissions('admin.professionals.write')
@@ -267,7 +634,6 @@ export class AdminOpsController {
   ) {
     const phone = normalizeIranPhone(body.phone || '');
     if (!phone || phone.length < 10) throw new BadRequestException('موبایل الزامی است');
-    // #82.r2.7/8 — dual-role: look up professional accountType first
     let user: any = await this.prisma.user.findFirst({
       where: { phone, accountType: 'professional' as any },
       include: { professional: true, profile: true },
@@ -288,16 +654,24 @@ export class AdminOpsController {
         },
         include: { professional: true, profile: true },
       });
-      // attach professional role when roles table exists
       try {
         const role = await this.prisma.role.findUnique({ where: { name: 'professional' } });
         if (role) {
           await this.prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
         }
-      } catch { /* non-blocking */ }
+      } catch {
+        /* non-blocking */
+      }
     }
     if (user.professional) return user.professional;
-    const baseSlug = (body.title || body.displayName || phone).toString().trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u0600-\u06FF-]+/g, '').slice(0, 40) || 'pro';
+    const baseSlug =
+      (body.title || body.displayName || phone)
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w\u0600-\u06FF-]+/g, '')
+        .slice(0, 40) || 'pro';
     let slug = baseSlug;
     for (let i = 0; i < 5; i++) {
       const taken = await this.prisma.professional.findUnique({ where: { slug } });
@@ -305,20 +679,14 @@ export class AdminOpsController {
       slug = `${baseSlug}-${Date.now().toString(36).slice(-4)}`;
     }
     const pro = await this.prisma.professional.create({
-      data: { userId: user.id, slug, title: (body.title || body.displayName || 'زیباگر').trim(), status: 'draft' as any },
+      data: {
+        userId: user.id,
+        slug,
+        title: (body.title || body.displayName || 'زیباگر').trim(),
+        status: 'draft' as any,
+      },
     });
-    try {
-      await this.prisma.auditLog.create({
-        data: {
-          actorId: actorId || null,
-          action: 'professional.create',
-          entityType: 'professional',
-          entityId: pro.id,
-          after: { phone, slug } as any,
-        },
-      });
-    } catch { /* non-blocking */ }
+    await this.audit(actorId, 'professional.create', 'professional', pro.id, { phone, slug });
     return pro;
   }
-
 }
