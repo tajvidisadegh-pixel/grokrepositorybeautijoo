@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
@@ -18,7 +19,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 class CreateQuoteDto {
   @IsUUID() professionalId!: string;
   @IsOptional() @IsUUID() professionalServiceId?: string;
-  @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsString() @MaxLength(2000) note?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) photoUrls?: string[];
 }
 
@@ -26,7 +27,7 @@ class RespondQuoteDto {
   @IsIn(['quoted', 'declined']) status!: 'quoted' | 'declined';
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) quotedPrice?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(5) quotedDurationMin?: number;
-  @IsOptional() @IsString() @MinLength(0) responseNote?: string;
+  @IsOptional() @IsString() @MaxLength(2000) responseNote?: string;
 }
 
 @ApiTags('quotes')
