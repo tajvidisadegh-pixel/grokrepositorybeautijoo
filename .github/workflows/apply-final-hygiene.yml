@@ -1,0 +1,138 @@
+name: apply-final-hygiene
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-final-hygiene.yml'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Final hygiene patches
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+
+          # 1) Fix revalidate: never use NEXT_PUBLIC_ for secret
+          r = Path('frontend/src/app/api/revalidate/route.ts')
+          t = r.read_text(encoding='utf-8')
+          old = "process.env.REVALIDATE_SECRET || process.env.NEXT_PUBLIC_REVALIDATE_SECRET || '';"
+          new = "process.env.REVALIDATE_SECRET || ''; // never NEXT_PUBLIC_* for secrets (#82.final)"
+          if old in t:
+              t = t.replace(old, new, 1)
+              r.write_text(t, encoding='utf-8')
+              print('revalidate secret fix ok')
+          else:
+              print('revalidate skip')
+
+          # 2) Also accept BOOKING_FREE_CANCEL_HOURS alias CANCEL_MIN_HOURS_BEFORE in cancel
+          b = Path('backend/src/bookings/bookings.service.ts')
+          bt = b.read_text(encoding='utf-8')
+          if "BOOKING_FREE_CANCEL_HOURS || '24'" in bt and 'CANCEL_MIN_HOURS_BEFORE' not in bt:
+              bt = bt.replace(
+                  "process.env.BOOKING_FREE_CANCEL_HOURS || '24'",
+                  "process.env.BOOKING_FREE_CANCEL_HOURS || process.env.CANCEL_MIN_HOURS_BEFORE || '24'",
+                  1,
+              )
+              b.write_text(bt, encoding='utf-8')
+              print('cancel env alias ok')
+          else:
+              print('cancel env skip')
+
+          # 3) backend/.env.example refresh
+          env = Path('backend/.env.example')
+          e = env.read_text(encoding='utf-8') if env.exists() else ''
+          extras = '''
+
+# ---- OTP limits (#82.med15) ----
+# OTP_MAX_PER_IP_10M=20
+# per-phone limits via OTP_MAX_PER_HOUR / OTP_MAX_PER_DAY in configuration
+
+# ---- Cancel policy (#82.med9) ----
+# Free full refund window (hours before start). Alias: CANCEL_MIN_HOURS_BEFORE
+# BOOKING_FREE_CANCEL_HOURS=24
+# CANCEL_MIN_HOURS_BEFORE=24
+
+# ---- Boot seeds (#82.infra20) ----
+# seed-catalog only when explicitly enabled (default off)
+# RUN_SEED_CATALOG_ON_BOOT=false
+
+# ---- Storage (#82.infra19) ----
+# Prefer object storage in production
+# STORAGE_PROVIDER=s3
+# STORAGE_LOCAL_PATH=/app/uploads
+# S3_ENDPOINT=
+# S3_BUCKET=
+# S3_ACCESS_KEY=
+# S3_SECRET_KEY=
+# S3_REGION=
+
+# ---- Payment mode (when gateway ready) ----
+# BOOKING_PAYMENT_MODE=auto
+# PAYMENT_PROVIDER=zarinpal
+'''
+          if 'BOOKING_FREE_CANCEL_HOURS' not in e:
+              e = e.rstrip() + extras
+              env.write_text(e, encoding='utf-8')
+              print('env.example ok')
+          else:
+              print('env.example skip')
+
+          # 4) gitleaks workflow
+          gl = Path('.github/workflows/gitleaks.yml')
+          gl.write_text('''name: gitleaks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+''', encoding='utf-8')
+          print('gitleaks workflow ok')
+
+          # 5) strengthen SECURITY doc
+          sec = Path('docs/SECURITY_ISSUE_82_9.md')
+          sec.write_text('''# Security hygiene (#82.9 / #82.infra21)
+
+## Done in code
+- Image-only `/uploads` (no directory listing, path traversal blocked)
+- OTP purpose whitelist + per-IP rate limit
+- Auth throttles tightened
+- `REVALIDATE_SECRET` must not be `NEXT_PUBLIC_*`
+- Gitleaks workflow on push/PR (`.github/workflows/gitleaks.yml`)
+- Seed catalog gated by `RUN_SEED_CATALOG_ON_BOOT`
+
+## Owner actions (required)
+1. **Make the repository private** — GitHub → Settings → Danger Zone → Change visibility → Private.
+2. After first gitleaks run, open the Actions log. If findings exist, **rotate** every exposed secret (JWT, DB, SMS, payment, S3, REVALIDATE_SECRET).
+3. Confirm production env uses `STORAGE_PROVIDER=s3` when multi-instance.
+4. When payment gateway is ready: set `BOOKING_PAYMENT_MODE` + `PAYMENT_PROVIDER` together and lock NOK callback auth.
+
+## Env reference
+See `backend/.env.example` for `BOOKING_FREE_CANCEL_HOURS`, `OTP_MAX_PER_IP_10M`, `RUN_SEED_CATALOG_ON_BOOT`.
+''', encoding='utf-8')
+          print('security doc ok')
+          print('ALL_OK')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "chore(#82.final): env.example, gitleaks CI, revalidate secret, cancel env alias, security doc"
+          git push origin HEAD:main
