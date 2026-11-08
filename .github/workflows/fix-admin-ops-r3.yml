@@ -1,0 +1,72 @@
+name: fix-admin-ops-r3
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-admin-ops-r3.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch admin-ops
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/admin/admin-ops.controller.ts')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace(
+              'if (depth > 12) return null;',
+              "if (depth > 12) return typeof value === 'string' ? value.replace(/<[^>]*>/g, '').slice(0, 5000) : value;",
+              1,
+          )
+          if 'rawSize > 400_000' not in t:
+              t = t.replace(
+                  "async putContent(@Body() body: any, @CurrentUser('id') actorId?: string) {\n    const cleaned = stripHtmlDeep({",
+                  "async putContent(@Body() body: any, @CurrentUser('id') actorId?: string) {\n    const rawSize = Buffer.byteLength(JSON.stringify(body ?? {}), 'utf8');\n    if (rawSize > 400_000) {\n      throw new BadRequestException('payload too large');\n    }\n    const cleaned = stripHtmlDeep({",
+                  1,
+              )
+          if 'sbSize > 400_000' not in t:
+              t = t.replace(
+                  "if (listRaw.length > 200) throw new BadRequestException('\u062d\u062f\u0627\u06a9\u062b\u0631 \u06f2\u06f0\u06f0 \u0628\u062e\u0634 \u0645\u062c\u0627\u0632 \u0627\u0633\u062a');\n    const list = stripHtmlDeep(listRaw) as any[];",
+                  "if (listRaw.length > 200) throw new BadRequestException('\u062d\u062f\u0627\u06a9\u062b\u0631 \u06f2\u06f0\u06f0 \u0628\u062e\u0634 \u0645\u062c\u0627\u0632 \u0627\u0633\u062a');\n    const sbSize = Buffer.byteLength(JSON.stringify(listRaw), 'utf8');\n    if (sbSize > 400_000) throw new BadRequestException('payload too large');\n    const list = stripHtmlDeep(listRaw) as any[];",
+                  1,
+              )
+          # English fallback for site-builder if persian match failed
+          if 'sbSize > 400_000' not in t and 'listRaw.length > 200' in t:
+              t = t.replace(
+                  'if (listRaw.length > 200) throw new BadRequestException',
+                  "const sbSize = Buffer.byteLength(JSON.stringify(listRaw), 'utf8');\n    if (sbSize > 400_000) throw new BadRequestException('payload too large');\n    if (listRaw.length > 200) throw new BadRequestException",
+                  1,
+              )
+          old = 'const maxSms = Math.min(ids.length, Number(process.env.BULK_SMS_MAX || 200));'
+          new = "const envMax = parseInt(process.env.BULK_SMS_MAX || '200', 10);\n      const hardMax = Math.min(200, Number.isFinite(envMax) && envMax > 0 ? envMax : 200);\n      const maxSms = Math.min(ids.length, hardMax);"
+          if old in t:
+              t = t.replace(old, new, 1)
+              print('sms cap')
+          t = t.replace(
+              "deliveryStatus: 'sent',\n              smsRequested: !!dto.sms,",
+              "deliveryStatus: dto.sms ? 'pending' : 'sent',\n              smsRequested: !!dto.sms,",
+          )
+          t = t.replace(
+              "data: { campaignId, deliveryStatus: 'sent', smsRequested: !!dto.sms } as any,",
+              "data: { campaignId, deliveryStatus: dto.sms ? 'pending' : 'sent', smsRequested: !!dto.sms } as any,",
+          )
+          old_idx = 'const idsList = [campaignId, ...(Array.isArray(prev) ? prev : [])].slice(0, 500);'
+          new_idx = 'const prevIds = Array.isArray(prev) ? prev.filter((x: string) => x !== campaignId) : [];\n      const idsList = [campaignId, ...prevIds].slice(0, 500);'
+          if old_idx in t:
+              t = t.replace(old_idx, new_idx, 1)
+              print('idx')
+          p.write_text(t, encoding='utf-8')
+          print('done', 'hardMax' in t, '400_000' in t)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin-ops.controller.ts
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(#82.r3): CMS payload limits, SMS hardcap, stripHtmlDeep, campaign index"
+          git push origin HEAD:main
