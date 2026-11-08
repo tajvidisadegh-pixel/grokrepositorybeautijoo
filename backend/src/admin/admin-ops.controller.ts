@@ -366,17 +366,24 @@ export class AdminOpsController {
       const maxSms = Math.min(ids.length, hardMax);
       const usersRaw = await this.prisma.user.findMany({
         where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null }, status: UserStatus.active },
-        select: {
-          id: true,
-          phone: true,
-          profile: { select: { bio: true } },
-        },
+        select: { id: true, phone: true },
       });
-      // #r4.gap — skip explicit opt-out markers in bio (marketing:optout)
-      const users = usersRaw.filter((u) => {
-        const bio = (u.profile?.bio || '').toLowerCase();
-        return !bio.includes('sms:optout') && !bio.includes('marketing:optout');
-      });
+      // #r4.bugfix — opt-out list in platform_setting (not free-text bio)
+      let optOutIds = new Set<string>();
+      try {
+        const optRow = await this.prisma.platformSetting.findUnique({
+          where: { key: 'sms_opt_out_user_ids' },
+        });
+        const arr = Array.isArray(optRow?.value)
+          ? (optRow!.value as unknown[])
+          : Array.isArray((optRow?.value as any)?.ids)
+            ? (optRow!.value as any).ids
+            : [];
+        optOutIds = new Set(arr.map((x) => String(x)));
+      } catch {
+        /* ignore */
+      }
+      const users = usersRaw.filter((u) => !optOutIds.has(u.id));
       if (users.length < usersRaw.length) {
         smsSkippedReason = (smsSkippedReason ? smsSkippedReason + ',' : '') + 'opt_out_skipped';
       }

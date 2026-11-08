@@ -1376,7 +1376,7 @@ export class AdminService {
     if ((userIds || []).length > 50) {
       throw new BadRequestException('حداکثر ۵۰ کاربر در هر درخواست');
     }
-    // Pre-check all IDs so we fail fast before any delete (best-effort atomicity)
+    // All-or-nothing precheck: if any ID has history, delete none
     const blocked: string[] = [];
     for (const id of ids) {
       const [bookings, payments] = await Promise.all([
@@ -1390,21 +1390,14 @@ export class AdminService {
         `حذف گروهی متوقف شد؛ این کاربران سابقه رزرو/پرداخت دارند: ${blocked.slice(0, 5).join(', ')}`,
       );
     }
-    let deleted = 0;
-    const failed: string[] = [];
-    await this.prisma.$transaction(async () => {
-      for (const id of ids) {
-        try {
-          await this.hardDeleteUser(id, actorId);
-          deleted += 1;
-        } catch (e) {
-          failed.push(id);
-          this.logger.warn(`bulkHardDelete fail ${id}: ${(e as Error)?.message || e}`);
-          throw e; // abort remaining deletes in this batch
-        }
-      }
-    }, { timeout: 60_000 });
-    return { deleted, failed, cappedAt: 50 };
+    // Sequential deletes after precheck (each hardDeleteUser has its own tx).
+    // Not a single multi-user DB transaction — precheck prevents partial history loss.
+    const deletedIds: string[] = [];
+    for (const id of ids) {
+      await this.hardDeleteUser(id, actorId);
+      deletedIds.push(id);
+    }
+    return { deleted: deletedIds.length, failed: [] as string[], cappedAt: 50, deletedIds };
   }
 
   async hardDeleteProfessional(id: string, actorId?: string) {
@@ -1425,9 +1418,23 @@ export class AdminService {
         'سوابق پرداخت مرتبط وجود دارد؛ حذف دائمی مجاز نیست',
       );
     }
+    const media = await this.prisma.mediaAsset.findMany({
+      where: { professionalId: id },
+      select: { id: true, storageKey: true, url: true },
+    });
+    for (const m of media) {
+      const key = m.storageKey || null;
+      if (key && this.storage.delete) {
+        try {
+          await this.storage.delete(key);
+        } catch (e) {
+          this.logger.warn(`hardDeleteProfessional storage delete ${key}: ${(e as Error)?.message || e}`);
+        }
+      }
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.review.deleteMany({ where: { professionalId: id } });
-      await tx.mediaAsset.deleteMany({ where: { professionalId: id } }).catch(() => undefined as never);
+      await tx.mediaAsset.deleteMany({ where: { professionalId: id } });
       await tx.professional.delete({ where: { id } });
     });
     await this.audit(actorId, 'professional.hard_delete', 'professional', id, { userId: pro.userId, slug: pro.slug }, null);
@@ -1554,11 +1561,12 @@ export class AdminService {
   }
   /** Overlay env-backed runtime values so panel keys match process env (#r4.H2 gap). */
   private envOverlay(): Record<string, unknown> {
+    // Defaults aligned with bookings/auth runtime env fallbacks
     return {
       booking: {
-        cancelWindowHours: Number(process.env.BOOKING_FREE_CANCEL_HOURS || 2),
+        cancelWindowHours: Number(process.env.BOOKING_FREE_CANCEL_HOURS || 24),
         holdMinutes: Number(process.env.BOOKING_HOLD_MINUTES || 15),
-        minLeadHours: Number(process.env.BOOKING_MIN_LEAD_HOURS || 2),
+        minLeadHours: Number(process.env.BOOKING_MIN_LEAD_HOURS || 4),
       },
       auth: {
         maxOtpAttempts: Number(process.env.OTP_MAX_ATTEMPTS || 3),
@@ -1573,7 +1581,7 @@ export class AdminService {
       booking: {
         slotStepMin: 30,
         holdMinutes: 15,
-        cancelWindowHours: 2,
+        cancelWindowHours: 24,
         allowSameDay: true,
       },
       commission: { ratePercent: 10 },
@@ -1590,8 +1598,8 @@ export class AdminService {
         featuredBoost: true,
       },
       auth: {
-        otpTtlSeconds: 120,
-        maxOtpAttempts: 5,
+        otpTtlSeconds: 300,
+        maxOtpAttempts: 3,
         loginRateLimitPerMinute: 10,
       },
       privacy: {
@@ -1636,10 +1644,12 @@ export class AdminService {
       row?.value && typeof row.value === 'object' && !Array.isArray(row.value)
         ? (row.value as Record<string, unknown>)
         : {};
-    return this.deepMerge(
+    // defaults <- stored panel <- env overlay (env wins for ops-critical knobs)
+    const merged = this.deepMerge(
       this.platformDefaults() as unknown as Record<string, unknown>,
       stored,
     );
+    return this.deepMerge(merged, this.envOverlay());
   }
 
   async updatePlatformSettings(

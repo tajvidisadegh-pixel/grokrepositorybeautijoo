@@ -50,7 +50,7 @@ RUN mkdir -p /app/standalone \
   && ln -sf /app/server.js /app/standalone/server.js \
   && ln -sfn /app/node_modules /app/standalone/node_modules \
   && mkdir -p /app/standalone/.next \
-  && ln -sfn /app/.next/static /app/standalone/.next/static 2>/dev/null || true \
+  && ln -sfn /app/.next/static /app/standalone/.next/static \
   && ln -sfn /app/public /app/standalone/public
 
 # #r4.D1 — run as non-root
