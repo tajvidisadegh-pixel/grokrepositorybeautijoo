@@ -1,0 +1,41 @@
+name: apply-high1-4
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-high1-4.yml'
+      - '.github/payloads/high1-4/**'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble and write services
+        run: |
+          set -euo pipefail
+          mkdir -p backend/src/bookings backend/src/auth
+          cat .github/payloads/high1-4/book.* | base64 -d > backend/src/bookings/bookings.service.ts
+          cat .github/payloads/high1-4/auth.* | base64 -d > backend/src/auth/auth.service.ts
+          grep -q 'class BookingsService' backend/src/bookings/bookings.service.ts
+          grep -q 'class AuthService' backend/src/auth/auth.service.ts
+          grep -q 'recent >= 3' backend/src/bookings/bookings.service.ts
+          grep -q 'maskedItems' backend/src/bookings/bookings.service.ts
+          grep -q 'delete_account:' backend/src/auth/auth.service.ts
+          grep -q 'cancelledProCount' backend/src/auth/auth.service.ts
+          grep -qv 'PLACEHOLDER' backend/src/bookings/bookings.service.ts
+          grep -qv 'PLACEHOLDER' backend/src/auth/auth.service.ts
+          wc -l backend/src/bookings/bookings.service.ts backend/src/auth/auth.service.ts
+          echo APPLY_OK
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts backend/src/auth/auth.service.ts
+          if git diff --staged --quiet; then
+            echo no-change
+            exit 0
+          fi
+          git commit -m "fix(#82.high1-4): reportIssue for pro + rate-limit, OTP delete confirm, cancel bookings & hide pro, mask phones, #82.19 cleanup"
+          git push origin HEAD:main
