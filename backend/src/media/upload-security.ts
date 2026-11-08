@@ -3,6 +3,7 @@
  * - size / count limits (image 10MB, video 500MB)
  * - reject polyglot / executable magic (beyond image sniff)
  * Magic-byte image detection remains in image-sniff.ts.
+ * #82.r2.3 — video/* is no longer exempt from HTML/script polyglot checks.
  */
 
 import { BadRequestException } from '@nestjs/common';
@@ -111,10 +112,36 @@ export function findSuspiciousReason(buf: Buffer): string | null {
   return null;
 }
 
+/** True if buffer looks like a real video container (ftyp/webm/matroska). */
+function looksLikeVideoContainer(buf: Buffer): boolean {
+  if (buf.length < 12) return false;
+  // ISO BMFF (mp4/mov): ....ftyp
+  if (buf.toString('ascii', 4, 8) === 'ftyp') return true;
+  // WebM / Matroska EBML
+  if (headerMatches(buf, [0x1a, 0x45, 0xdf, 0xa3])) return true;
+  return false;
+}
+
 export function assertNotSuspicious(buf: Buffer, mime?: string | null): void {
-  // Skip polyglot checks for known video containers (mp4/webm/mov)
-  if (isVideoMime(mime)) return;
+  // #82.r2.3 — always reject HTML/script polyglots, including when client claims video/*
   const reason = findSuspiciousReason(buf);
+  if (reason === 'html_or_script' || reason === 'svg' || reason === 'server_script') {
+    throw new BadRequestException(
+      'فایل مشکوک شناسایی شد و رد شد (فرمت یا محتوای غیرمجاز)',
+    );
+  }
+  if (isVideoMime(mime)) {
+    // Client claims video: require container magic; still reject PE/ELF/ZIP disguised as video
+    if (reason && reason !== null) {
+      throw new BadRequestException(
+        'فایل مشکوک شناسایی شد و رد شد (فرمت یا محتوای غیرمجاز)',
+      );
+    }
+    if (!looksLikeVideoContainer(buf)) {
+      throw new BadRequestException('فرمت ویدیو معتبر نیست');
+    }
+    return;
+  }
   if (reason) {
     throw new BadRequestException(
       'فایل مشکوک شناسایی شد و رد شد (فرمت یا محتوای غیرمجاز)',
