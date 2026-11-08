@@ -1,0 +1,50 @@
+name: capture-build-error
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/capture-build-error.yml'
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Build and capture errors
+        run: |
+          set +e
+          npm run build > /tmp/build.log 2>&1
+          code=$?
+          echo "exit=$code"
+          tail -n 120 /tmp/build.log
+          mkdir -p ../docs
+          {
+            echo "# Backend build log"
+            echo
+            echo "exit=$code"
+            echo
+            echo '```'
+            tail -n 200 /tmp/build.log
+            echo '```'
+          } > ../docs/LAST_BUILD_ERROR.md
+          exit 0
+      - name: Commit log
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/LAST_BUILD_ERROR.md
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "chore: capture backend build error log"
+          git push origin HEAD:main
