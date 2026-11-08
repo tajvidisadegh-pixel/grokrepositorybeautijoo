@@ -21,7 +21,14 @@ const DAY_MAP: Record<number, DayOfWeek> = {
 };
 
 function parseTime(t: string): number {
-  const [h, m] = t.split(':').map(Number);
+  // #82.r2 — reject incomplete / NaN times so slot loops do not silently fail
+  const parts = String(t || '').split(':');
+  if (parts.length < 2) throw new BadRequestException('ساعت کاری نامعتبر');
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    throw new BadRequestException('ساعت کاری نامعتبر');
+  }
   return h * 60 + m;
 }
 

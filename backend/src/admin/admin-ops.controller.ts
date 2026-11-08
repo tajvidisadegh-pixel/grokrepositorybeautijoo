@@ -10,6 +10,8 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  Inject,
+  Logger,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
@@ -17,6 +19,7 @@ import { PaymentStatus, UserStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
 
 class CreateCustomerDto {
   @IsString() phone!: string;
@@ -84,7 +87,11 @@ function stripHtmlDeep(value: unknown, depth = 0): unknown {
 @ApiBearerAuth()
 @Controller('admin')
 export class AdminOpsController {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AdminOpsController.name);
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
+  ) {}
 
   private async audit(
     actorId: string | undefined,
@@ -345,11 +352,32 @@ export class AdminOpsController {
       }
     }
 
-    // Honest SMS: bulk SMS is not wired in this controller (avoids silent smsSent:0 lie).
-    const smsSent = 0;
-    const smsSkippedReason = dto.sms
-      ? 'bulk_sms_not_wired_use_provider_queue'
-      : undefined;
+    // #82.r2.sms — optional bulk SMS (capped, sequential batches)
+    let smsSent = 0;
+    let smsFailed = 0;
+    let smsSkippedReason: string | undefined;
+    if (dto.sms) {
+      const maxSms = Math.min(ids.length, Number(process.env.BULK_SMS_MAX || 200));
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null } },
+        select: { id: true, phone: true },
+      });
+      const msg = `${title}
+${body}`.slice(0, 400);
+      for (const u of users) {
+        if (!u.phone) continue;
+        try {
+          await this.sms.sendNotification(u.phone, msg);
+          smsSent++;
+        } catch (e) {
+          smsFailed++;
+          this.logger.warn(`bulk SMS fail user=${u.id}: ${e}`);
+        }
+      }
+      if (ids.length > maxSms) {
+        smsSkippedReason = `capped_at_${maxSms}`;
+      }
+    }
 
     // Persist campaign summary for listCampaigns (survives beyond last 1500 notifs)
     const campaignMeta = {
@@ -362,6 +390,7 @@ export class AdminOpsController {
       failed,
       smsRequested: !!dto.sms,
       smsSent,
+      smsFailed,
       smsSkippedReason,
       actorId: actorId || null,
     };

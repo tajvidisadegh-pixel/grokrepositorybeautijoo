@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+function maskPhone(phone?: string | null): string | null {
+  if (!phone) return null;
+  const d = phone.replace(/\D/g, '');
+  if (d.length < 7) return '***';
+  return d.slice(0, 4) + '***' + d.slice(-2);
+}
+
 @Injectable()
 export class ReviewsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -65,7 +72,12 @@ export class ReviewsService {
       this.prisma.review.count({ where }),
     ]);
     return {
-      items,
+      items: items.map((it) => ({
+        ...it,
+        customer: it.customer
+          ? { ...it.customer, phone: maskPhone(it.customer.phone) }
+          : it.customer,
+      })),
       meta: { page: Math.max(1, page), limit: take, total, totalPages: Math.ceil(total / take) || 0 },
       summary: {
         ratingAvg: pro.ratingAvg,

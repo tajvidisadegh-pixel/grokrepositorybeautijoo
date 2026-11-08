@@ -9,7 +9,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 class CreateReviewDto {
   @IsUUID() bookingId!: string;
   @Type(() => Number) @IsInt() @Min(1) @Max(5) rating!: number;
-  @IsOptional() @IsString() comment?: string;
+  @IsOptional() @IsString() @MaxLength(2000) comment?: string;
 }
 
 class ReplyReviewDto {
