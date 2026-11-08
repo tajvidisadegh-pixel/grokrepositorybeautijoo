@@ -78,20 +78,6 @@ export class BookingsService {
       // #82.19 / #72 — pro-initiated customer block removed (no longer enforced)
     }
 
-    const maxConcurrent = Math.max(1, parseInt(process.env.MAX_CONCURRENT_BOOKINGS || '3', 10) || 3);
-    const activeCount = await this.prisma.booking.count({
-      where: {
-        customerId,
-        status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
-        startAt: { gte: new Date() },
-      },
-    });
-    if (activeCount >= maxConcurrent) {
-      throw new BadRequestException(
-        `حداکثر ${maxConcurrent} رزرو فعال همزمان مجاز است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.`,
-      );
-    }
-
     const pro = await this.prisma.professional.findUnique({ where: { id: data.professionalId } });
     if (!pro || pro.status !== 'approved') throw new NotFoundException('زیباگر یافت نشد');
 
@@ -308,6 +294,23 @@ export class BookingsService {
         async (tx) => {
           // #82.19 — parameterized row lock (no $queryRawUnsafe)
           await tx.$queryRaw`SELECT id FROM professionals WHERE id = ${data.professionalId}::uuid FOR UPDATE`;
+
+          // #82.med14 — concurrent limit inside tx (race-safe with row lock)
+          {
+            const maxConcurrent = Math.max(1, parseInt(process.env.MAX_CONCURRENT_BOOKINGS || '3', 10) || 3);
+            const activeCount = await tx.booking.count({
+              where: {
+                customerId,
+                status: { in: [BookingStatus.pending, BookingStatus.confirmed] },
+                startAt: { gte: new Date() },
+              },
+            });
+            if (activeCount >= maxConcurrent) {
+              throw new BadRequestException(
+                `حداکثر ${maxConcurrent} رزرو فعال همزمان مجاز است. ابتدا یکی از رزروهای قبلی را مدیریت کنید.`,
+              );
+            }
+          }
 
           const padMs=Math.max(newBufferMin,180)*60000;
           const candidates=await tx.booking.findMany({where:{professionalId:data.professionalId,status:{in:[BookingStatus.pending,BookingStatus.confirmed]},startAt:{lt:new Date(endAt.getTime()+padMs)},endAt:{gt:new Date(startAt.getTime()-padMs)}},include:{items:{select:{professionalService:{select:{bufferMin:true}}}}}});
@@ -720,6 +723,46 @@ export class BookingsService {
         );
       }
     }
+    // Pre-load booking for availability check (#82.med7) outside heavy tx work
+    const existing = await this.prisma.booking.findUnique({
+      where: { id },
+      include: { items: { select: { professionalService: { select: { bufferMin: true } } } } },
+    });
+    if (!existing) throw new NotFoundException();
+    if (existing.customerId !== userId) throw new ForbiddenException();
+    const allowedPre: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
+    if (!allowedPre.includes(existing.status)) throw new BadRequestException('قابل جابجایی نیست');
+    const durationMs = existing.endAt.getTime() - existing.startAt.getTime();
+    const endAt = new Date(startAt.getTime() + durationMs);
+    const newBufferMin = this.maxBufferMin(existing.items ?? []);
+    // #82.med7 / #82.med8 — pro must still be approved
+    const proRow = await this.prisma.professional.findUnique({ where: { id: existing.professionalId } });
+    if (!proRow || proRow.status !== 'approved') {
+      throw new BadRequestException('زیباگر در حال حاضر قابل رزرو نیست');
+    }
+    // #82.med7 — re-check working hours / availability slots
+    {
+      const dateStr = tehranDateStr(startAt);
+      const startHHMM = tehranHHMM(startAt);
+      const totalDurationMin = Math.max(1, Math.round(durationMs / 60000));
+      const avail = await this.availability.getSlots(
+        existing.professionalId,
+        dateStr,
+        totalDurationMin,
+        newBufferMin,
+      );
+      const normalizeHhmm = (s: string) => {
+        const m = /^(\d{1,2}):(\d{2})/.exec(String(s).trim());
+        if (!m) return s;
+        return `${m[1].padStart(2, '0')}:${m[2]}`;
+      };
+      const want = normalizeHhmm(startHHMM);
+      const slotOk = avail.slots.some(
+        (s: { start: string; end: string; available?: boolean }) =>
+          normalizeHhmm(s.start) === want && s.available !== false,
+      );
+      if (!slotOk) throw new ConflictException('این بازه زمانی در دسترس نیست');
+    }
     return this.prisma.$transaction(async (tx) => {
       const b = await tx.booking.findUnique({
         where: { id },
@@ -729,9 +772,6 @@ export class BookingsService {
       if (b.customerId !== userId) throw new ForbiddenException();
       const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
       if (!allowed.includes(b.status)) throw new BadRequestException('قابل جابجایی نیست');
-      const durationMs = b.endAt.getTime() - b.startAt.getTime();
-      const endAt = new Date(startAt.getTime() + durationMs);
-      const newBufferMin = this.maxBufferMin(b.items ?? []);
       const padMs = Math.max(newBufferMin, 180) * 60000;
       const candidates = await tx.booking.findMany({
         where: {
