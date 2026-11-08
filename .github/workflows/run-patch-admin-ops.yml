@@ -1,0 +1,27 @@
+name: run-patch-admin-ops
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/run-patch-admin-ops.yml'
+      - 'scripts/patch_admin_ops_r3.py'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run patch script
+        run: |
+          set -euo pipefail
+          python3 scripts/patch_admin_ops_r3.py
+          grep -n hardMax backend/src/admin/admin-ops.controller.ts | head -3
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin-ops.controller.ts
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "fix(#82.r3): CMS limits, SMS hardcap, deliveryStatus, campaign index"
+          git push origin HEAD:main
