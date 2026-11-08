@@ -63,7 +63,7 @@ function normalizeIranPhone(raw: string): string {
 
 /** Strip HTML/script from CMS strings to mitigate stored XSS (#82.r2.5). */
 function stripHtmlDeep(value: unknown, depth = 0): unknown {
-  if (depth > 12) return null;
+  if (depth > 12) return typeof value === 'string' ? value.replace(/<[^>]*>/g, '').slice(0, 5000) : value;
   if (typeof value === 'string') {
     return value
       .replace(/<\s*(script|iframe|object|embed|link|meta|style)[\s\S]*?>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
@@ -170,6 +170,8 @@ export class AdminOpsController {
   @RequirePermissions('admin.site_builder.manage')
   @Put('content')
   async putContent(@Body() body: any, @CurrentUser('id') actorId?: string) {
+    const rawSize = Buffer.byteLength(JSON.stringify(body ?? {}), 'utf8');
+    if (rawSize > 400_000) throw new BadRequestException('payload too large');
     const cleaned = stripHtmlDeep({
       hero: body?.hero ?? {},
       texts: body?.texts ?? {},
@@ -214,6 +216,8 @@ export class AdminOpsController {
   async putSiteBuilder(@Body() body: any, @CurrentUser('id') actorId?: string) {
     const listRaw = Array.isArray(body) ? body : body?.sections ?? [];
     if (!Array.isArray(listRaw)) throw new BadRequestException('sections must be an array');
+    const sbSize = Buffer.byteLength(JSON.stringify(listRaw), 'utf8');
+    if (sbSize > 400_000) throw new BadRequestException('payload too large');
     if (listRaw.length > 200) throw new BadRequestException('حداکثر ۲۰۰ بخش مجاز است');
     const list = stripHtmlDeep(listRaw) as any[];
     await this.prisma.platformSetting.upsert({
@@ -323,7 +327,7 @@ export class AdminOpsController {
             body,
             data: {
               campaignId,
-              deliveryStatus: 'sent',
+              deliveryStatus: dto.sms ? 'pending' : 'sent',
               smsRequested: !!dto.sms,
             } as any,
           })),
@@ -341,7 +345,7 @@ export class AdminOpsController {
                 type: 'system' as any,
                 title,
                 body,
-                data: { campaignId, deliveryStatus: 'sent', smsRequested: !!dto.sms } as any,
+                data: { campaignId, deliveryStatus: dto.sms ? 'pending' : 'sent', smsRequested: !!dto.sms } as any,
               },
             });
             notified++;
@@ -357,9 +361,11 @@ export class AdminOpsController {
     let smsFailed = 0;
     let smsSkippedReason: string | undefined;
     if (dto.sms) {
-      const maxSms = Math.min(ids.length, Number(process.env.BULK_SMS_MAX || 200));
+      const envMax = parseInt(process.env.BULK_SMS_MAX || '200', 10);
+      const hardMax = Math.min(200, Number.isFinite(envMax) && envMax > 0 ? envMax : 200);
+      const maxSms = Math.min(ids.length, hardMax);
       const users = await this.prisma.user.findMany({
-        where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null } },
+        where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null }, status: UserStatus.active },
         select: { id: true, phone: true },
       });
       const msg = `${title}
@@ -404,7 +410,8 @@ ${body}`.slice(0, 400);
       const idxKey = 'campaign_index_v1';
       const idxRow = await this.prisma.platformSetting.findUnique({ where: { key: idxKey } });
       const prev = (idxRow?.value as any)?.ids as string[] | undefined;
-      const idsList = [campaignId, ...(Array.isArray(prev) ? prev : [])].slice(0, 500);
+      const prevIds = Array.isArray(prev) ? prev.filter((x: string) => x !== campaignId) : [];
+      const idsList = [campaignId, ...prevIds].slice(0, 500);
       await this.prisma.platformSetting.upsert({
         where: { key: idxKey },
         create: { key: idxKey, value: { ids: idsList } as object },
