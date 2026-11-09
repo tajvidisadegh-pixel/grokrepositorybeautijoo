@@ -1,0 +1,36 @@
+name: commit-backend-lock-now
+on:
+  push:
+    paths:
+      - '.github/TRIGGER_BACKEND_LOCK'
+  workflow_dispatch:
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate package-lock.json
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --no-audit --no-fund
+          test -f package-lock.json
+          wc -l package-lock.json
+          head -5 package-lock.json
+      - name: Commit lockfile
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/package-lock.json
+          rm -f .github/TRIGGER_BACKEND_LOCK
+          rm -f .github/workflows/commit-backend-lock-now.yml
+          git add -A
+          if git diff --staged --quiet; then echo no-change; exit 0; fi
+          git commit -m "chore: add backend/package-lock.json for deterministic npm ci (Liara deploy)"
+          git push origin HEAD:main
