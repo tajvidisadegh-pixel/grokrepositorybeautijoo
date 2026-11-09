@@ -9,11 +9,17 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 # package.json + lockfile first (cache). prisma BEFORE install so generate never misses schema.
-# Prefer npm ci when package-lock.json is present (#82.16); fall back to npm install for local ZIP deploys without lock.
+# Prefer npm ci when package-lock.json is present (#82.16); fall back to npm install if lock is absent
+# so Liara ZIP/Git deploys are not blocked while lockfile is being committed.
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 
-RUN if [ -f package-lock.json ]; then npm ci; else echo "ERROR: package-lock.json required for reproducible builds" >&2; exit 1; fi
+RUN if [ -f package-lock.json ]; then \
+      npm ci; \
+    else \
+      echo "WARN: package-lock.json missing — using npm install (non-reproducible)" >&2; \
+      npm install --no-audit --no-fund; \
+    fi
 
 COPY . .
 
