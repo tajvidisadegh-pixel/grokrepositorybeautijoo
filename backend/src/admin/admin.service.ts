@@ -1326,7 +1326,7 @@ export class AdminService {
     if (!existing) throw new NotFoundException('Media not found');
     const updated = await this.prisma.mediaAsset.update({ where: { id }, data: { status } });
     // #r4.M4 — purge storage when media is rejected/deleted
-    if (status === MediaStatus.draft || status === MediaStatus.draft) {
+    if (status === MediaStatus.draft) { // purge on unpublish/reject-to-draft
       const storageKey = (existing as any).storageKey || (existing as any).key || (existing as any).path;
       if (storageKey && this.storage.delete) {
         try {

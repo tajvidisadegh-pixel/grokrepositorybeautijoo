@@ -388,7 +388,7 @@ export class AdminOpsController {
           : Array.isArray((optRow?.value as any)?.ids)
             ? (optRow!.value as any).ids
             : [];
-        optOutIds = new Set(arr.map((x) => String(x)));
+        optOutIds = new Set(arr.map((x: unknown) => String(x)));
       } catch {
         /* ignore */
       }
