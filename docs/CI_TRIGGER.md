@@ -1,3 +1,3 @@
 # CI trigger
 
-Notification bell at top of page (header + panel shell) — 2026-11-07.
+Re-run after TypeScript fixes (TS7006 + MediaStatus) — 2026-11-09.
