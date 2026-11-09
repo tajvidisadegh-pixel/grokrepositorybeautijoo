@@ -1,0 +1,62 @@
+name: fix-ts-build-errors
+on:
+  push:
+    paths:
+      - '.github/TRIGGER_FIX_TS'
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch TS errors
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          ops = Path('backend/src/admin/admin-ops.controller.ts')
+          t = ops.read_text(encoding='utf-8')
+          t2 = t.replace(
+              'optOutIds = new Set(arr.map((x) => String(x)));',
+              'optOutIds = new Set(arr.map((x: unknown) => String(x)));',
+          )
+          if t2 == t:
+              # broader
+              t2 = t.replace('arr.map((x) => String(x))', 'arr.map((x: unknown) => String(x))')
+          if t2 == t:
+              raise SystemExit('ops pattern not found')
+          ops.write_text(t2, encoding='utf-8')
+          print('ops fixed')
+
+          svc = Path('backend/src/admin/admin.service.ts')
+          s = svc.read_text(encoding='utf-8')
+          s2 = s.replace(
+              'if (status === MediaStatus.draft || status === MediaStatus.draft) {',
+              'if (status === MediaStatus.draft) { // purge on unpublish/reject-to-draft',
+          )
+          if s2 == s:
+              raise SystemExit('svc pattern not found')
+          svc.write_text(s2, encoding='utf-8')
+          print('svc fixed')
+          PY
+          grep -n "x: unknown" backend/src/admin/admin-ops.controller.ts | head -3
+          grep -n "purge on unpublish" backend/src/admin/admin.service.ts | head -3
+      - name: Verify nest build
+        working-directory: backend
+        run: |
+          npm install --no-audit --no-fund
+          npx prisma generate --schema=./prisma/schema.prisma
+          npx nest build
+          test -f dist/main.js || test -f dist/src/main.js
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/TRIGGER_FIX_TS
+          rm -f .github/workflows/fix-ts-build-errors.yml
+          git add -A
+          git commit -m "fix: TS7006 opt-out map typing + MediaStatus draft purge comparison"
+          git push origin HEAD:main
