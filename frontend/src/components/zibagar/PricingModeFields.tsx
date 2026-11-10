@@ -84,9 +84,13 @@ type Props = {
 };
 
 export function PricingModeFields({ allowed, state, onChange, groups, disabled }: Props) {
-  // #80 pure fixed: no extra UI at all
+  // Pure fixed with no other modes: explain why picker is hidden
   if (allowed.length === 1 && allowed[0] === 'fixed') {
-    return null;
+    return (
+      <p className="rounded-xl border border-border bg-gray-50 px-3 py-2 text-xs text-gray-600" dir="rtl">
+        حالت این خدمت: <b>قیمت ثابت</b> (در کاتالوگ ادمین فقط ثابت مجاز است — برای متغیر/بیعانه از پنل ادمین مجوز بدهید)
+      </p>
+    );
   }
 
   const activeGroups = (groups || []).filter((g) => g.isActive !== false);
@@ -97,24 +101,25 @@ export function PricingModeFields({ allowed, state, onChange, groups, disabled }
       {showModePicker && (
         <>
           <p className="text-sm font-medium text-[#0B2C4A]">حالت قیمت‌گذاری</p>
-      <p className="text-[11px] text-gray-500">فقط حالت‌هایی که برای این خدمت باز شده‌اند.</p>
+          <p className="text-[11px] text-gray-500">فقط حالت‌هایی که برای این خدمت باز شده‌اند. بعد از تغییر، دکمه ذخیره را بزنید.</p>
           <div className="flex flex-wrap gap-2">
             {allowed.map((m) => (
-          <button
-            key={m}
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange({ ...state, mode: m })}
-            className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
-              state.mode === m
-                ? 'border-[#0B2C4A] bg-[#0B2C4A] text-white'
-                : 'border-gray-200 bg-white text-gray-700'
-            }`}
-          >
-            {MODE_LABEL[m]}
-          </button>
-        ))}
+              <button
+                key={m}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange({ ...state, mode: m })}
+                className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                  state.mode === m
+                    ? 'border-[#0B2C4A] bg-[#0B2C4A] text-white'
+                    : 'border-gray-200 bg-white text-gray-700'
+                }`}
+              >
+                {MODE_LABEL[m]}
+              </button>
+            ))}
           </div>
+          <p className="text-[11px] text-[#2D6CDF]">حالت انتخاب‌شده: {MODE_LABEL[state.mode]}</p>
         </>
       )}
 
