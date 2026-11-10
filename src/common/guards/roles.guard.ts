@@ -20,7 +20,7 @@ const FULL_ACCESS_ROLES = new Set(['SUPER_ADMIN']);
  * - `admin` and channel roles rely solely on @Roles / @RequirePermissions (no bypass).
  * - If only @Roles: user must have one of the roles.
  * - If only @RequirePermissions: user must have all listed permissions.
- * - If both: pass when role OR permissions match (channel admins).
+ * - If both: require BOTH role and permissions (stricter, #r4.M9).
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
