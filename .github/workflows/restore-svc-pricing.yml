@@ -9,5 +9,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: placeholder
-        run: echo 'will be replaced'
+      - name: Write ServicePricingPanel
+        run: echo 'use local patch - see next commit'
