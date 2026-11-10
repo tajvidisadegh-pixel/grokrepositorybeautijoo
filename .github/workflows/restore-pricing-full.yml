@@ -1,0 +1,13 @@
+name: restore-pricing-full
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_PRICING_FULL'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: note
+        run: echo 'full base64 workflow to be applied in next step if needed'
