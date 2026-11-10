@@ -11,13 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Decode and put files on export branch
+      - name: Sync full backend tree onto export via Contents API
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           python3 <<'PY'
-          import base64, json, os, urllib.request, urllib.error
+          import base64, json, os, time, urllib.request, urllib.error
           from pathlib import Path
 
           token = os.environ["GH_TOKEN"]
@@ -30,15 +30,23 @@ jobs:
               "Content-Type": "application/json",
           }
 
-          def api(method, url, data=None):
-              req = urllib.request.Request(url, data=data, headers=headers, method=method)
-              try:
-                  with urllib.request.urlopen(req) as r:
-                      return json.loads(r.read().decode())
-              except urllib.error.HTTPError as e:
-                  body = e.read().decode()
-                  print("API", method, url, e.code, body[:800])
-                  raise
+          def api(method, url, data=None, retries=4):
+              last = None
+              for i in range(retries):
+                  req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(req) as r:
+                          return json.loads(r.read().decode())
+                  except urllib.error.HTTPError as e:
+                      body = e.read().decode()
+                      last = (e.code, body)
+                      if e.code in (409, 429, 502, 503):
+                          time.sleep(1.5 * (i + 1))
+                          continue
+                      print("API", method, url, e.code, body[:500])
+                      raise
+              print("API give up", last)
+              raise RuntimeError("api failed")
 
           def put_file(path, raw: bytes):
               get_url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={branch}"
@@ -46,10 +54,11 @@ jobs:
               try:
                   meta = api("GET", get_url)
                   sha = meta.get("sha")
-              except Exception as e:
-                  print("no existing", path, e)
+                  # skip if identical size and we can compare later — always update Dockerfile/src
+              except Exception:
+                  pass
               payload = {
-                  "message": f"fix(prod): restore {path} from main for Liara",
+                  "message": f"fix(prod): sync {path} from main for Liara",
                   "content": base64.b64encode(raw).decode(),
                   "branch": branch,
               }
@@ -58,12 +67,42 @@ jobs:
               api("PUT", f"https://api.github.com/repos/{repo}/contents/{path}", json.dumps(payload).encode())
               print("put", path, len(raw))
 
-          # Prefer live files from this checkout (main)
-          svc = Path("backend/src/admin/admin.service.ts").read_bytes()
-          ops = Path("backend/src/admin/admin-ops.controller.ts").read_bytes()
-          docker = Path("backend/Dockerfile").read_bytes()
-          put_file("src/admin/admin.service.ts", svc)
-          put_file("src/admin/admin-ops.controller.ts", ops)
-          put_file("Dockerfile", docker)
-          print("done")
+          root = Path("backend")
+          # Priority files first
+          priority = [
+              "Dockerfile",
+              "package.json",
+              "nest-cli.json",
+              "tsconfig.json",
+              "tsconfig.build.json",
+              "src/main.ts",
+              "src/app.module.ts",
+              "src/admin/admin.service.ts",
+              "src/admin/admin-ops.controller.ts",
+              "src/admin/admin.controller.ts",
+              "scripts/prisma-migrate-deploy.cjs",
+              "prisma/seed-roles.cjs",
+              "prisma/schema.prisma",
+          ]
+          for rel in priority:
+              p = root / rel
+              if p.is_file():
+                  put_file(rel, p.read_bytes())
+
+          # Rest of src + prisma + scripts
+          for sub in ("src", "prisma", "scripts"):
+              base = root / sub
+              if not base.exists():
+                  continue
+              for p in base.rglob("*"):
+                  if not p.is_file():
+                      continue
+                  if p.suffix not in {".ts", ".js", ".cjs", ".mjs", ".json", ".prisma", ".sql"}:
+                      continue
+                  rel = str(p.relative_to(root)).replace("\\", "/")
+                  if rel in priority:
+                      continue
+                  put_file(rel, p.read_bytes())
+
+          print("full sync done")
           PY
