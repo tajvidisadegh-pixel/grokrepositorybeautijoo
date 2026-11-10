@@ -31,22 +31,27 @@ function applyDom(theme: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  // Default is always light; dark only if user explicitly chose it.
   const [theme, setThemeState] = useState<Theme>('light');
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-      if (stored === 'dark' || stored === 'light') {
-        setThemeState(stored);
-        applyDom(stored);
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === 'dark') {
+        setThemeState('dark');
+        applyDom('dark');
         return;
       }
-      const prefersDark =
-        typeof window !== 'undefined' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const initial: Theme = prefersDark ? 'dark' : 'light';
-      setThemeState(initial);
-      applyDom(initial);
+      // light, missing, or any other value → light (no system preference)
+      setThemeState('light');
+      applyDom('light');
+      if (stored !== 'light') {
+        try {
+          localStorage.setItem(STORAGE_KEY, 'light');
+        } catch {
+          /* ignore */
+        }
+      }
     } catch {
       applyDom('light');
     }
