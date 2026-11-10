@@ -1,0 +1,44 @@
+name: force-export-sync
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_FORCE_EXPORT'
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Materialize backend as export branch and force-push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          WORK=$(mktemp -d)
+          # Copy backend contents only (export is root=backend)
+          rsync -a --delete \
+            --exclude node_modules --exclude dist --exclude .env --exclude uploads \
+            backend/ "$WORK/"
+
+          cd "$WORK"
+          git init -b beautijoo-backend-export
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "fix(prod): full sync backend from main $(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
+
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # Prefer force-with-lease; fall back to force for orphan history
+          git push -f origin HEAD:beautijoo-backend-export
+
+          echo "Pushed export HEAD=$(git rev-parse --short HEAD)"
+          test -f src/admin/admin.service.ts
+          test "$(wc -c < src/admin/admin.service.ts)" -gt 10000
+          grep -q "x: unknown" src/admin/admin-ops.controller.ts
+          grep -q "npm install --no-audit" Dockerfile || grep -q "npm ci" Dockerfile
