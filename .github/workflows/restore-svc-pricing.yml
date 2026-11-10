@@ -1,0 +1,13 @@
+name: restore-svc-pricing
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_RESTORE_PRICING'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: placeholder
+        run: echo 'will be replaced'
