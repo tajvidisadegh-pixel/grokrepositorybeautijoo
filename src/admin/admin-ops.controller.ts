@@ -345,6 +345,7 @@ export class AdminOpsController {
         notified += result.count;
         failed += chunk.length - result.count;
       } catch {
+        // fallback per-user
         for (const userId of chunk) {
           try {
             await this.prisma.notification.create({
@@ -364,6 +365,7 @@ export class AdminOpsController {
       }
     }
 
+    // #82.r2.sms — optional bulk SMS (capped, sequential batches)
     let smsSent = 0;
     let smsFailed = 0;
     let smsSkippedReason: string | undefined;
@@ -375,6 +377,7 @@ export class AdminOpsController {
         where: { id: { in: ids.slice(0, maxSms) }, phone: { not: null }, status: UserStatus.active },
         select: { id: true, phone: true },
       });
+      // #r4.bugfix — opt-out list in platform_setting (not free-text bio)
       let optOutIds = new Set<string>();
       try {
         const optRow = await this.prisma.platformSetting.findUnique({
@@ -393,7 +396,8 @@ export class AdminOpsController {
       if (users.length < usersRaw.length) {
         smsSkippedReason = (smsSkippedReason ? smsSkippedReason + ',' : '') + 'opt_out_skipped';
       }
-      const msg = `${title}\n${body}`.slice(0, 400);
+      const msg = `${title}
+${body}`.slice(0, 400);
       if (ids.length > maxSms) smsSkippedReason = `capped_at_${maxSms}`;
       const concurrency = 10;
       for (let i = 0; i < users.length; i += concurrency) {
@@ -435,6 +439,7 @@ export class AdminOpsController {
       }
     }
 
+    // Persist campaign summary for listCampaigns (survives beyond last 1500 notifs)
     const campaignMeta = {
       campaignId,
       title,
@@ -455,6 +460,7 @@ export class AdminOpsController {
         create: { key: `campaign_meta_${campaignId}`, value: campaignMeta as object },
         update: { value: campaignMeta as object },
       });
+      // maintain index of recent campaign ids
       const idxKey = 'campaign_index_v1';
       const idxRow = await this.prisma.platformSetting.findUnique({ where: { key: idxKey } });
       const prev = (idxRow?.value as any)?.ids as string[] | undefined;
@@ -462,7 +468,7 @@ export class AdminOpsController {
       const idsList = [campaignId, ...prevIds].slice(0, 500);
       await this.prisma.platformSetting.upsert({
         where: { key: idxKey },
-        create: { key: idxKey },
+        create: { key: idxKey, value: { ids: idsList } as object },
         update: { value: { ids: idsList } as object },
       });
     } catch {
@@ -518,22 +524,361 @@ export class AdminOpsController {
     );
   }
 
+  @RequirePermissions('admin.notifications.send')
+  @Get('notifications/campaigns')
+  async listCampaigns(@Query('page') pageStr?: string, @Query('limit') limitStr?: string) {
+    const page = Math.max(1, Number(pageStr) || 1);
+    const limit = Math.min(50, Math.max(1, Number(limitStr) || 20));
+
+    // Prefer campaign index + meta rows (#82.r2.11)
+    const idxRow = await this.prisma.platformSetting.findUnique({
+      where: { key: 'campaign_index_v1' },
+    });
+    const ids = ((idxRow?.value as any)?.ids as string[]) || [];
+    if (ids.length) {
+      const slice = ids.slice((page - 1) * limit, page * limit);
+      const metas = await Promise.all(
+        slice.map(async (cid) => {
+          const row = await this.prisma.platformSetting.findUnique({
+            where: { key: `campaign_meta_${cid}` },
+          });
+          return (row?.value as any) || {
+            campaignId: cid,
+            title: '',
+            body: '',
+            createdAt: null,
+            total: 0,
+            sent: 0,
+            failed: 0,
+            read: 0,
+          };
+        }),
+      );
+      return {
+        items: metas,
+        meta: {
+          page,
+          limit,
+          total: ids.length,
+          totalPages: Math.ceil(ids.length / limit) || 0,
+        },
+      };
+    }
+
+    // Fallback: derive from recent notifications (legacy)
+    const rows = await this.prisma.notification.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 1500,
+      select: { id: true, title: true, body: true, createdAt: true, readAt: true, data: true },
+    });
+    const map = new Map<string, any>();
+    for (const r of rows) {
+      const data = (r.data as any) || {};
+      const cid = data.campaignId || `legacy_${r.id}`;
+      if (!map.has(cid)) {
+        map.set(cid, {
+          campaignId: cid,
+          title: r.title,
+          body: r.body,
+          createdAt: r.createdAt,
+          total: 0,
+          sent: 0,
+          failed: 0,
+          read: 0,
+        });
+      }
+      const c = map.get(cid);
+      c.total++;
+      if (data.deliveryStatus === 'failed') c.failed++;
+      else c.sent++;
+      if (r.readAt) c.read++;
+    }
+    const all = Array.from(map.values());
+    return {
+      items: all.slice((page - 1) * limit, page * limit),
+      meta: {
+        page,
+        limit,
+        total: all.length,
+        totalPages: Math.ceil(all.length / limit) || 0,
+      },
+    };
+  }
+
+  @RequirePermissions('admin.notifications.send')
+  @Get('notifications/campaigns/:campaignId')
+  async campaignRecipients(
+    @Param('campaignId') campaignId: string,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const page = Math.max(1, Number(pageStr) || 1);
+    const limit = Math.min(100, Math.max(1, Number(limitStr) || 50));
+    const where: any = { data: { path: ['campaignId'], equals: campaignId } };
+    const [rows, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          user: { select: { phone: true, profile: { select: { displayName: true } } } },
+        },
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+    return {
+      campaignId,
+      items: rows.map((r) => {
+        const raw = r.user?.phone || '';
+        const masked =
+          raw.length >= 7 ? raw.slice(0, 4) + '***' + raw.slice(-2) : raw ? '***' : null;
+        return {
+          id: r.id,
+          userId: r.userId,
+          phone: masked, // #r4.M2 — never return full phone in campaign lists
+          displayName: r.user?.profile?.displayName,
+          status:
+            (r.data as any)?.deliveryStatus === 'failed'
+              ? 'failed'
+              : r.readAt
+                ? 'read'
+                : 'sent',
+          createdAt: r.createdAt,
+        };
+      }),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 0,
+      },
+    };
+  }
+
+  @RequirePermissions('admin.notifications.send')
+  @Post('notifications/campaigns/:campaignId/retry-failed')
+  async retryCampaign(
+    @Param('campaignId') campaignId: string,
+    @CurrentUser('id') actorId?: string,
+  ) {
+    const failed = await this.prisma.notification.findMany({
+      where: {
+        AND: [
+          { data: { path: ['campaignId'], equals: campaignId } },
+          { data: { path: ['deliveryStatus'], equals: 'failed' } },
+        ],
+      },
+      take: 200,
+      include: { user: { select: { id: true, phone: true } } },
+    });
+    let retried = 0;
+    let stillFailed = 0;
+    const metaRow = await this.prisma.platformSetting.findUnique({
+      where: { key: `campaign_meta_${campaignId}` },
+    });
+    const title = String((metaRow?.value as any)?.title || 'Beautijoo');
+    const body = String((metaRow?.value as any)?.body || '');
+    const msg = `${title}
+${body}`.slice(0, 400);
+    for (const n of failed) {
+      let ok = false;
+      const phone = n.user?.phone;
+      if (phone && this.sms?.sendNotification) {
+        try {
+          await this.sms.sendNotification(phone, msg);
+          ok = true;
+        } catch (e) {
+          this.logger.warn(`retry SMS fail notif=${n.id}: ${e}`);
+        }
+      }
+      try {
+        await this.prisma.notification.update({
+          where: { id: n.id },
+          data: {
+            data: {
+              ...((n.data as object) || {}),
+              campaignId,
+              deliveryStatus: ok ? 'sent' : 'failed',
+              retriedAt: new Date().toISOString(),
+              smsDelivered: ok,
+            } as any,
+          },
+        });
+        if (ok) retried++;
+        else stillFailed++;
+      } catch {
+        stillFailed++;
+      }
+    }
+    // Update campaign_meta counters
+    if (metaRow?.value) {
+      const v = { ...(metaRow.value as any) };
+      v.smsSent = Number(v.smsSent || 0) + retried;
+      v.smsFailed = stillFailed;
+      v.failed = stillFailed;
+      v.lastRetryAt = new Date().toISOString();
+      await this.prisma.platformSetting
+        .update({ where: { key: `campaign_meta_${campaignId}` }, data: { value: v as object } })
+        .catch(() => undefined);
+    }
+    await this.audit(actorId, 'admin.notifications.retry_failed', 'campaign', campaignId, {
+      retried,
+      stillFailed,
+      totalFailed: failed.length,
+    });
+    return {
+      success: true,
+      retried,
+      stillFailed,
+      campaignId,
+      totalFailed: failed.length,
+    };
+  }
+
+
+  /** Read SMS opt-out user id list (#r4). */
+  @RequirePermissions('admin.users.read')
+  @Get('sms-opt-out')
+
+  private async mutateSmsOptOut(userId: string, optOut: boolean) {
+    const key = 'sms_opt_out_user_ids';
+    const MAX = 50_000;
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.platformSetting.findUnique({ where: { key } });
+      const prev = Array.isArray(row?.value)
+        ? (row!.value as string[])
+        : Array.isArray((row?.value as any)?.ids)
+          ? ((row!.value as any).ids as string[])
+          : [];
+      let ids = prev.map(String);
+      if (optOut) {
+        if (!ids.includes(userId)) ids.push(userId);
+      } else {
+        ids = ids.filter((x) => x !== userId);
+      }
+      if (ids.length > MAX) {
+        // drop oldest entries (front of array)
+        ids = ids.slice(ids.length - MAX);
+      }
+      await tx.platformSetting.upsert({
+        where: { key },
+        create: { key, value: ids as any },
+        update: { value: ids as any },
+      });
+      return ids;
+    });
+  }
+
+  async listSmsOptOut() {
+    const row = await this.prisma.platformSetting.findUnique({ where: { key: 'sms_opt_out_user_ids' } });
+    const ids = Array.isArray(row?.value)
+      ? (row!.value as string[])
+      : Array.isArray((row?.value as any)?.ids)
+        ? ((row!.value as any).ids as string[])
+        : [];
+    return { ids };
+  }
+
+  /** Add user to SMS opt-out list. */
+  @RequirePermissions('admin.users.write')
+  @Post('users/:id/sms-opt-out')
+  async addSmsOptOut(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('not found');
+    const ids = await this.mutateSmsOptOut(id, true);
+    await this.audit(actorId, 'admin.sms.opt_out.add', 'user', id, { ids: ids.length });
+    return { ok: true, ids };
+  }
+
+  /** Remove user from SMS opt-out list. */
+  @RequirePermissions('admin.users.write')
+  @Post('users/:id/sms-opt-in')
+  async removeSmsOptOut(@Param('id') id: string, @CurrentUser('id') actorId?: string) {
+    const ids = await this.mutateSmsOptOut(id, false);
+    await this.audit(actorId, 'admin.sms.opt_out.remove', 'user', id, { ids: ids.length });
+    return { ok: true, ids };
+  }
+
   @RequirePermissions('admin.professionals.write')
-  @Patch('professionals/:id/featured')
-  async setFeatured(
+  @Patch('professionals/:id/feature')
+  async setFeaturedAlias(
     @Param('id') id: string,
     @Body() dto: FeaturedDto,
     @CurrentUser('id') actorId?: string,
   ) {
-    const pro = await this.prisma.professionalProfile.findUnique({ where: { id } });
-    if (!pro) throw new NotFoundException('professional not found');
-    const updated = await this.prisma.professionalProfile.update({
+    const pro = await this.prisma.professional.findUnique({ where: { id } });
+    if (!pro) throw new NotFoundException('not found');
+    const updated = await this.prisma.professional.update({
       where: { id },
-      data: { isFeatured: !!dto.isFeatured } as any,
+      data: { isFeatured: !!dto.isFeatured },
     });
     await this.audit(actorId, 'admin.professional.featured', 'professional', id, {
       isFeatured: !!dto.isFeatured,
     });
     return updated;
+  }
+
+  @RequirePermissions('admin.professionals.write')
+  @Post('professionals/create')
+  async createProfessional(
+    @Body() body: { phone: string; title?: string; displayName?: string; firstName?: string; lastName?: string },
+    @CurrentUser('id') actorId?: string,
+  ) {
+    const phone = normalizeIranPhone(body.phone || '');
+    if (!phone || phone.length < 10) throw new BadRequestException('موبایل الزامی است');
+    let user: any = await this.prisma.user.findFirst({
+      where: { phone, accountType: 'professional' as any },
+      include: { professional: true, profile: true },
+    });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          phone,
+          accountType: 'professional' as any,
+          status: 'active' as any,
+          profile: {
+            create: {
+              displayName: (body.displayName || body.title || body.firstName || phone).trim(),
+              firstName: body.firstName?.trim() || null,
+              lastName: body.lastName?.trim() || null,
+            },
+          },
+        },
+        include: { professional: true, profile: true },
+      });
+      try {
+        const role = await this.prisma.role.findUnique({ where: { name: 'professional' } });
+        if (role) {
+          await this.prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
+        }
+      } catch {
+        /* non-blocking */
+      }
+    }
+    if (user.professional) return user.professional;
+    const baseSlug =
+      (body.title || body.displayName || phone)
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w\u0600-\u06FF-]+/g, '')
+        .slice(0, 40) || 'pro';
+    let slug = baseSlug;
+    for (let i = 0; i < 5; i++) {
+      const taken = await this.prisma.professional.findUnique({ where: { slug } });
+      if (!taken) break;
+      slug = `${baseSlug}-${Date.now().toString(36).slice(-4)}`;
+    }
+    const pro = await this.prisma.professional.create({
+      data: {
+        userId: user.id,
+        slug,
+        title: (body.title || body.displayName || 'زیباگر').trim(),
+        status: 'draft' as any,
+      },
+    });
+    await this.audit(actorId, 'professional.create', 'professional', pro.id, { phone, slug });
+    return pro;
   }
 }
