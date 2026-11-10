@@ -49,10 +49,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fc7074' },
-    { media: '(prefers-color-scheme: dark)', color: '#12141a' },
-  ],
+  themeColor: '#fc7074',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -76,7 +73,8 @@ export default function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('bj-theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'}}catch(e){}})();`,
+            // Manual theme only: dark solely when localStorage bj-theme === 'dark'
+            __html: `(function(){try{var t=localStorage.getItem('bj-theme');if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'}else{document.documentElement.classList.remove('dark');document.documentElement.style.colorScheme='light'}}catch(e){}})();`,
           }}
         />
       </head>
