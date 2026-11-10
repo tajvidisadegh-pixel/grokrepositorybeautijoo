@@ -1,0 +1,32 @@
+name: restore-svc-cat2
+on:
+  push:
+    paths:
+      - '.github/TRIGGER_SVC2'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore file
+        run: |
+          set -euo pipefail
+          git show 672e371e96a93a4bb55279d1277d5eb5920c3efe:frontend/src/app/admin/service-categories/page.tsx > frontend/src/app/admin/service-categories/page.tsx
+          wc -c frontend/src/app/admin/service-categories/page.tsx
+          grep -q "export default function" frontend/src/app/admin/service-categories/page.tsx
+          test $(wc -c < frontend/src/app/admin/service-categories/page.tsx) -gt 5000
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/TRIGGER_SVC2
+          rm -f .github/workflows/restore-svc-cat2.yml
+          rm -f .github/workflows/restore-svc-cat.yml
+          rm -f .github/TRIGGER_RESTORE_SVC_CAT
+          git add -A
+          git commit -m "fix: restore admin service-categories page from 672e371e"
+          git push origin HEAD:main
