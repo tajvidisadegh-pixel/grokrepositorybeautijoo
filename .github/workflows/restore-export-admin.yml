@@ -1,0 +1,69 @@
+name: restore-export-admin
+on:
+  push:
+    paths:
+      - '.github/TRIGGER_RESTORE_EXPORT_ADMIN'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and put files on export branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, json, os, urllib.request, urllib.error
+          from pathlib import Path
+
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          branch = "beautijoo-backend-export"
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "restore-export-admin",
+              "Content-Type": "application/json",
+          }
+
+          def api(method, url, data=None):
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return json.loads(r.read().decode())
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode()
+                  print("API", method, url, e.code, body[:800])
+                  raise
+
+          def put_file(path, raw: bytes):
+              get_url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={branch}"
+              sha = None
+              try:
+                  meta = api("GET", get_url)
+                  sha = meta.get("sha")
+              except Exception as e:
+                  print("no existing", path, e)
+              payload = {
+                  "message": f"fix(prod): restore {path} from main for Liara",
+                  "content": base64.b64encode(raw).decode(),
+                  "branch": branch,
+              }
+              if sha:
+                  payload["sha"] = sha
+              api("PUT", f"https://api.github.com/repos/{repo}/contents/{path}", json.dumps(payload).encode())
+              print("put", path, len(raw))
+
+          # Prefer live files from this checkout (main)
+          svc = Path("backend/src/admin/admin.service.ts").read_bytes()
+          ops = Path("backend/src/admin/admin-ops.controller.ts").read_bytes()
+          docker = Path("backend/Dockerfile").read_bytes()
+          put_file("src/admin/admin.service.ts", svc)
+          put_file("src/admin/admin-ops.controller.ts", ops)
+          put_file("Dockerfile", docker)
+          print("done")
+          PY
