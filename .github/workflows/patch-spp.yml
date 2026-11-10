@@ -1,0 +1,104 @@
+name: patch-spp
+on:
+  push:
+    paths: ['.github/TRIGGER_SPP']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/components/admin/ServicePricingPanel.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'applySampleVariable' in t:
+              print('already patched')
+          else:
+              needle = "defaultPricingMode: defaultMode,"
+              if needle not in t:
+                  raise SystemExit('needle missing')
+              # fix default mode on save
+              t = t.replace(
+                  "defaultPricingMode: defaultMode,",
+                  "defaultPricingMode: (allowFixed && defaultMode==='fixed') || (allowVariable && defaultMode==='variable') || (allowDeposit && defaultMode==='deposit') ? defaultMode : (allowVariable ? 'variable' : allowDeposit ? 'deposit' : 'fixed'),",
+                  1,
+              )
+              # inject sample button near modes heading
+              h = '<h4 className="text-sm font-semibold text-[#0B2C4A]">حالت‌های قیمت مجاز</h4>'
+              if h not in t:
+                  raise SystemExit('heading missing')
+              inject = h + '''
+                <div className="rounded-xl border border-dashed border-[#2D6CDF]/40 bg-[#F7FBFF] p-3 text-[11px] leading-5 text-gray-600">
+                  <p className="font-medium text-[#0B2C4A]">نمونه حالت متغیر</p>
+                  <p className="mt-1">ثابت = یک قیمت. متغیر = پایه + گزینه‌ها (مثل طول مو). بیعانه = پیش‌پرداخت.</p>
+                  <button type="button" disabled={busy} onClick={() => void applySampleVariable()} className="mt-2 h-9 rounded-lg border border-[#2D6CDF] px-3 text-xs font-medium text-[#2D6CDF] disabled:opacity-50">اعمال نمونه قیمت متغیر</button>
+                </div>'''
+              t = t.replace(h, inject, 1)
+              # add function before deactivateGroup
+              fn = '''
+  async function applySampleVariable() {
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await apiClient.patch(`/admin/catalog-services/${serviceId}/pricing-flags`, {
+        allowFixed: true,
+        allowVariable: true,
+        allowDeposit: allowDeposit,
+        defaultPricingMode: 'variable',
+      });
+      setAllowFixed(true);
+      setAllowVariable(true);
+      setDefaultMode('variable');
+      const current = await apiClient.get<PricingPayload>(`/admin/catalog-services/${serviceId}/pricing`);
+      const existing = (current.attributeGroups || []).filter((g) => g.isActive !== false);
+      if (existing.length === 0) {
+        const g1 = await apiClient.post<{ id: string }>(`/admin/catalog-services/${serviceId}/attribute-groups`, { name: 'طول مو', required: true });
+        for (const opt of [
+          { label: 'کوتاه', suggestedPriceDelta: 0, suggestedDurationDeltaMin: 0 },
+          { label: 'متوسط', suggestedPriceDelta: 50000, suggestedDurationDeltaMin: 15 },
+          { label: 'بلند', suggestedPriceDelta: 120000, suggestedDurationDeltaMin: 30 },
+        ]) await apiClient.post(`/admin/attribute-groups/${g1.id}/options`, opt);
+        const g2 = await apiClient.post<{ id: string }>(`/admin/catalog-services/${serviceId}/attribute-groups`, { name: 'نوع کار', required: false });
+        for (const opt of [
+          { label: 'اصلاح ساده', suggestedPriceDelta: 0, suggestedDurationDeltaMin: 0 },
+          { label: 'رنگ ریشه‌ای', suggestedPriceDelta: 200000, suggestedDurationDeltaMin: 45 },
+          { label: 'دکلره', suggestedPriceDelta: 450000, suggestedDurationDeltaMin: 90, forcesDeposit: true },
+        ]) await apiClient.post(`/admin/attribute-groups/${g2.id}/options`, opt);
+      }
+      setMsg('نمونه قیمت متغیر اعمال شد');
+      await load();
+      onSaved?.();
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+'''
+              key = '  async function deactivateGroup(groupId: string) {'
+              if key not in t:
+                  raise SystemExit('deactivateGroup missing')
+              t = t.replace(key, fn + key, 1)
+              # allowFixed off -> switch default
+              t = t.replace(
+                  'onChange={(e) => setAllowFixed(e.target.checked)}',
+                  "onChange={(e) => { const next = e.target.checked; setAllowFixed(next); if (!next && defaultMode === 'fixed') { if (allowVariable) setDefaultMode('variable'); else if (allowDeposit) setDefaultMode('deposit'); } }}",
+                  1,
+              )
+              p.write_text(t, encoding='utf-8')
+              print('patched')
+          PY
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/TRIGGER_SPP .github/workflows/patch-spp.yml
+          git add -A
+          git diff --cached --stat
+          git commit -m "fix(admin): sample variable pricing + save when fixed disabled" || exit 0
+          git push origin HEAD:main
