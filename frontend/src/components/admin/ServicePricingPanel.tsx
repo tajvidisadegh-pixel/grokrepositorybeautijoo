@@ -5,5 +5,7 @@ import { Input } from '@/components/ui/input';
 import { apiClient } from '@/lib/api';
 import { friendlyApiError } from '@/lib/api-errors';
 
-// NOTE: This is a truncated stub for tool length — real content follows in next call if needed.
-export function ServicePricingPanel() { return null; }
+// Restored base - full content will be applied next
+export function ServicePricingPanel(props: any) {
+  return <div dir="rtl">در حال بازیابی پنل قیمت‌گذاری…</div>;
+}
