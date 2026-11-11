@@ -19,6 +19,7 @@ function LoginForm() {
   const nextParam = search?.get('next');
   const asParam = search?.get('as');
   const sessionExpired = search?.get('expired') === '1';
+  const wantPassword = search?.get('password') === '1';
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -28,13 +29,18 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordForm, setShowPasswordForm] = useState(wantPassword);
 
   if (isAuthenticated) {
     let dest = nextParam || '/panel';
     if (hasRole('SUPER_ADMIN') || hasRole('admin')) dest = '/admin';
     else if (user?.accountType === 'professional' || hasRole('professional')) dest = '/zibagar';
     else dest = nextParam || '/panel';
-    if (dest.startsWith('/panel') && (user?.accountType === 'professional' || (hasRole('professional') && !hasRole('customer')))) {
+    if (
+      dest.startsWith('/panel') &&
+      (user?.accountType === 'professional' ||
+        (hasRole('professional') && !hasRole('customer')))
+    ) {
       dest = '/zibagar';
     }
     if (dest.startsWith('/zibagar') && user?.accountType === 'customer') {
@@ -85,11 +91,13 @@ function LoginForm() {
         <LogoMark className="h-12 w-12" />
         <h1 className="text-2xl font-bold text-foreground">ورود</h1>
         <p className="text-sm text-gray">به بیوتی‌جو خوش آمدید</p>
-        <p className="text-xs text-gray-muted">سریع‌ترین راه: ورود با کد پیامکی</p>
       </div>
 
       {sessionExpired && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+        <div
+          className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          role="status"
+        >
           نشست شما منقضی شده است. لطفاً دوباره وارد شوید.
         </div>
       )}
@@ -119,60 +127,93 @@ function LoginForm() {
           </button>
         </div>
 
-        <Link
-          href={`/otp?as=${accountType}`}
-          className="mb-4 flex h-12 w-full items-center justify-center rounded-2xl bg-coral text-sm font-semibold text-white shadow-sm transition hover:bg-coral-dark"
-        >
-          ورود با کد پیامکی
-        </Link>
-        <p className="mb-4 text-center text-xs text-gray">یا با رمز عبور</p>
-
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">شماره موبایل</label>
-            <Input
-              type="tel"
-              inputMode="numeric"
-              placeholder="09123456789"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              dir="ltr"
-              className="text-left"
-              autoComplete="tel"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">رمز عبور</label>
-            <div className="relative">
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                autoComplete="current-password"
-                placeholder="••••••••"
-                className="pl-16"
-              />
+        {!showPasswordForm ? (
+          <>
+            <Link
+              href={`/otp?as=${accountType}`}
+              className="mb-3 flex h-12 w-full items-center justify-center rounded-2xl bg-coral text-sm font-semibold text-white shadow-sm transition hover:bg-coral-dark"
+            >
+              ورود با کد پیامکی
+            </Link>
+            <p className="text-center text-[11px] leading-relaxed text-gray-muted">
               <button
                 type="button"
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray hover:text-foreground"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'مخفی کردن رمز عبور' : 'نمایش رمز عبور'}
-                title={showPassword ? 'مخفی کردن رمز عبور' : 'نمایش رمز عبور'}
+                className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                onClick={() => setShowPasswordForm(true)}
               >
-                {showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                ورود با رمز عبور
               </button>
-            </div>
-          </div>
-          {error && (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-          )}
-          <Button type="submit" className="w-full" loading={loading}>
-            {accountType === 'professional' ? 'ورود با رمز (زیباگر)' : 'ورود با رمز (نوبت‌گیر)'}
-          </Button>
-        </form>
+              {' '}
+              (بدون کد پیامکی)
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mb-3 text-center text-xs text-gray">ورود با شماره و رمز عبور</p>
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  شماره موبایل
+                </label>
+                <Input
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="09123456789"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                  dir="ltr"
+                  className="text-left"
+                  autoComplete="tel"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">رمز عبور</label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    className="pl-16"
+                  />
+                  <button
+                    type="button"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray hover:text-foreground"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'مخفی کردن رمز عبور' : 'نمایش رمز عبور'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" aria-hidden="true" />
+                    ) : (
+                      <Eye className="h-5 w-5" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              {error && (
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+              )}
+              <Button type="submit" className="w-full" loading={loading}>
+                {accountType === 'professional'
+                  ? 'ورود با رمز (زیباگر)'
+                  : 'ورود با رمز (حساب کاربری)'}
+              </Button>
+            </form>
+            <p className="mt-3 text-center text-[11px] text-gray-muted">
+              <button
+                type="button"
+                className="underline decoration-dotted"
+                onClick={() => setShowPasswordForm(false)}
+              >
+                بازگشت به ورود با کد پیامکی
+              </button>
+            </p>
+          </>
+        )}
 
         <div className="mt-6 space-y-2 border-t border-border pt-4 text-center text-sm text-gray">
           <p>
