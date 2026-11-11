@@ -1,0 +1,137 @@
+name: fix-issue-83-batch
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_ISSUE_83'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch professionals table checkbox + compact actions
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/admin/professionals/page.tsx')
+          t = p.read_text()
+          old = '''              {items.map((p) => (
+                <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/80">
+                  <td className="px-3 py-2">
+                    <Link href={`/admin/professionals/${p.id}`} className="font-medium text-coral hover:underline">
+                      {p.user?.profile?.displayName || p.title || p.slug}
+                    </Link>
+                    <div className="text-xs text-gray" dir="ltr">{p.slug}</div>
+                  </td>'''
+          new = '''              {items.map((p) => (
+                <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/80">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label="انتخاب"
+                      checked={selected.has(p.id)}
+                      onChange={() => toggleSelect(p.id)}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <Link href={`/admin/professionals/${p.id}`} className="font-medium text-coral hover:underline">
+                      {p.user?.profile?.displayName || p.title || p.slug}
+                    </Link>
+                    <div className="text-xs text-gray" dir="ltr">{p.slug}</div>
+                  </td>'''
+          if old not in t:
+              print('pro row pattern missing')
+          else:
+              t = t.replace(old, new, 1)
+              print('pro checkbox ok')
+          # compact action buttons
+          old2 = '''                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {p.status !== 'approved' && (
+                        <Button size="sm" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
+                      )}
+                      <Link href={`/admin/professionals/${p.id}`}>
+                        <Button size="sm" variant="outline">ویرایش</Button>
+                      </Link>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onNotify(p)}>اعلان</Button>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</Button>
+                    </div>
+                  </td>'''
+          new2 = '''                  <td className="px-3 py-2 whitespace-nowrap">
+                    <div className="flex flex-nowrap items-center gap-1 text-xs">
+                      {p.status !== 'approved' && (
+                        <button type="button" className="rounded border border-green-400 px-1.5 py-0.5 text-green-700 disabled:opacity-50" disabled={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</button>
+                      )}
+                      <Link href={`/admin/professionals/${p.id}`} className="rounded border px-1.5 py-0.5">ویرایش</Link>
+                      <button type="button" className="rounded border px-1.5 py-0.5 disabled:opacity-50" disabled={busyId === p.id} onClick={() => onNotify(p)}>اعلان</button>
+                      <button type="button" className="rounded border border-red-300 px-1.5 py-0.5 text-red-700 disabled:opacity-50" disabled={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</button>
+                    </div>
+                  </td>'''
+          if old2 not in t:
+              print('actions pattern missing')
+          else:
+              t = t.replace(old2, new2, 1)
+              print('actions compact ok')
+          p.write_text(t)
+          PY
+      - name: Patch admin bookings - checkbox + city column
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/admin/bookings/page.tsx')
+          t = p.read_text()
+          # add selected state if missing
+          if 'const [selected, setSelected]' not in t:
+              t = t.replace(
+                  '  const [reason, setReason] = useState(\'\');
+',
+                  '  const [reason, setReason] = useState(\'\');
+  const [selected, setSelected] = useState<Set<string>>(new Set());\n',
+              )
+          # city on professional type
+          if 'city?: string' not in t:
+              t = t.replace(
+                  '    slug?: string;\n    title?: string | null;',
+                  '    slug?: string;\n    title?: string | null;\n    city?: string | null;',
+              )
+          old_head = '''                <th className="p-3">کد</th>
+                <th className="p-3">کاربر</th>
+                <th className="p-3">زیباگر</th>
+                <th className="p-3">زمان</th>'''
+          new_head = '''                <th className="p-3"><input type="checkbox" aria-label="همه" onChange={() => setSelected((prev) => prev.size === items.length && items.length ? new Set() : new Set(items.map((b) => b.id)))} checked={selected.size === items.length && items.length > 0} /></th>
+                <th className="p-3">کد</th>
+                <th className="p-3">کاربر</th>
+                <th className="p-3">زیباگر</th>
+                <th className="p-3">شهر</th>
+                <th className="p-3">زمان</th>'''
+          if old_head in t:
+              t = t.replace(old_head, new_head, 1)
+              print('bookings head ok')
+          old_row = '''                <tr key={b.id} className="cursor-pointer border-t hover:bg-gray-light/30" onClick={() => openDetail(b.id)}>
+                  <td className="p-3 font-mono text-xs" dir="ltr">#{b.id.slice(0, 8)}</td>
+                  <td className="p-3">{b.customer?.profile?.displayName || b.customer?.phone || '—'}</td>
+                  <td className="p-3">{b.professional?.user?.profile?.displayName || b.professional?.title || '—'}</td>
+                  <td className="p-3">{formatDate(b.startAt, { style: 'short', includeTime: true })}</td>'''
+          new_row = '''                <tr key={b.id} className="cursor-pointer border-t hover:bg-gray-light/30" onClick={() => openDetail(b.id)}>
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={selected.has(b.id)} onChange={() => setSelected((prev) => { const n = new Set(prev); if (n.has(b.id)) n.delete(b.id); else n.add(b.id); return n; })} />
+                  </td>
+                  <td className="p-3 font-mono text-xs" dir="ltr">#{b.id.slice(0, 8)}</td>
+                  <td className="p-3">{b.customer?.profile?.displayName || b.customer?.phone || '—'}</td>
+                  <td className="p-3">{b.professional?.user?.profile?.displayName || b.professional?.title || '—'}</td>
+                  <td className="p-3">{b.professional?.city || '—'}</td>
+                  <td className="p-3">{formatDate(b.startAt, { style: 'short', includeTime: true })}</td>'''
+          if old_row in t:
+              t = t.replace(old_row, new_row, 1)
+              print('bookings row ok')
+          else:
+              print('bookings row missing')
+          p.write_text(t)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/professionals/page.tsx frontend/src/app/admin/bookings/page.tsx
+          git commit -m "fix(#83): admin pros checkbox+compact actions; bookings select+city" || exit 0
+          git push
