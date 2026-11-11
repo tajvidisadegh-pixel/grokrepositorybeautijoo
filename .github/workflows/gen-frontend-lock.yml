@@ -16,11 +16,16 @@ jobs:
         working-directory: frontend
         run: |
           if [ -f package-lock.json ]; then
-            echo "lock already exists"
-            exit 0
+            if grep -q '"lockfileVersion"' package-lock.json 2>/dev/null; then
+              echo "valid lock already exists"
+              exit 0
+            fi
+            echo "invalid lock present — regenerating"
+            rm -f package-lock.json
           fi
           npm install --package-lock-only --ignore-scripts
           test -f package-lock.json
+          grep -q '"lockfileVersion"' package-lock.json
           wc -c package-lock.json
       - name: Commit lockfile
         run: |
