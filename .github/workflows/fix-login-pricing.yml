@@ -1,0 +1,89 @@
+name: fix-login-pricing
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_FIX_LOGIN_PRICING'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch auth.service login for OTP-only professional accounts
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/auth/auth.service.ts')
+          t = p.read_text()
+          old = """    if (!user || !user.passwordHash) {
+      if (candidates.length > 0) {
+        const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
+        const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
+        throw new UnauthorizedException(
+          'برای این شماره حساب ' + want + ' با رمز پیدا نشد. اگر حساب ' + other + ' دارید نوع ورود را عوض کنید یا ثبت‌نام نقش جدید انجام دهید.',
+        );
+      }
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }
+    if (user.status !== UserStatus.active) {
+      throw new UnauthorizedException('حساب کاربری غیرفعال است');
+    }
+    const ok = await argon2.verify(user.passwordHash, dto.password);
+    if (!ok) {
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }"""
+          new = """    // Prefer password match across roles; handle OTP-only accounts
+    let matched = user;
+    let passwordOk = false;
+    const tryList = matched
+      ? [matched, ...candidates.filter((c) => c.id !== matched!.id)]
+      : candidates;
+    for (const cand of tryList) {
+      if (!cand.passwordHash) continue;
+      try {
+        if (await argon2.verify(cand.passwordHash, dto.password)) {
+          matched = cand;
+          passwordOk = true;
+          break;
+        }
+      } catch { /* next */ }
+    }
+    if (!passwordOk || !matched) {
+      const wanted = candidates.find(
+        (u) =>
+          u.accountType === accountType ||
+          u.userRoles.some((ur) => ur.role.name === roleWanted),
+      );
+      if (wanted && !wanted.passwordHash) {
+        throw new UnauthorizedException(
+          'این حساب با کد پیامکی ساخته شده و هنوز رمز ندارد. از «ورود با کد پیامکی» استفاده کنید یا از فراموشی رمز، رمز بگذارید.',
+        );
+      }
+      if (candidates.length > 0) {
+        const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
+        const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
+        throw new UnauthorizedException(
+          'برای این شماره حساب ' + want + ' با این رمز پیدا نشد. اگر حساب ' + other + ' دارید نوع ورود را عوض کنید، یا با کد پیامکی وارد شوید.',
+        );
+      }
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }
+    const userFinal = matched;
+    if (userFinal.status !== UserStatus.active) {
+      throw new UnauthorizedException('حساب کاربری غیرفعال است');
+    }
+    // bind for rest of method
+    user = userFinal;"""
+          if old not in t:
+              print('OLD BLOCK NOT FOUND')
+              raise SystemExit(1)
+          p.write_text(t.replace(old, new, 1))
+          print('auth patched')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          git commit -m "fix(auth): OTP-only pro message + password match across account types" || exit 0
+          git push
