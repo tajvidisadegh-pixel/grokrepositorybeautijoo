@@ -6,9 +6,10 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
 ENV PUBLIC_API_TIMEOUT_MS=8000
 ENV DOCKER_STANDALONE=1
+# NOTE: Do NOT set NODE_ENV=production here — npm would skip devDependencies
+# (typescript, tailwind, postcss, eslint-config-next) and `next build` fails.
 
 ARG NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1
 ARG NEXT_PUBLIC_APP_URL=https://beautijoo.ir
@@ -18,11 +19,23 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 
 COPY frontend/package.json frontend/package-lock.json* ./
+
 # Prefer reproducible npm ci when lock exists; fall back so Liara build is not blocked
 # when frontend/package-lock.json is absent from the repo.
-# Builder needs devDependencies (typescript, tailwind, postcss) for `next build`
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# Explicit --include=dev so install works even if NODE_ENV is later set to production.
+RUN npm config set fetch-retries 5 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && if [ -f package-lock.json ]; then \
+       npm ci --include=dev; \
+     else \
+       npm install --include=dev; \
+     fi
+
 COPY frontend/ ./
+
+# Now production for the actual Next build
+ENV NODE_ENV=production
 RUN npm run build
 
 RUN set -e; \
