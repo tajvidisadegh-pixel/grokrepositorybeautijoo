@@ -1,9 +1,9 @@
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
 ENV PUBLIC_API_TIMEOUT_MS=8000
 ENV DOCKER_STANDALONE=1
+# Do NOT set NODE_ENV=production before npm install — skips devDependencies needed by next build
 
 ARG NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1
 ARG NEXT_PUBLIC_APP_URL=https://beautijoo.ir
@@ -13,8 +13,16 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 
 COPY package.json package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+RUN npm config set fetch-retries 5 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && if [ -f package-lock.json ]; then \
+       npm ci --include=dev; \
+     else \
+       npm install --include=dev; \
+     fi
 COPY . .
+ENV NODE_ENV=production
 RUN npm run build
 
 RUN if [ -f .next/standalone/frontend/server.js ] && [ ! -f .next/standalone/server.js ]; then \
