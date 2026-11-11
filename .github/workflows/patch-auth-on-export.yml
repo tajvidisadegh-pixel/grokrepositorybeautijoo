@@ -1,0 +1,121 @@
+name: patch-auth-on-export
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_PATCH_AUTH_EXPORT'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: beautijoo-backend-export
+          fetch-depth: 0
+      - name: Replace login method on export branch
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('src/auth/auth.service.ts')
+          if not p.exists():
+              raise SystemExit('src/auth/auth.service.ts missing on export')
+          t = p.read_text()
+          start = t.find('  async login(dto: LoginDto)')
+          end = t.find('  async requestOtp', start)
+          if start < 0 or end < 0:
+              raise SystemExit('login/requestOtp markers not found')
+          new_login = '''  async login(dto: LoginDto) {
+    const accountType = this.resolveAccountType(dto.accountType);
+    const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';
+    const candidates = await this.prisma.user.findMany({
+      where: { phone: dto.phone },
+      include: { profile: true, userRoles: { include: { role: true } } },
+    });
+    let user =
+      candidates.find((u) => u.accountType === accountType) ||
+      candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted)) ||
+      null;
+
+    let matched = user;
+    let passwordOk = false;
+    const tryList = matched
+      ? [matched, ...candidates.filter((c) => c.id !== matched!.id)]
+      : candidates;
+    for (const cand of tryList) {
+      if (!cand.passwordHash) continue;
+      try {
+        if (await argon2.verify(cand.passwordHash, dto.password)) {
+          matched = cand;
+          passwordOk = true;
+          break;
+        }
+      } catch {
+        /* next */
+      }
+    }
+
+    if (!passwordOk || !matched) {
+      const wanted = candidates.find(
+        (u) =>
+          u.accountType === accountType ||
+          u.userRoles.some((ur) => ur.role.name === roleWanted),
+      );
+      if (wanted && !wanted.passwordHash) {
+        throw new UnauthorizedException(
+          'این حساب با کد پیامکی ساخته شده و هنوز رمز ندارد. از «ورود با کد پیامکی» استفاده کنید یا از فراموشی رمز، رمز بگذارید.',
+        );
+      }
+      if (candidates.length > 0) {
+        const other =
+          candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
+        const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
+        throw new UnauthorizedException(
+          'برای این شماره حساب ' +
+            want +
+            ' با این رمز پیدا نشد. اگر حساب ' +
+            other +
+            ' دارید نوع ورود را عوض کنید، یا با کد پیامکی وارد شوید.',
+        );
+      }
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }
+
+    user = matched;
+    if (user.status !== UserStatus.active) {
+      throw new UnauthorizedException('حساب کاربری غیرفعال است');
+    }
+
+    await this.prisma.user
+      .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+      .catch(() => undefined);
+    const tokens = await this.issueTokens(user.id, user.phone);
+    const roles = user.userRoles.map((ur) => ur.role.name);
+    return {
+      user: {
+        id: user.id,
+        phone: user.phone,
+        accountType: user.accountType,
+        displayName: user.profile?.displayName,
+        roles,
+      },
+      ...tokens,
+    };
+  }
+
+'''
+          p.write_text(t[:start] + new_login + t[end:])
+          print('export auth.service.ts login replaced')
+          PY
+      - name: Also mirror patch onto main backend path
+        run: |
+          git fetch origin main
+          git checkout main -- backend/src/auth/auth.service.ts 2>/dev/null || true
+          # stay on export; only commit export file
+          true
+      - name: Commit and push export
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/auth/auth.service.ts
+          git commit -m "fix(auth): OTP-only pro login + password match (export branch for Liara)" || exit 0
+          git push origin HEAD:beautijoo-backend-export
