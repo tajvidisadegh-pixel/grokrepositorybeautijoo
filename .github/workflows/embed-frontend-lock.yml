@@ -1,0 +1,22 @@
+name: embed-frontend-lock
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_EMBED_LOCK'
+jobs:
+  embed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write lock from gzip+base64
+        run: |
+          python3 << 'PY'
+          import base64, gzip, pathlib
+          parts = [
+            open('.github/lock-part0.b64').read().strip() if False else '',
+          ]
+          print('use multipartite approach')
+          PY
+      - name: placeholder
+        run: echo 'will replace with full workflow'
