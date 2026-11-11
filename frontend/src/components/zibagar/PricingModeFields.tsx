@@ -166,25 +166,39 @@ export function PricingModeFields({ allowed, state, onChange, groups, disabled }
                   <div className="mt-1 space-y-1">
                     {(g.options || [])
                       .filter((o) => o.isActive !== false)
-                      .map((o) => (
-                        <div key={o.id} className="flex items-center gap-2">
-                          <span className="w-24 shrink-0 text-[11px] text-gray-600">{o.label}</span>
-                          <Input
-                            className="h-8"
-                            value={state.optionDeltas[o.id] != null ? String(state.optionDeltas[o.id]) : ''}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              const next = { ...state.optionDeltas };
-                              if (v === '') delete next[o.id];
-                              else next[o.id] = Number(v.replace(/[^\d-]/g, '')) || 0;
-                              onChange({ ...state, optionDeltas: next });
-                            }}
-                            disabled={disabled}
-                            inputMode="numeric"
-                            placeholder="0"
-                          />
-                        </div>
-                      ))}
+                      .map((o) => {
+                        const d = state.optionDeltas[o.id];
+                        const display =
+                          d?.priceDelta != null
+                            ? String(d.priceDelta)
+                            : '';
+                        return (
+                          <div key={o.id} className="flex items-center gap-2">
+                            <span className="w-24 shrink-0 text-[11px] text-gray-600">{o.label}</span>
+                            <Input
+                              className="h-8"
+                              value={display}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                const next: OptionDeltaMap = { ...state.optionDeltas };
+                                if (v === '') {
+                                  delete next[o.id];
+                                } else {
+                                  const n = Number(v.replace(/[^\d-]/g, '')) || 0;
+                                  next[o.id] = {
+                                    ...(next[o.id] || {}),
+                                    priceDelta: n,
+                                  };
+                                }
+                                onChange({ ...state, optionDeltas: next });
+                              }}
+                              disabled={disabled}
+                              inputMode="numeric"
+                              placeholder={String(o.suggestedPriceDelta ?? 0)}
+                            />
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               ))}
