@@ -9,14 +9,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Write lock from gzip+base64
+      - name: Reconstruct package-lock.json
         run: |
-          python3 << 'PY'
+          python3 << 'END'
           import base64, gzip, pathlib
-          parts = [
-            open('.github/lock-part0.b64').read().strip() if False else '',
-          ]
-          print('use multipartite approach')
-          PY
-      - name: placeholder
-        run: echo 'will replace with full workflow'
+          parts = []
+          i = 0
+          while True:
+              p = pathlib.Path(f'.github/lock-part{i}.b64')
+              if not p.exists():
+                  break
+              parts.append(p.read_text().strip())
+              i += 1
+          assert parts, 'no parts'
+          data = gzip.decompress(base64.b64decode(''.join(parts)))
+          pathlib.Path('frontend/package-lock.json').write_bytes(data)
+          print('wrote', len(data), 'from', len(parts), 'parts')
+          assert b'lockfileVersion' in data
+          END
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          git status
+          git commit -m "chore(frontend): add package-lock.json for reproducible builds" || exit 0
+          git push
