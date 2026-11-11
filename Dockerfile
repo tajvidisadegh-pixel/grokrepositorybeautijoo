@@ -20,16 +20,19 @@ ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 
 COPY frontend/package.json frontend/package-lock.json* ./
 
-# Prefer reproducible npm ci when lock exists; fall back so Liara build is not blocked
-# when frontend/package-lock.json is absent from the repo.
-# Explicit --include=dev so install works even if NODE_ENV is later set to production.
+# Prefer reproducible npm ci when a REAL lock exists; fall back to npm install.
+# --include=dev keeps typescript/tailwind for next build.
+# --no-audit --no-fund cuts minutes off Liara builds.
 RUN npm config set fetch-retries 5 \
   && npm config set fetch-retry-mintimeout 20000 \
   && npm config set fetch-retry-maxtimeout 120000 \
-  && if [ -f package-lock.json ]; then \
-       npm ci --include=dev; \
+  && npm config set maxsockets 10 \
+  && if [ -f package-lock.json ] && grep -q '"lockfileVersion"' package-lock.json; then \
+       echo "Using npm ci with package-lock.json"; \
+       npm ci --include=dev --no-audit --no-fund; \
      else \
-       npm install --include=dev; \
+       echo "No valid lockfile — npm install (slower)"; \
+       npm install --include=dev --no-audit --no-fund; \
      fi
 
 COPY frontend/ ./
