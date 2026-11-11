@@ -11,19 +11,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore from last good blob and patch checkbox
+      - name: Restore professionals page from last good commit
         run: |
           set -e
-          # last known good full page before PLACEHOLDER accidents
-          git show 8e8c8497576d8a894b65ce3597c9ef6a7fef8cf9:frontend/src/app/admin/professionals/page.tsx > frontend/src/app/admin/professionals/page.tsx || \
           git show dee62d5b11f68a877b424861b50e56eb381d3be4:frontend/src/app/admin/professionals/page.tsx > frontend/src/app/admin/professionals/page.tsx
+          wc -c frontend/src/app/admin/professionals/page.tsx
+          test $(wc -c < frontend/src/app/admin/professionals/page.tsx) -gt 5000
           python3 << 'PY'
           from pathlib import Path
           p = Path('frontend/src/app/admin/professionals/page.tsx')
           t = p.read_text()
-          if 'PLACEHOLDER' in t or len(t) < 500:
-              raise SystemExit('restore failed size='+str(len(t)))
-          old = '''              {items.map((p) => (
+          if 'checked={selected.has(p.id)}' not in t:
+              old = '''              {items.map((p) => (
                 <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/80">
                   <td className="px-3 py-2">
                     <Link href={`/admin/professionals/${p.id}`} className="font-medium text-coral hover:underline">
@@ -31,7 +30,7 @@ jobs:
                     </Link>
                     <div className="text-xs text-gray" dir="ltr">{p.slug}</div>
                   </td>'''
-          new = '''              {items.map((p) => (
+              new = '''              {items.map((p) => (
                 <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/80">
                   <td className="px-3 py-2">
                     <input type="checkbox" aria-label="انتخاب" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
@@ -42,11 +41,9 @@ jobs:
                     </Link>
                     <div className="text-xs text-gray" dir="ltr">{p.slug}</div>
                   </td>'''
-          if old in t and 'checked={selected.has(p.id)}' not in t:
+              if old not in t:
+                  raise SystemExit('row pattern missing')
               t = t.replace(old, new, 1)
-              print('checkbox added')
-          else:
-              print('checkbox skip or already')
           old2 = '''                  <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
                       {p.status !== 'approved' && (
@@ -71,14 +68,13 @@ jobs:
                   </td>'''
           if old2 in t:
               t = t.replace(old2, new2, 1)
-              print('actions compact')
           p.write_text(t)
-          print('final', len(t))
+          print('ok', len(t))
           PY
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add frontend/src/app/admin/professionals/page.tsx
-          git commit -m "fix(#83): restore admin professionals with select checkbox + compact row" || exit 0
+          git commit -m "fix(#83): restore admin professionals with checkbox + compact actions" || exit 0
           git push
