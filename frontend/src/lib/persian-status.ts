@@ -1,8 +1,8 @@
 /** Status labels aligned with Prisma enums (lowercase / snake_case). */
 export function persianBookingStatus(status: string): string {
   const map: Record<string, string> = {
-    pending: 'در انتظار تأیید',
-    confirmed: 'تأیید شده',
+    pending: 'رزرو ثبت شد',
+    confirmed: 'رزرو ثبت شد',
     in_progress: 'در حال انجام',
     rejected: 'رد شده',
     cancelled: 'لغو شده',
@@ -27,14 +27,25 @@ export function persianProfessionalStatus(status: string): string {
 
 export function persianPaymentStatus(status: string): string {
   const map: Record<string, string> = {
-    pending: 'در انتظار پرداخت',
+    pending: 'پرداخت حضوری',
     processing: 'در حال پردازش',
-    paid: 'موفق و تسویه‌شده',
+    // تا قبل از درگاه واقعی: «موفق و تسویه‌شده» گمراه‌کننده است
+    paid: 'پرداخت ثبت‌شده',
     failed: 'ناموفق',
     refunded: 'مسترد شده',
     cancelled: 'لغو شده',
+    offline: 'پرداخت حضوری',
   };
   return map[status] || map[status?.toLowerCase()] || status;
+}
+
+/** توضیح کوتاه زیر وضعیت رزرو وقتی درگاه آنلاین فعال نیست */
+export function offlineBookingHint(paymentStatus?: string | null): string | null {
+  const st = (paymentStatus || '').toLowerCase();
+  if (!st || st === 'pending' || st === 'offline' || st === 'paid') {
+    return 'پرداخت به صورت حضوری انجام می‌شود.';
+  }
+  return null;
 }
 
 export const WEEKDAY_FA: Record<string, string> = {
@@ -46,7 +57,6 @@ export const WEEKDAY_FA: Record<string, string> = {
   FRIDAY: 'جمعه',
   SATURDAY: 'شنبه',
 };
-
 
 /** Display status: confirmed bookings within [startAt, endAt] show as in_progress. */
 export function effectiveBookingStatus(b: {
@@ -65,4 +75,3 @@ export function effectiveBookingStatus(b: {
   }
   return st;
 }
-
