@@ -1,0 +1,13 @@
+name: fix-login-and-pricing-panel
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_FIX_LOGIN_PRICING'
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: placeholder
+        run: echo 'replace with full'
