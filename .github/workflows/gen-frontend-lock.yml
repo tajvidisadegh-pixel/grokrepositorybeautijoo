@@ -1,0 +1,32 @@
+name: gen-frontend-lock
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_GEN_LOCK'
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate package-lock.json
+        working-directory: frontend
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "lock already exists"
+            exit 0
+          fi
+          npm install --package-lock-only --ignore-scripts
+          test -f package-lock.json
+          wc -c package-lock.json
+      - name: Commit lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          git diff --cached --quiet && echo "no change" && exit 0
+          git commit -m "chore(frontend): add package-lock.json for reproducible Docker builds"
+          git push
