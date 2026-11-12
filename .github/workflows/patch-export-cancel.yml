@@ -1,0 +1,74 @@
+name: patch-export-cancel
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_PATCH_EXPORT_CANCEL'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: beautijoo-backend-export
+          fetch-depth: 0
+      - name: Patch cancel to 2h + hardstop + soft refund + ticket
+        run: |
+          set -e
+          f=src/bookings/bookings.service.ts
+          test -f "$f"
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('src/bookings/bookings.service.ts')
+          t = p.read_text()
+          t2 = t.replace("BOOKING_FREE_CANCEL_HOURS || '24'", "BOOKING_FREE_CANCEL_HOURS || '2'")
+          if "امکان لغو وجود ندارد" not in t2:
+              old = "        const msLeft = b.startAt.getTime() - Date.now();\n        const withinFreeWindow = msLeft >= hours * 3600_000;"
+              new = "        const msLeft = b.startAt.getTime() - Date.now();\n        if (hours > 0 && msLeft < hours * 3600_000) {\n          throw new BadRequestException('کمتر از ' + String(hours) + ' ساعت به نوبت مانده و امکان لغو وجود ندارد.');\n        }\n        const withinFreeWindow = msLeft >= hours * 3600_000;"
+              if old in t2:
+                  t2 = t2.replace(old, new, 1)
+                  print('hardstop')
+              else:
+                  print('hardstop pattern missing')
+          bad = "throw new BadRequestException('استرداد پرداخت ناموفق بود. رزرو لغو نشد؛ لطفاً بعداً تلاش کنید یا با پشتیبانی تماس بگیرید.');"
+          good = "return this.prisma.booking.update({ where: { id }, data: { status: BookingStatus.cancelled, cancelReason: reason ?? null, cancelledAt: new Date() } });"
+          if bad in t2:
+              t2 = t2.replace(bad, good, 1)
+              print('soft-refund')
+          if 'supportTicket.create' not in t2 and 'async reportIssue' in t2:
+              old = "    try {\n      await this.prisma.auditLog.create({\n        data: {\n          actorId: userId,\n          action: 'booking.report_issue',"
+              new = """    try {
+      const subject = ('report booking #' + id.slice(0, 8)).slice(0, 120);
+      const body = (message?.trim() || 'empty') + '\\n\\nbookingId=' + id;
+      await this.prisma.supportTicket.create({
+        data: {
+          userId,
+          subject,
+          status: 'open',
+          messages: { create: { body: body.slice(0, 2000), isStaff: false, senderId: userId } },
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`reportIssue supportTicket failed booking=${id}: ${(err as Error)?.message || err}`);
+    }
+
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: userId,
+          action: 'booking.report_issue',"""
+              if old in t2:
+                  t2 = t2.replace(old, new, 1)
+                  print('ticket')
+          p.write_text(t2)
+          print('done', '24->2' if "|| '2'" in t2 else 'check')
+          PY
+      - name: Commit on export
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(#83): cancel 2h hardstop + soft refund + report ticket on export" || exit 0
+          git push origin HEAD:beautijoo-backend-export
