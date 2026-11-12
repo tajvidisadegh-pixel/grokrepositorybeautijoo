@@ -153,10 +153,12 @@ export class UpdateProfileDto {
 }
 
 export class ChangePasswordDto {
-  @ApiProperty({ example: 'OldPass123' })
+  /** Optional when account is OTP-only and setting the first password. */
+  @ApiPropertyOptional({ example: 'OldPass123', description: 'برای حساب‌های بدون رمز لازم نیست' })
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  currentPassword!: string;
+  currentPassword?: string;
 
   @ApiProperty({ example: 'NewSecurePass1' })
   @IsString()
