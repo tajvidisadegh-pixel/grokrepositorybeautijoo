@@ -3,13 +3,16 @@
  * Avoids a heavy Prisma include (roles + permissions + profile + professional)
  * on every authenticated request.
  *
- * #82.15 notes:
- * - Not a substitute for Redis in multi-instance deploys — each process has its
- *   own cache. Prefer short TTL (default 30s) so status/role changes propagate.
- * - JwtStrategy re-checks `user.status` on every cache hit (cheap select).
+ * #82.15 multi-instance:
+ * - Each process still has its own Map (no Redis required).
+ * - JwtStrategy stores `cachedAt` and on every hit re-checks
+ *   `users.status` + `users.updatedAt`. If the row was updated after the
+ *   entry was cached (role/status change on another instance), the entry is
+ *   dropped and reloaded — so multi-instance stays correct without pub/sub.
  * - Call `invalidate(userId)` from admin paths that change status or roles
- *   (setUserStatus, setUserRoles) so the same instance drops the entry immediately.
+ *   so the same instance drops the entry immediately.
  * - Set JWT_USER_CACHE_TTL_SECONDS=0 to disable the cache entirely.
+ * - Prefer short TTL (default 30s) as an extra safety bound.
  */
 
 export type CachedAuthUser = {
@@ -23,6 +26,8 @@ export type CachedAuthUser = {
   /** Present when access token is an impersonation session (issue #22). */
   isImpersonating?: boolean;
   impersonatorId?: string | null;
+  /** Epoch ms when this entry was written — used for multi-instance freshness. */
+  cachedAt?: number;
 };
 
 type Entry = {
@@ -69,7 +74,11 @@ class UserAuthCache {
       if (oldest === undefined) break;
       this.store.delete(oldest);
     }
-    this.store.set(userId, { value, expiresAt: Date.now() + this.ttlMs });
+    const stamped: CachedAuthUser = {
+      ...value,
+      cachedAt: value.cachedAt ?? Date.now(),
+    };
+    this.store.set(userId, { value: stamped, expiresAt: Date.now() + this.ttlMs });
   }
 
   invalidate(userId: string): void {
