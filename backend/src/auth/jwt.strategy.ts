@@ -45,18 +45,23 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!isImpersonating) {
       const cached = userAuthCache.get(payload.sub);
       if (cached) {
-        // #82.15 — lightweight status re-check so suspended/inactive users
-        // lose access within one request even if still in the in-memory TTL cache.
-        // Avoids full roles/permissions reload on every hit.
+        // #82.15 — status + updatedAt re-check so suspended/role changes on
+        // any instance invalidate this process cache without Redis.
         const row = await this.prisma.user.findUnique({
           where: { id: payload.sub },
-          select: { status: true },
+          select: { status: true, updatedAt: true },
         });
         if (!row || row.status !== 'active') {
           userAuthCache.invalidate(payload.sub);
           throw new UnauthorizedException();
         }
-        return cached;
+        const cachedAt = cached.cachedAt ?? 0;
+        if (row.updatedAt && row.updatedAt.getTime() > cachedAt) {
+          userAuthCache.invalidate(payload.sub);
+          // fall through to full reload
+        } else {
+          return cached;
+        }
       }
     }
 
@@ -106,6 +111,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       professionalStatus: user.professional?.status ?? null,
       isImpersonating: isImpersonating || undefined,
       impersonatorId: isImpersonating ? payload.imp : undefined,
+      cachedAt: Date.now(),
     };
 
     if (!isImpersonating) {
