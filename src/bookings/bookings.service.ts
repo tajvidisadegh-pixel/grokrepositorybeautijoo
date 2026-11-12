@@ -566,7 +566,7 @@ return booking;
       const allowed: BookingStatus[] = [BookingStatus.pending, BookingStatus.confirmed];
       if (!allowed.includes(b.status)) throw new BadRequestException('این رزرو قابل لغو نیست');
       {
-        const freeH = parseInt(process.env.BOOKING_FREE_CANCEL_HOURS || '24', 10);
+        const freeH = parseInt(process.env.BOOKING_FREE_CANCEL_HOURS || '2', 10);
         const hours = Number.isFinite(freeH) && freeH >= 0 ? freeH : 24;
         const msLeft = b.startAt.getTime() - Date.now();
         const withinFreeWindow = msLeft >= hours * 3600_000;
