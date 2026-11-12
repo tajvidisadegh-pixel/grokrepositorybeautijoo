@@ -1,0 +1,58 @@
+name: sync-auth-service-export
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backend/src/auth/auth.service.ts'
+      - '.github/TRIGGER_SYNC_AUTH_EXPORT'
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Put auth.service.ts on export via API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          python3 << 'PY'
+          import base64, json, os, urllib.request
+          token = os.environ['GH_TOKEN']
+          repo = os.environ['GITHUB_REPOSITORY']
+          path = 'src/auth/auth.service.ts'
+          branch = 'beautijoo-backend-export'
+          local = 'backend/src/auth/auth.service.ts'
+          with open(local, 'rb') as f:
+              raw = f.read()
+          b64 = base64.b64encode(raw).decode()
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'User-Agent': 'sync-auth',
+              'Content-Type': 'application/json',
+          }
+          def api(method, url, data=None):
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read().decode())
+          get_url = f'https://api.github.com/repos/{repo}/contents/{path}?ref={branch}'
+          sha = None
+          try:
+              meta = api('GET', get_url)
+              sha = meta.get('sha')
+          except Exception as e:
+              print('get', e)
+          payload = {
+              'message': 'fix(auth): sync login phone variants + OTP-only from main',
+              'content': b64,
+              'branch': branch,
+          }
+          if sha:
+              payload['sha'] = sha
+          api('PUT', f'https://api.github.com/repos/{repo}/contents/{path}', json.dumps(payload).encode())
+          print('synced', len(raw), 'sha was', sha)
+          PY
