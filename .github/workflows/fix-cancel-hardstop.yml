@@ -1,0 +1,41 @@
+name: fix-cancel-hardstop
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_HARDSTOP'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject hard stop
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text()
+          if 'امکان لغو وجود ندارد' in t:
+              print('already present')
+          else:
+              old = "const msLeft = b.startAt.getTime() - Date.now();\n        const withinFreeWindow = msLeft >= hours * 3600_000;"
+              new = "const msLeft = b.startAt.getTime() - Date.now();\n        if (hours > 0 && msLeft < hours * 3600_000) {\n          throw new BadRequestException('کمتر از ' + String(hours) + ' ساعت به نوبت مانده و امکان لغو وجود ندارد.');\n        }\n        const withinFreeWindow = msLeft >= hours * 3600_000;"
+              if old not in t:
+                  raise SystemExit('pattern missing')
+              t = t.replace(old, new, 1)
+              print('injected')
+          bad = "throw new BadRequestException('استرداد پرداخت ناموفق بود. رزرو لغو نشد؛ لطفاً بعداً تلاش کنید یا با پشتیبانی تماس بگیرید.');"
+          if bad in t:
+              t = t.replace(bad, "return this.prisma.booking.update({ where: { id }, data: { status: BookingStatus.cancelled, cancelReason: reason ?? null, cancelledAt: new Date() } });", 1)
+              print('soft refund')
+          p.write_text(t)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts
+          git commit -m "fix(#83): hard-stop cancel under 2h; offline refund must not block" || exit 0
+          git push
