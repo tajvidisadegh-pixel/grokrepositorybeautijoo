@@ -830,7 +830,7 @@ export function BookingWizard({
                           ? 'border-coral bg-coral text-white'
                           : available
                             ? 'border-border bg-white hover:border-coral'
-                            : 'cursor-not-allowed border-red-300 bg-red-50 text-red-700 line-through opacity-80'
+                            : 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 line-through'
                       }`}
                     >
                       {s.start}
