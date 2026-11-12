@@ -142,7 +142,7 @@ function RegisterForm() {
           </button>
         </div>
         <p className="mb-3 text-xs text-gray">
-          یک شماره می‌تواند هم حساب نوبت‌گیر و هم حساب زیباگر داشته باشد.
+          یک شماره می‌تواند هم حساب حساب کاربری و هم حساب زیباگر داشته باشد.
         </p>
         {step === 'phone' && (
           <form onSubmit={onPhoneSubmit} className="space-y-4">

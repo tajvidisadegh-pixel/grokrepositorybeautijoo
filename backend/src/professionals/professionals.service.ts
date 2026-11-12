@@ -57,6 +57,8 @@ export class ProfessionalsService {
     maxDuration?: number;
     sort?: string;
     availableDate?: string;
+    availableToday?: boolean;
+    availableTomorrow?: boolean;
     ids?: string[];
     lat?: string | number;
     lng?: string | number;
@@ -67,6 +69,16 @@ export class ProfessionalsService {
     const page = params.page || 1;
     const limit = Math.min(params.limit || 20, 50);
     const skip = (page - 1) * limit;
+    if (!params.availableDate && (params.availableToday || params.availableTomorrow)) {
+      const now = new Date();
+      const tehranMs = now.getTime() + 3.5 * 3600_000;
+      const base = new Date(tehranMs);
+      if (params.availableTomorrow) base.setUTCDate(base.getUTCDate() + 1);
+      const y = base.getUTCFullYear();
+      const m = String(base.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(base.getUTCDate()).padStart(2, '0');
+      params.availableDate = y + '-' + m + '-' + d;
+    }
 
     const cacheKey =
       !params.ids || params.ids.length === 0

@@ -692,6 +692,21 @@ return booking;
       }
     }
     try {
+      const subject = ('report booking #' + id.slice(0, 8)).slice(0, 120);
+      const body = (message?.trim() || 'empty') + '\n\nbookingId=' + id;
+      await this.prisma.supportTicket.create({
+        data: {
+          userId,
+          subject,
+          status: 'open',
+          messages: { create: { body: body.slice(0, 2000), isStaff: false, senderId: userId } },
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`reportIssue supportTicket failed booking=${id}: ${(err as Error)?.message || err}`);
+    }
+
+    try {
       await this.prisma.auditLog.create({
         data: {
           actorId: userId,

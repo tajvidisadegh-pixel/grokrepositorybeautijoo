@@ -114,10 +114,16 @@ function ConfirmationBody() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-10" dir="rtl">
-      <h1 className="text-2xl font-bold text-foreground">تأیید رزرو</h1>
+      <h1 className="text-2xl font-bold text-foreground">رزرو شما ثبت شد</h1>
       <p className="mt-1 text-sm text-gray">
         وضعیت: {persianBookingStatus(booking.status)}
       </p>
+      {!payOk && !payFail && (booking.status === 'confirmed' || booking.status === 'pending') && (
+        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <p className="font-bold">رزرو شما ثبت شد</p>
+          <p className="mt-1 text-xs">پرداخت به صورت حضوری انجام می‌شود.</p>
+        </div>
+      )}
       {payOk && (
         <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <p className="font-bold">پرداخت با موفقیت ثبت شد</p>
@@ -180,7 +186,7 @@ function ConfirmationBody() {
       </Card>
 
       {/* #65.4 — contact after payment / confirmation */}
-      {paymentSucceeded && (proPhone || proAddress || proSlug) && (
+      {(paymentSucceeded || booking.status === 'pending' || booking.status === 'confirmed') && (proPhone || proAddress || proSlug) && (
         <Card className="mt-4 space-y-2 border-coral/20 bg-coral/5 text-sm">
           <p className="font-bold text-foreground">اطلاعات تماس زیباگر</p>
           {proSlug && (

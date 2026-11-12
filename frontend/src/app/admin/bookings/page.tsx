@@ -26,6 +26,7 @@ type BookingRow = {
     id: string;
     slug?: string;
     title?: string | null;
+    city?: string | null;
     user?: { phone?: string | null; profile?: { displayName?: string | null } | null } | null;
   } | null;
   payment?: {
@@ -86,6 +87,7 @@ export default function AdminBookingsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
@@ -246,9 +248,11 @@ export default function AdminBookingsPage() {
           <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-gray-light/60 text-right">
               <tr>
+                <th className="p-3"><input type="checkbox" aria-label="all" onChange={() => setSelected((prev) => prev.size === items.length && items.length ? new Set() : new Set(items.map((b) => b.id)))} checked={selected.size === items.length && items.length > 0} /></th>
                 <th className="p-3">کد</th>
                 <th className="p-3">کاربر</th>
                 <th className="p-3">زیباگر</th>
+                <th className="p-3">شهر</th>
                 <th className="p-3">زمان</th>
                 <th className="p-3">مبلغ</th>
                 <th className="p-3">پرداخت</th>
@@ -258,9 +262,11 @@ export default function AdminBookingsPage() {
             <tbody>
               {items.map((b) => (
                 <tr key={b.id} className="cursor-pointer border-t hover:bg-gray-light/30" onClick={() => openDetail(b.id)}>
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selected.has(b.id)} onChange={() => setSelected((prev) => { const n = new Set(prev); if (n.has(b.id)) n.delete(b.id); else n.add(b.id); return n; })} /></td>
                   <td className="p-3 font-mono text-xs" dir="ltr">#{b.id.slice(0, 8)}</td>
                   <td className="p-3">{b.customer?.profile?.displayName || b.customer?.phone || '—'}</td>
                   <td className="p-3">{b.professional?.user?.profile?.displayName || b.professional?.title || '—'}</td>
+                  <td className="p-3">{b.professional?.city || '—'}</td>
                   <td className="p-3">{formatDate(b.startAt, { style: 'short', includeTime: true })}</td>
                   <td className="p-3">{b.totalPrice != null ? formatPrice(b.totalPrice) : '—'}</td>
                   <td className="p-3 text-xs">{b.payment?.status || '—'}</td>

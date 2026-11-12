@@ -112,7 +112,7 @@ export default function PanelBookingsPage() {
     setError(null);
     try {
       await reportBookingToAdmin(id, reportText.trim());
-      setReportMsg('گزارش برای پشتیبانی ارسال شد.');
+      setReportMsg('گزارش شما ارسال شد و به‌زودی بررسی خواهد شد.');
       setReportFor(null);
       setReportText('');
     } catch (e) {
