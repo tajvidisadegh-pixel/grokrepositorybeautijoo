@@ -1,0 +1,30 @@
+name: patch-export-cancel2
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_PATCH_EXPORT_CANCEL2'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: beautijoo-backend-export
+          fetch-depth: 0
+      - name: sed 24 to 2
+        run: |
+          set -e
+          f=src/bookings/bookings.service.ts
+          test -f "$f"
+          sed -i "s/BOOKING_FREE_CANCEL_HOURS || '24'/BOOKING_FREE_CANCEL_HOURS || '2'/g" "$f"
+          grep -n "BOOKING_FREE_CANCEL" "$f" | head -3
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(#83): export cancel default 2h" || exit 0
+          git push origin HEAD:beautijoo-backend-export
