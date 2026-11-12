@@ -1,0 +1,205 @@
+name: restore-pro-curl
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_PRO_CURL'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download good file and patch
+        run: |
+          set -e
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/dee62d5b11f68a877b424861b50e56eb381d3be4/frontend/src/app/admin/professionals/page.tsx" \
+            -o frontend/src/app/admin/professionals/page.tsx
+          wc -c frontend/src/app/admin/professionals/page.tsx
+          test $(wc -c < frontend/src/app/admin/professionals/page.tsx) -gt 5000
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('frontend/src/app/admin/professionals/page.tsx')
+          t = p.read_text()
+          if 'checked={selected.has(p.id)}' not in t:
+              old = '''              {items.map((p) => (
+                <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/80">
+                  <td className="px-3 py-2">
+                    <Link href={`/admin/professionals/${p.id}`} className="font-medium text-coral hover:underline">
+                      {p.user?.profile?.displayName || p.title || p.slug}
+                    </Link>
+                    <div className="text-xs text-gray" dir="ltr">{p.slug}</div>
+                  </td>'''
+              new = '''              {items.map((p) => (
+                <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/80">
+                  <td className="px-3 py-2">
+                    <input type="checkbox" aria-label="انتخاب" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <Link href={`/admin/professionals/${p.id}`} className="font-medium text-coral hover:underline">
+                      {p.user?.profile?.displayName || p.title || p.slug}
+                    </Link>
+                    <div className="text-xs text-gray" dir="ltr">{p.slug}</div>
+                  </td>'''
+              if old not in t:
+                  raise SystemExit('row pattern missing')
+              t = t.replace(old, new, 1)
+              print('checkbox ok')
+          old2 = '''                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {p.status !== 'approved' && (
+                        <Button size="sm" loading={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</Button>
+                      )}
+                      <Link href={`/admin/professionals/${p.id}`}>
+                        <Button size="sm" variant="outline">ویرایش</Button>
+                      </Link>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onNotify(p)}>اعلان</Button>
+                      <Button size="sm" variant="outline" loading={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</Button>
+                    </div>
+                  </td>'''
+          new2 = '''                  <td className="px-3 py-2 whitespace-nowrap">
+                    <div className="flex flex-nowrap items-center gap-1 text-xs">
+                      {p.status !== 'approved' && (
+                        <button type="button" className="rounded border border-green-400 px-1.5 py-0.5 text-green-700 disabled:opacity-50" disabled={busyId === p.id} onClick={() => onStatus(p.id, 'approved')}>تأیید</button>
+                      )}
+                      <Link href={`/admin/professionals/${p.id}`} className="rounded border px-1.5 py-0.5">ویرایش</Link>
+                      <button type="button" className="rounded border px-1.5 py-0.5 disabled:opacity-50" disabled={busyId === p.id} onClick={() => onNotify(p)}>اعلان</button>
+                      <button type="button" className="rounded border border-red-300 px-1.5 py-0.5 text-red-700 disabled:opacity-50" disabled={busyId === p.id} onClick={() => onDelete(p.id)}>حذف</button>
+                    </div>
+                  </td>'''
+          if old2 in t:
+              t = t.replace(old2, new2, 1)
+              print('actions compact')
+          p.write_text(t)
+          print('final', len(t))
+          PY
+      - name: Patch cancel + slots + confirm + admin bookings
+        run: |
+          set -e
+          python3 << 'PY'
+          from pathlib import Path
+
+          # cancel 2h
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text()
+          if "BOOKING_FREE_CANCEL_HOURS || '2'" not in t:
+              start = t.find("      {\n        const freeH = parseInt(process.env.BOOKING_FREE_CANCEL_HOURS")
+              end = t.find("      return this.prisma.booking.update({\n        where: { id },\n        data: { status: BookingStatus.cancelled, cancelReason: reason ?? null, cancelledAt: new Date() },\n      });\n    }\n\n    if (action === 'complete')", start)
+              if start < 0 or end < 0:
+                  raise SystemExit(f'cancel markers {start} {end}')
+              new_block = """      {
+        // #83.6 — لغو فقط تا N ساعت قبل از شروع (پیش‌فرض ۲ ساعت)
+        const freeH = parseInt(process.env.BOOKING_FREE_CANCEL_HOURS || '2', 10);
+        const hours = Number.isFinite(freeH) && freeH >= 0 ? freeH : 2;
+        const msLeft = b.startAt.getTime() - Date.now();
+        if (hours > 0 && msLeft < hours * 3600_000) {
+          throw new BadRequestException(
+            `کمتر از ${hours} ساعت به نوبت مانده و امکان لغو وجود ندارد.`,
+          );
+        }
+        if (isCustomer && paid && b.payment?.id) {
+          try {
+            await this.payments.refund(b.payment.id, reason?.trim() || 'لغو توسط مشتری', userId);
+          } catch (err) {
+            this.logger.warn(`customer paid cancel refund failed booking=${id}: ${(err as Error)?.message || err}`);
+            try {
+              await this.prisma.booking.update({
+                where: { id },
+                data: {
+                  status: BookingStatus.cancelled,
+                  cancelReason: reason ?? 'لغو توسط مشتری',
+                  cancelledAt: new Date(),
+                  notes: [b.notes, 'REFUND_PENDING:cancel_refund_failed_offline_ok'].filter(Boolean).join(' | ').slice(0, 2000),
+                },
+              });
+              await this.prisma.auditLog.create({
+                data: {
+                  actorId: userId,
+                  action: 'booking.cancel.refund_failed_still_cancelled',
+                  entityType: 'booking',
+                  entityId: id,
+                  after: { paymentId: b.payment?.id, error: String((err as Error)?.message || err).slice(0, 300) } as any,
+                },
+              });
+            } catch { /* non-blocking */ }
+            return this.prisma.booking.findUniqueOrThrow({ where: { id } });
+          }
+          return this.prisma.booking.update({
+            where: { id },
+            data: { status: BookingStatus.cancelled, cancelReason: reason ?? null, cancelledAt: new Date() },
+          });
+        }
+      }
+"""
+              p.write_text(t[:start] + new_block + t[end:])
+              print('cancel patched')
+          else:
+              print('cancel already')
+
+          # gray slots
+          w = Path('frontend/src/components/booking/booking-wizard.tsx')
+          wt = w.read_text()
+          old = ": 'cursor-not-allowed border-red-300 bg-red-50 text-red-700 line-through opacity-80'"
+          new = ": 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 line-through'"
+          if old in wt:
+              w.write_text(wt.replace(old, new, 1))
+              print('slots gray')
+
+          # confirm
+          c = Path('frontend/src/app/booking/confirmation/[id]/page.tsx')
+          ct = c.read_text()
+          ct = ct.replace('>تأیید رزرو<', '>رزرو شما ثبت شد<', 1)
+          if 'پرداخت به صورت حضوری انجام می‌شود' not in ct:
+              needle = '{payOk && ('
+              insert = """{!payOk && !payFail && (booking.status === 'confirmed' || booking.status === 'pending') && (
+        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <p className="font-bold">رزرو شما ثبت شد</p>
+          <p className="mt-1 text-xs">پرداخت به صورت حضوری انجام می‌شود.</p>
+        </div>
+      )}
+      {payOk && ("""
+              if needle in ct:
+                  ct = ct.replace(needle, insert, 1)
+          ct = ct.replace(
+              '{paymentSucceeded && (proPhone || proAddress || proSlug) && (',
+              "{(paymentSucceeded || booking.status === 'pending' || booking.status === 'confirmed') && (proPhone || proAddress || proSlug) && (",
+              1,
+          )
+          c.write_text(ct)
+          print('confirm ok')
+
+          # admin bookings
+          ab = Path('frontend/src/app/admin/bookings/page.tsx')
+          at = ab.read_text()
+          if 'const [selected, setSelected]' not in at:
+              at = at.replace("  const [reason, setReason] = useState('');\n", "  const [reason, setReason] = useState('');\n  const [selected, setSelected] = useState<Set<string>>(new Set());\n")
+          if 'city?: string' not in at:
+              at = at.replace('    slug?: string;\n    title?: string | null;', '    slug?: string;\n    title?: string | null;\n    city?: string | null;')
+          if '<th className="p-3">شهر</th>' not in at:
+              at = at.replace(
+                  '<th className="p-3">کد</th>\n                <th className="p-3">کاربر</th>\n                <th className="p-3">زیباگر</th>\n                <th className="p-3">زمان</th>',
+                  '<th className="p-3"><input type="checkbox" aria-label="همه" onChange={() => setSelected((prev) => prev.size === items.length && items.length ? new Set() : new Set(items.map((b) => b.id)))} checked={selected.size === items.length && items.length > 0} /></th>\n                <th className="p-3">کد</th>\n                <th className="p-3">کاربر</th>\n                <th className="p-3">زیباگر</th>\n                <th className="p-3">شهر</th>\n                <th className="p-3">زمان</th>',
+              )
+              at = at.replace(
+                  '<tr key={b.id} className="cursor-pointer border-t hover:bg-gray-light/30" onClick={() => openDetail(b.id)}>\n                  <td className="p-3 font-mono text-xs" dir="ltr">#{b.id.slice(0, 8)}</td>\n                  <td className="p-3">{b.customer?.profile?.displayName || b.customer?.phone || \'—\'}</td>\n                  <td className="p-3">{b.professional?.user?.profile?.displayName || b.professional?.title || \'—\'}</td>\n                  <td className="p-3">{formatDate(b.startAt, { style: \'short\', includeTime: true })}</td>',
+                  '<tr key={b.id} className="cursor-pointer border-t hover:bg-gray-light/30" onClick={() => openDetail(b.id)}>\n                  <td className="p-3" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selected.has(b.id)} onChange={() => setSelected((prev) => { const n = new Set(prev); if (n.has(b.id)) n.delete(b.id); else n.add(b.id); return n; })} /></td>\n                  <td className="p-3 font-mono text-xs" dir="ltr">#{b.id.slice(0, 8)}</td>\n                  <td className="p-3">{b.customer?.profile?.displayName || b.customer?.phone || \'—\'}</td>\n                  <td className="p-3">{b.professional?.user?.profile?.displayName || b.professional?.title || \'—\'}</td>\n                  <td className="p-3">{b.professional?.city || \'—\'}</td>\n                  <td className="p-3">{formatDate(b.startAt, { style: \'short\', includeTime: true })}</td>',
+              )
+          ab.write_text(at)
+          print('admin bookings')
+
+          # report msg
+          pb = Path('frontend/src/app/panel/bookings/page.tsx')
+          pt = pb.read_text()
+          pt2 = pt.replace('گزارش برای پشتیبانی ارسال شد.', 'گزارش شما ارسال شد و به‌زودی بررسی خواهد شد.')
+          pb.write_text(pt2)
+          print('panel report msg')
+          PY
+      - name: Commit all
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "fix(#83): restore pros page; cancel 2h; gray slots; confirm offline; admin bookings" || exit 0
+          git push
