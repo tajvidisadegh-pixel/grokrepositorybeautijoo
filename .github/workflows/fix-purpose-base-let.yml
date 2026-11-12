@@ -1,0 +1,57 @@
+name: fix-purpose-base-let
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/fix_purpose_base_let.py'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_purpose_base_let.py
+      - name: Commit main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          git commit -m "fix(auth): purposeBase must be let (TS build)" || exit 0
+          git push
+      - name: Sync auth.service to export
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          python3 << 'PY'
+          import base64, json, os, urllib.request
+          token = os.environ['GH_TOKEN']
+          repo = os.environ['GITHUB_REPOSITORY']
+          branch = 'beautijoo-backend-export'
+          local = 'backend/src/auth/auth.service.ts'
+          remote = 'src/auth/auth.service.ts'
+          with open(local, 'rb') as f:
+              raw = f.read()
+          b64 = base64.b64encode(raw).decode()
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'User-Agent': 'sync',
+              'Content-Type': 'application/json',
+          }
+          def api(method, url, data=None):
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read().decode())
+          get_url = f'https://api.github.com/repos/{repo}/contents/{remote}?ref={branch}'
+          sha = api('GET', get_url).get('sha')
+          payload = {
+              'message': 'fix(auth): purposeBase let for TS build (sync from main)',
+              'content': b64,
+              'branch': branch,
+              'sha': sha,
+          }
+          api('PUT', f'https://api.github.com/repos/{repo}/contents/{remote}', json.dumps(payload).encode())
+          print('export synced', len(raw))
+          PY
