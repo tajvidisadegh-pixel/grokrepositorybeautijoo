@@ -1,9 +1,11 @@
 /**
  * Boot-time DB alignment — must keep production schema = Prisma schema.
+ * #82.21 — drift heal:
  * 1) ensure-runtime.sql (idempotent ALTERs)
- * 2) prisma db push (authoritative)
- * 3) migrate history cleanup
- * 4) critical column verify (second pass)
+ * 2) critical column heal SQL
+ * 3) prisma db push (authoritative schema sync)
+ * 4) migrate history resolve for known partial/failed migrations
+ * 5) prisma migrate deploy
  * Never exit non-zero for heal failures after best-effort (API still starts).
  */
 const { existsSync, writeFileSync, unlinkSync } = require('fs');
@@ -18,6 +20,20 @@ const RESOLVE_APPLIED = [
   '20260911140000_full_schema_align',
   '20260911150000_media_assets_url',
   '20260913100000_working_hours_timestamps',
+  // Newer migrations that may have been applied via db push without history
+  '20260918170000_payout_and_review_reply',
+  '20260923180000_one_location_per_professional',
+  '20260925180000_support_tickets',
+  '20260925190000_catalog_add_ons',
+  '20260927120000_media_kind_salon_and_portfolio_fields',
+  '20260927140000_professional_social_links',
+  '20261001140000_booking_no_show',
+  '20261103230000_service_pricing_modes',
+  '20261104103000_service_attribute_templates',
+  '20261104110000_service_variants',
+  '20261104120000_price_quote_requests',
+  '20261104130000_quote_notification_types',
+  '20261104160000_booking_no_show_fields',
 ];
 
 /** Columns that caused production P2022 — always re-assert on boot */
@@ -82,6 +98,7 @@ function executeSql(sql, label) {
 }
 
 console.log('[prisma-migrate] schema:', schema);
+console.log('[prisma-migrate] #82.21 drift heal starting');
 
 for (const name of RESOLVE_ROLLED_BACK) {
   run(['migrate', 'resolve', '--rolled-back', name, '--schema', schema]);
@@ -131,7 +148,9 @@ if (deploy.status === 0) {
   const m = deploy.out.match(/The `([^`]+)` migration started at .+ failed/);
   if (m) run(['migrate', 'resolve', '--applied', m[1], '--schema', schema]);
   run(['migrate', 'deploy', '--schema', schema]);
+} else if (/P3005|database schema is not empty/i.test(deploy.out)) {
+  console.warn('[prisma-migrate] P3005 baseline-like state — resolved via db push + resolve list');
 }
 
-console.log('[prisma-migrate] boot alignment finished — starting API');
+console.log('[prisma-migrate] #82.21 boot alignment finished — starting API');
 process.exit(0);
