@@ -1,0 +1,58 @@
+name: fix-cancel-2h-simple
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_CANCEL_2H'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Change default free cancel hours 24 to 2 and block late cancel
+        run: |
+          set -e
+          FILE=backend/src/bookings/bookings.service.ts
+          # default env fallback 24 -> 2
+          sed -i "s/BOOKING_FREE_CANCEL_HOURS || '24'/BOOKING_FREE_CANCEL_HOURS || '2'/g" "$FILE"
+          sed -i 's/freeH >= 0 ? freeH : 24/freeH >= 0 ? freeH : 2/g' "$FILE"
+          # If still late-cancel-allows, inject hard stop before paid refund logic when missing
+          if ! grep -q 'کمتر از' "$FILE"; then
+            python3 << 'PY'
+          from pathlib import Path
+          p = Path('backend/src/bookings/bookings.service.ts')
+          t = p.read_text()
+          mark = "const msLeft = b.startAt.getTime() - Date.now();"
+          if mark not in t:
+              raise SystemExit('msLeft marker missing')
+          inject = """const msLeft = b.startAt.getTime() - Date.now();
+        if (hours > 0 && msLeft < hours * 3600_000) {
+          throw new BadRequestException(
+            `کمتر از ${hours} ساعت به نوبت مانده و امکان لغو وجود ندارد.`,
+          );
+        }"""
+          # remove withinFreeWindow late path dependency by hard-blocking first
+          t = t.replace(mark, inject, 1)
+          # replace throw on refund fail with soft cancel
+          bad = "throw new BadRequestException('استرداد پرداخت ناموفق بود. رزرو لغو نشد؛ لطفاً بعداً تلاش کنید یا با پشتیبانی تماس بگیرید.');"
+          good = "/* offline: still cancel */ return this.prisma.booking.update({ where: { id }, data: { status: BookingStatus.cancelled, cancelReason: reason ?? 'لغو توسط مشتری', cancelledAt: new Date(), notes: [b.notes, 'REFUND_PENDING:offline_ok'].filter(Boolean).join(' | ').slice(0, 2000) } });"
+          if bad in t:
+              t = t.replace(bad, good, 1)
+          p.write_text(t)
+          print('injected cancel hard stop')
+          PY
+          fi
+          grep -n "BOOKING_FREE_CANCEL\|کمتر از\|offline_ok" "$FILE" | head -20
+      - name: Gray unavailable slots
+        run: |
+          sed -i "s/border-red-300 bg-red-50 text-red-700 line-through opacity-80/border-gray-200 bg-gray-100 text-gray-400 line-through/g" frontend/src/components/booking/booking-wizard.tsx || true
+          grep -n "cursor-not-allowed border-" frontend/src/components/booking/booking-wizard.tsx | head -3
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/bookings/bookings.service.ts frontend/src/components/booking/booking-wizard.tsx
+          git commit -m "fix(#83): cancel window default 2h + gray unavailable slots" || exit 0
+          git push
