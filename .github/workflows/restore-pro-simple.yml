@@ -20,27 +20,39 @@ jobs:
           echo "bytes=$BYTES"
           test "$BYTES" -gt 5000
           grep -q "AdminProfessionalsPage" frontend/src/app/admin/professionals/page.tsx
-      - name: Add per-row checkbox after thead checkbox column
+      - name: Insert checkbox column (best effort)
+        continue-on-error: true
         run: |
-          python3 -c "
+          python3 << 'PY'
           from pathlib import Path
           p = Path('frontend/src/app/admin/professionals/page.tsx')
           t = p.read_text()
-          needle = '''                  <td className=\"px-3 py-2\">\n                    <Link href={`/admin/professionals/${p.id}`} className=\"font-medium text-coral hover:underline\">'''
-          insert = '''                  <td className=\"px-3 py-2\">\n                    <input type=\"checkbox\" aria-label=\"select\" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />\n                  </td>\n                  <td className=\"px-3 py-2\">\n                    <Link href={`/admin/professionals/${p.id}`} className=\"font-medium text-coral hover:underline\">'''
-          if 'selected.has(p.id)' not in t:
-              if needle not in t:
-                  raise SystemExit('needle missing')
-              t = t.replace(needle, insert, 1)
-              p.write_text(t)
-              print('checkbox inserted')
-          else:
-              print('checkbox already present')
-          "
+          if 'selected.has(p.id)' in t:
+              print('already has checkbox')
+              raise SystemExit(0)
+          # find first tbody row Link cell
+          key = 'items.map((p) => ('
+          i = t.find(key)
+          if i < 0:
+              print('map missing')
+              raise SystemExit(0)
+          j = t.find('<td className="px-3 py-2">', i)
+          if j < 0:
+              print('td missing')
+              raise SystemExit(0)
+          checkbox_td = '''<td className="px-3 py-2">
+                    <input type="checkbox" aria-label="select" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                  </td>
+                  '''
+          t = t[:j] + checkbox_td + t[j:]
+          p.write_text(t)
+          print('checkbox inserted at', j)
+          PY
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add frontend/src/app/admin/professionals/page.tsx
+          git status
           git commit -m "fix(#83): restore admin professionals page + row checkbox" || exit 0
           git push
