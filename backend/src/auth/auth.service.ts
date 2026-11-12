@@ -715,18 +715,27 @@ export class AuthService {
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.passwordHash) {
-      throw new BadRequestException('امکان تغییر رمز برای این حساب وجود ندارد');
+    if (!user) {
+      throw new BadRequestException('حساب یافت نشد');
     }
-    const ok = await argon2.verify(user.passwordHash, dto.currentPassword);
-    if (!ok) {
-      throw new UnauthorizedException('رمز فعلی اشتباه است');
+    if (user.status !== UserStatus.active) {
+      throw new BadRequestException('حساب کاربری غیرفعال است');
     }
-    if (dto.currentPassword === dto.newPassword) {
-      throw new BadRequestException('رمز جدید باید با رمز فعلی متفاوت باشد');
-    }
-    if (dto.newPassword.length < 8) {
+    if (!dto.newPassword || dto.newPassword.length < 8) {
       throw new BadRequestException('رمز جدید باید حداقل ۸ کاراکتر باشد');
+    }
+    // OTP-only: allow setting the first password while authenticated (JWT).
+    if (user.passwordHash) {
+      if (!dto.currentPassword) {
+        throw new BadRequestException('رمز فعلی الزامی است');
+      }
+      const ok = await argon2.verify(user.passwordHash, dto.currentPassword);
+      if (!ok) {
+        throw new UnauthorizedException('رمز فعلی اشتباه است');
+      }
+      if (dto.currentPassword === dto.newPassword) {
+        throw new BadRequestException('رمز جدید باید با رمز فعلی متفاوت باشد');
+      }
     }
     const passwordHash = await argon2.hash(dto.newPassword);
     await this.prisma.$transaction(async (tx) => {

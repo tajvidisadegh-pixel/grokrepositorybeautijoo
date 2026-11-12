@@ -6,6 +6,27 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { userAuthCache } from './user-auth-cache';
 
+
+function normalizePhoneLocal(raw?: string | null): string {
+  let s = String(raw || '').trim().replace(/[\s-]/g, '');
+  s = s.replace(/^\+/, '');
+  if (s.startsWith('0098')) s = s.slice(4);
+  else if (s.startsWith('98') && s.length >= 12) s = s.slice(2);
+  if (s.startsWith('9') && s.length === 10) s = '0' + s;
+  return s;
+}
+function phoneVariants(phone: string): string[] {
+  const n = normalizePhoneLocal(phone);
+  const set = new Set<string>();
+  if (phone) set.add(String(phone).trim());
+  if (n) set.add(n);
+  if (n.startsWith('0') && n.length === 11) {
+    set.add('98' + n.slice(1));
+    set.add('+98' + n.slice(1));
+  }
+  return [...set].filter(Boolean);
+}
+
 type OtpSender = (dto: {
   phone: string;
   purpose?: string;
@@ -28,7 +49,7 @@ export async function runForgotPassword(
   };
 
   const user = await prisma.user.findFirst({
-    where: { phone: dto.phone, accountType },
+    where: { phone: { in: phoneVariants(dto.phone) }, accountType },
     select: { id: true, status: true },
   });
   if (!user || user.status !== UserStatus.active) {
@@ -98,7 +119,7 @@ export async function runResetPassword(
   }
 
   const user = await prisma.user.findFirst({
-    where: { phone: dto.phone, accountType },
+    where: { phone: { in: phoneVariants(dto.phone) }, accountType },
   });
   if (!user || user.status !== UserStatus.active) {
     throw new UnauthorizedException('کد نامعتبر یا منقضی شده است');
