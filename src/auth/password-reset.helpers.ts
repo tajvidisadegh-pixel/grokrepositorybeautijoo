@@ -37,7 +37,7 @@ export async function runForgotPassword(
 
   await requestOtp({
     phone: dto.phone,
-    purpose: 'reset_password',
+    purpose: 'password_reset',
     accountType: dto.accountType,
   });
   return generic;
@@ -54,7 +54,7 @@ export async function runResetPassword(
   }
 
   const accountType = resolveAccountType(dto.accountType);
-  const purpose = `reset_password:${accountType}`;
+  const purpose = `password_reset:${accountType}`;
   const otp = await prisma.otpCode.findFirst({
     where: {
       phone: dto.phone,
