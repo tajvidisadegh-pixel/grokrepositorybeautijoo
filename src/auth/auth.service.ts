@@ -288,12 +288,17 @@ export class AuthService {
       'login',
       'register',
       'password_reset',
+      'reset_password', // alias — normalized below
       'change_phone',
       'delete_account',
     ]);
     const purposeBase = (dto.purpose || 'login').toString().trim();
     if (!allowedPurposes.has(purposeBase)) {
       throw new BadRequestException('هدف درخواست کد نامعتبر است');
+    }
+    // Unify legacy reset_password -> password_reset (forgot-password OTP)
+    if (purposeBase === 'reset_password') {
+      purposeBase = 'password_reset';
     }
     // #82.med15 — per-IP soft limit (default 20 / 10 min)
     if (clientIp) {
