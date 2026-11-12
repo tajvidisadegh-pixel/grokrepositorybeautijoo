@@ -11,45 +11,18 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: sed patches
+      - name: sed only
         run: |
           set -e
           sed -i "s/BOOKING_FREE_CANCEL_HOURS || '24'/BOOKING_FREE_CANCEL_HOURS || '2'/g" backend/src/bookings/bookings.service.ts
           sed -i 's/freeH >= 0 ? freeH : 24/freeH >= 0 ? freeH : 2/g' backend/src/bookings/bookings.service.ts
           sed -i 's/border-red-300 bg-red-50 text-red-700 line-through opacity-80/border-gray-200 bg-gray-100 text-gray-400 line-through/g' frontend/src/components/booking/booking-wizard.tsx
-          # soft-fail refund: replace Persian error throw with continue cancel comment marker then python
-          python3 << 'PY'
-          from pathlib import Path
-          p = Path('backend/src/bookings/bookings.service.ts')
-          t = p.read_text()
-          # hard-stop under 2h if not present
-          if 'امکان لغو وجود ندارد' not in t:
-              old = 'const msLeft = b.startAt.getTime() - Date.now();\n        const withinFreeWindow = msLeft >= hours * 3600_000;'
-              new = '''const msLeft = b.startAt.getTime() - Date.now();
-        if (hours > 0 && msLeft < hours * 3600_000) {
-          throw new BadRequestException('کمتر از ' + hours + ' ساعت به نوبت مانده و امکان لغو وجود ندارد.');
-        }
-        const withinFreeWindow = msLeft >= hours * 3600_000;'''
-              if old in t:
-                  t = t.replace(old, new, 1)
-                  print('hard stop added')
-              else:
-                  print('msLeft pattern missing')
-          bad = "throw new BadRequestException('استرداد پرداخت ناموفق بود. رزرو لغو نشد؛ لطفاً بعداً تلاش کنید یا با پشتیبانی تماس بگیرید.');"
-          if bad in t:
-              t = t.replace(
-                  bad,
-                  "return this.prisma.booking.update({ where: { id }, data: { status: BookingStatus.cancelled, cancelReason: reason ?? null, cancelledAt: new Date() } });",
-                  1,
-              )
-              print('refund fail no longer blocks cancel')
-          p.write_text(t)
-          PY
-          grep -n "BOOKING_FREE_CANCEL\|امکان لغو\|cursor-not-allowed border-" backend/src/bookings/bookings.service.ts frontend/src/components/booking/booking-wizard.tsx | head -15
+          grep -n "BOOKING_FREE_CANCEL" backend/src/bookings/bookings.service.ts | head -5
+          grep -n "cursor-not-allowed border-" frontend/src/components/booking/booking-wizard.tsx | head -3
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/src/bookings/bookings.service.ts frontend/src/components/booking/booking-wizard.tsx
-          git commit -m "fix(#83): cancel default 2h + hard stop; gray unavailable slots" || exit 0
+          git commit -m "fix(#83): cancel default 2h; gray unavailable slots" || exit 0
           git push
