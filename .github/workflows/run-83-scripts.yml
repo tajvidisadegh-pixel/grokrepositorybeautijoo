@@ -2,10 +2,13 @@ name: run-83-scripts
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
-      - '.github/TRIGGER_RUN_83'
       - 'scripts/patch_backend83.py'
       - 'scripts/patch_frontend83.py'
+      - '.github/TRIGGER_RUN_83'
+      - '.github/workflows/run-83-scripts.yml'
 jobs:
   patch:
     runs-on: ubuntu-latest
