@@ -132,6 +132,8 @@ export class AuthController {
     return this.auth.setSmsOptOut(userId, false);
   }
 
+  /** Public: revoke via refresh cookie/body (same transport as refresh). */
+  @Public()
   @Post('logout')
   @HttpCode(200)
   @UseGuards(CsrfOriginGuard)
@@ -241,7 +243,6 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
-  
   @Post('change-phone/request')
   @HttpCode(200)
   // #82.13 — change-phone OTP stricter
