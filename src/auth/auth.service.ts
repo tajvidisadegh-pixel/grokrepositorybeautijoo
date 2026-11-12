@@ -292,7 +292,7 @@ export class AuthService {
       'change_phone',
       'delete_account',
     ]);
-    const purposeBase = (dto.purpose || 'login').toString().trim();
+    let purposeBase = (dto.purpose || 'login').toString().trim();
     if (!allowedPurposes.has(purposeBase)) {
       throw new BadRequestException('هدف درخواست کد نامعتبر است');
     }
