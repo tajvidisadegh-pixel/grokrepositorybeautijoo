@@ -1,0 +1,144 @@
+name: patch-auth-login-phone
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_AUTH_LOGIN_PHONE'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch auth.service login
+        run: |
+          set -e
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('backend/src/auth/auth.service.ts')
+          t = p.read_text()
+          if 'phoneLookupVariants' not in t:
+              old = """  private resolveAccountType(raw?: string | null): AccountType {
+    if (raw === 'professional') return AccountType.professional;
+    return AccountType.customer;
+  }
+
+  private isPrivileged(roles: string[]): boolean {
+    return roles.some((r) => PRIVILEGED_ROLES.has(r));
+  }"""
+              new = """  private resolveAccountType(raw?: string | null): AccountType {
+    if (raw === 'professional') return AccountType.professional;
+    return AccountType.customer;
+  }
+
+  private normalizePhone(raw?: string | null): string {
+    let s = String(raw || '').trim().replace(/[\\s-]/g, '');
+    s = s.replace(/^\\+/, '');
+    if (s.startsWith('0098')) s = s.slice(4);
+    else if (s.startsWith('98') && s.length >= 12) s = s.slice(2);
+    if (s.startsWith('9') && s.length === 10) s = '0' + s;
+    return s;
+  }
+
+  private phoneLookupVariants(phone: string): string[] {
+    const n = this.normalizePhone(phone);
+    const set = new Set<string>();
+    if (phone) set.add(String(phone).trim());
+    if (n) set.add(n);
+    if (n.startsWith('0') && n.length === 11) {
+      set.add('98' + n.slice(1));
+      set.add('+98' + n.slice(1));
+    }
+    return [...set].filter(Boolean);
+  }
+
+  private isPrivileged(roles: string[]): boolean {
+    return roles.some((r) => PRIVILEGED_ROLES.has(r));
+  }"""
+              if old not in t:
+                  raise SystemExit('resolve block missing')
+              t = t.replace(old, new, 1)
+              print('normalize added')
+          else:
+              print('normalize exists')
+
+          if 'فقط با کد پیامکی قابل ورود است' not in t:
+              start = t.find('  async login(dto: LoginDto) {')
+              if start < 0:
+                  raise SystemExit('login missing')
+              m = re.search(
+                  r'const ok = await argon2\.verify\(user\.passwordHash, dto\.password\);\n    if \(!ok\) \{\n      throw new UnauthorizedException\([^)]*\);\n    \}',
+                  t[start:],
+              )
+              if not m:
+                  raise SystemExit('verify block missing')
+              end_at = start + m.end()
+              new_login = '''  async login(dto: LoginDto) {
+    const accountType = this.resolveAccountType(dto.accountType);
+    const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';
+    const phones = this.phoneLookupVariants(dto.phone);
+    const candidates = await this.prisma.user.findMany({
+      where: { phone: { in: phones } },
+      include: { profile: true, userRoles: { include: { role: true } } },
+    });
+    let user =
+      candidates.find((u) => u.accountType === accountType && u.passwordHash) ||
+      candidates.find((u) => u.accountType === accountType) ||
+      candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted) && u.passwordHash) ||
+      candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted)) ||
+      null;
+
+    if (!user) {
+      if (candidates.length > 0) {
+        const otherType = candidates[0].accountType;
+        const other = otherType === AccountType.professional ? 'زیباگر' : 'کاربری';
+        const want = roleWanted === 'professional' ? 'زیباگر' : 'کاربری';
+        throw new UnauthorizedException(
+          'برای این شماره حساب ' +
+            want +
+            ' پیدا نشد. اگر حساب ' +
+            other +
+            ' دارید نوع ورود را عوض کنید یا برای نقش جدید ثبت\u200cنام کنید.',
+        );
+      }
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }
+
+    if (!user.passwordHash) {
+      const want = roleWanted === 'professional' ? 'زیباگر' : 'کاربری';
+      throw new UnauthorizedException(
+        'این حساب ' +
+          want +
+          ' فقط با کد پیامکی قابل ورود است. برای ورود با رمز از «فراموشی رمز» رمز تعیین کنید یا با کد پیامکی وارد شوید.',
+      );
+    }
+
+    if (user.status !== UserStatus.active) {
+      throw new UnauthorizedException('حساب کاربری غیرفعال است');
+    }
+    const ok = await argon2.verify(user.passwordHash, dto.password);
+    if (!ok) {
+      throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
+    }'''
+              t = t[:start] + new_login + t[end_at:]
+              print('login replaced')
+          else:
+              print('login already')
+
+          p.write_text(t)
+          print('ok', p.stat().st_size)
+          PY
+      - name: Also patch export tree file if present
+        run: |
+          if [ -f src/auth/auth.service.ts ]; then
+            cp backend/src/auth/auth.service.ts src/auth/auth.service.ts || true
+          fi
+      - name: Commit main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          git commit -m "fix(auth): phone variants + OTP-only password login message" || exit 0
+          git push
