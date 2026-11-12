@@ -1,0 +1,23 @@
+name: run-auth-login-patch
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/patch_auth_login_phone.py'
+      - '.github/TRIGGER_RUN_AUTH_LOGIN_PATCH'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run patch script
+        run: python3 scripts/patch_auth_login_phone.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/auth/auth.service.ts
+          git commit -m "fix(auth): phone variants + OTP-only password login" || exit 0
+          git push
