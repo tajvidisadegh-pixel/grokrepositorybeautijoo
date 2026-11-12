@@ -1,0 +1,59 @@
+name: patch-82-roles-touch
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_82_ROLES_TOUCH'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Touch updatedAt on setUserRoles
+        run: |
+          set -e
+          f=backend/src/admin/admin.service.ts
+          python3 -c "
+from pathlib import Path
+p=Path('backend/src/admin/admin.service.ts')
+t=p.read_text()
+old='''    await this.prisma.\$transaction(async (tx) => {
+      await tx.userRole.deleteMany({ where: { userId: id } });
+      await tx.userRole.createMany({
+        data: roleRows.map((r) => ({
+          userId: id,
+          roleId: r.id,
+          assignedBy: actorId || null,
+        })),
+      });
+    });'''
+new='''    await this.prisma.\$transaction(async (tx) => {
+      await tx.userRole.deleteMany({ where: { userId: id } });
+      await tx.userRole.createMany({
+        data: roleRows.map((r) => ({
+          userId: id,
+          roleId: r.id,
+          assignedBy: actorId || null,
+        })),
+      });
+      // #82.15 — bump updatedAt so other instances drop JWT auth cache
+      await tx.user.update({ where: { id }, data: { updatedAt: new Date() } });
+    });'''
+if old in t:
+    p.write_text(t.replace(old,new,1))
+    print('patched roles touch')
+elif 'bump updatedAt so other instances' in t:
+    print('already')
+else:
+    print('pattern missing')
+    raise SystemExit(1)
+"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(#82.15): bump users.updatedAt on role change for multi-instance cache" || exit 0
+          git push
