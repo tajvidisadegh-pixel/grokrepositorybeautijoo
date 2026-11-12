@@ -1,0 +1,46 @@
+name: restore-pro-simple
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_PRO_SIMPLE'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore file from known-good commit via raw URL
+        run: |
+          set -e
+          curl -fsSL "https://raw.githubusercontent.com/tajvidisadegh-pixel/grokrepositorybeautijoo/dee62d5b11f68a877b424861b50e56eb381d3be4/frontend/src/app/admin/professionals/page.tsx" \
+            -o frontend/src/app/admin/professionals/page.tsx
+          BYTES=$(wc -c < frontend/src/app/admin/professionals/page.tsx)
+          echo "bytes=$BYTES"
+          test "$BYTES" -gt 5000
+          grep -q "AdminProfessionalsPage" frontend/src/app/admin/professionals/page.tsx
+      - name: Add per-row checkbox after thead checkbox column
+        run: |
+          python3 -c "
+          from pathlib import Path
+          p = Path('frontend/src/app/admin/professionals/page.tsx')
+          t = p.read_text()
+          needle = '''                  <td className=\"px-3 py-2\">\n                    <Link href={`/admin/professionals/${p.id}`} className=\"font-medium text-coral hover:underline\">'''
+          insert = '''                  <td className=\"px-3 py-2\">\n                    <input type=\"checkbox\" aria-label=\"select\" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />\n                  </td>\n                  <td className=\"px-3 py-2\">\n                    <Link href={`/admin/professionals/${p.id}`} className=\"font-medium text-coral hover:underline\">'''
+          if 'selected.has(p.id)' not in t:
+              if needle not in t:
+                  raise SystemExit('needle missing')
+              t = t.replace(needle, insert, 1)
+              p.write_text(t)
+              print('checkbox inserted')
+          else:
+              print('checkbox already present')
+          "
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/admin/professionals/page.tsx
+          git commit -m "fix(#83): restore admin professionals page + row checkbox" || exit 0
+          git push
