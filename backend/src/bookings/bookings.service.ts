@@ -569,6 +569,9 @@ return booking;
         const freeH = parseInt(process.env.BOOKING_FREE_CANCEL_HOURS || '2', 10);
         const hours = Number.isFinite(freeH) && freeH >= 0 ? freeH : 2;
         const msLeft = b.startAt.getTime() - Date.now();
+        if (hours > 0 && msLeft < hours * 3600_000) {
+          throw new BadRequestException('کمتر از ' + String(hours) + ' ساعت به نوبت مانده و امکان لغو وجود ندارد.');
+        }
         const withinFreeWindow = msLeft >= hours * 3600_000;
         if (isCustomer && paid && b.payment?.id) {
           if (!withinFreeWindow && hours > 0) {
@@ -625,7 +628,7 @@ return booking;
                 },
               });
             } catch { /* non-blocking */ }
-            throw new BadRequestException('استرداد پرداخت ناموفق بود. رزرو لغو نشد؛ لطفاً بعداً تلاش کنید یا با پشتیبانی تماس بگیرید.');
+            return this.prisma.booking.update({ where: { id }, data: { status: BookingStatus.cancelled, cancelReason: reason ?? null, cancelledAt: new Date() } });
           }
           return this.prisma.booking.findUniqueOrThrow({ where: { id } });
         }
