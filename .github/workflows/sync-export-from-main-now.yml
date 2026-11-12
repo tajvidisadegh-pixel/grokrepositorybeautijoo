@@ -1,0 +1,24 @@
+name: sync-export-from-main-now
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_SYNC_EXPORT_NOW'
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      - name: Subtree split backend -> export branch
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git subtree split --prefix=backend --branch=backend-deploy-sync
+          git push origin backend-deploy-sync:beautijoo-backend-export --force
+          echo "export updated from $(git rev-parse main)"
