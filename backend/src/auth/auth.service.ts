@@ -49,6 +49,27 @@ export class AuthService {
     return AccountType.customer;
   }
 
+  private normalizePhone(raw?: string | null): string {
+    let s = String(raw || '').trim().replace(/[\s-]/g, '');
+    s = s.replace(/^\+/, '');
+    if (s.startsWith('0098')) s = s.slice(4);
+    else if (s.startsWith('98') && s.length >= 12) s = s.slice(2);
+    if (s.startsWith('9') && s.length === 10) s = '0' + s;
+    return s;
+  }
+
+  private phoneLookupVariants(phone: string): string[] {
+    const n = this.normalizePhone(phone);
+    const set = new Set<string>();
+    if (phone) set.add(String(phone).trim());
+    if (n) set.add(n);
+    if (n.startsWith('0') && n.length === 11) {
+      set.add('98' + n.slice(1));
+      set.add('+98' + n.slice(1));
+    }
+    return [...set].filter(Boolean);
+  }
+
   private isPrivileged(roles: string[]): boolean {
     return roles.some((r) => PRIVILEGED_ROLES.has(r));
   }
@@ -201,24 +222,43 @@ export class AuthService {
   async login(dto: LoginDto) {
     const accountType = this.resolveAccountType(dto.accountType);
     const roleWanted = accountType === AccountType.professional ? 'professional' : 'customer';
+    const phones = this.phoneLookupVariants(dto.phone);
     const candidates = await this.prisma.user.findMany({
-      where: { phone: dto.phone },
+      where: { phone: { in: phones } },
       include: { profile: true, userRoles: { include: { role: true } } },
     });
     let user =
+      candidates.find((u) => u.accountType === accountType && u.passwordHash) ||
       candidates.find((u) => u.accountType === accountType) ||
+      candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted) && u.passwordHash) ||
       candidates.find((u) => u.userRoles.some((ur) => ur.role.name === roleWanted)) ||
       null;
-    if (!user || !user.passwordHash) {
+
+    if (!user) {
       if (candidates.length > 0) {
-        const other = candidates[0].accountType === AccountType.professional ? 'زیباگر' : 'نوبت‌گیر';
-        const want = roleWanted === 'professional' ? 'زیباگر' : 'نوبت‌گیر';
+        const otherType = candidates[0].accountType;
+        const other = otherType === AccountType.professional ? 'زیباگر' : 'کاربری';
+        const want = roleWanted === 'professional' ? 'زیباگر' : 'کاربری';
         throw new UnauthorizedException(
-          'برای این شماره حساب ' + want + ' با رمز پیدا نشد. اگر حساب ' + other + ' دارید نوع ورود را عوض کنید یا ثبت‌نام نقش جدید انجام دهید.',
+          'برای این شماره حساب ' +
+            want +
+            ' پیدا نشد. اگر حساب ' +
+            other +
+            ' دارید نوع ورود را عوض کنید.',
         );
       }
       throw new UnauthorizedException('شماره یا رمز عبور نادرست است');
     }
+
+    if (!user.passwordHash) {
+      const want = roleWanted === 'professional' ? 'زیباگر' : 'کاربری';
+      throw new UnauthorizedException(
+        'این حساب ' +
+          want +
+          ' فقط با کد پیامکی قابل ورود است. برای ورود با رمز از فراموشی رمز استفاده کنید.',
+      );
+    }
+
     if (user.status !== UserStatus.active) {
       throw new UnauthorizedException('حساب کاربری غیرفعال است');
     }
