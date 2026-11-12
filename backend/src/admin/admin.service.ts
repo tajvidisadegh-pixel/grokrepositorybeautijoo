@@ -594,6 +594,8 @@ export class AdminService {
           assignedBy: actorId || null,
         })),
       });
+      // #82.15 — bump updatedAt so other instances drop JWT auth cache
+      await tx.user.update({ where: { id }, data: { updatedAt: new Date() } });
     });
 
     const updated = await this.prisma.user.findUnique({
