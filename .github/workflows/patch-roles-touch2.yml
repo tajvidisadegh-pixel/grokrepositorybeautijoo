@@ -1,0 +1,40 @@
+name: patch-roles-touch2
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/TRIGGER_ROLES_TOUCH2'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Insert updatedAt bump after createMany roles
+        run: |
+          set -e
+          f=backend/src/admin/admin.service.ts
+          if grep -q 'bump updatedAt so other instances' "$f"; then
+            echo already
+            exit 0
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/admin/admin.service.ts')
+          t = p.read_text()
+          needle = "await tx.userRole.createMany({\n        data: roleRows.map((r) => ({\n          userId: id,\n          roleId: r.id,\n          assignedBy: actorId || null,\n        })),\n      });\n    });"
+          insert = "await tx.userRole.createMany({\n        data: roleRows.map((r) => ({\n          userId: id,\n          roleId: r.id,\n          assignedBy: actorId || null,\n        })),\n      });\n      // #82.15 — bump updatedAt so other instances drop JWT auth cache\n      await tx.user.update({ where: { id }, data: { updatedAt: new Date() } });\n    });"
+          if needle not in t:
+              print('needle missing')
+              raise SystemExit(1)
+          p.write_text(t.replace(needle, insert, 1))
+          print('ok')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/admin/admin.service.ts
+          git commit -m "fix(#82.15): bump users.updatedAt on role change" || exit 0
+          git push
