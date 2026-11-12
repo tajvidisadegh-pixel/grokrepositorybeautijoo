@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# patch backend for issue 83 remaining items
 p = Path("backend/src/bookings/bookings.service.ts")
 t = p.read_text()
 bad = "throw new BadRequestException('استرداد پرداخت ناموفق بود. رزرو لغو نشد؛ لطفاً بعداً تلاش کنید یا با پشتیبانی تماس بگیرید.');"
