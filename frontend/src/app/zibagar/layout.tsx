@@ -80,7 +80,8 @@ export default function ZibagarLayout({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const status = (pro?.status || '').toLowerCase();
         const complete = !!pro?.completion?.complete;
-        const needsWizard = status === 'draft' && !complete;
+        // #81 — incomplete draft cannot use dashboard
+        const needsWizard = (status === 'draft' || !status) && !complete;
         setMustCompleteWizard(needsWizard);
         if (needsWizard) {
           router.replace('/zibagar/profile/complete');

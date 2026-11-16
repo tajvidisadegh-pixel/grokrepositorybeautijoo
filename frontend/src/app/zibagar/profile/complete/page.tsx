@@ -588,7 +588,7 @@ export default function ProfileCompletePage() {
       <div className="flex items-center justify-between gap-2 pt-2">
         <Button variant="outline" size="sm" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>قبلی</Button>
         <div className="flex gap-2">
-          <Link href="/zibagar"><Button variant="outline" size="sm">خروج</Button></Link>
+          {(isPublished || pro?.status === 'pending_review') ? (<Link href="/zibagar"><Button variant="outline" size="sm">ورود به داشبورد</Button></Link>) : (<span className="text-xs text-gray">برای ورود به داشبورد، مراحل را کامل و برای بررسی ارسال کنید</span>)}
           {step < STEPS.length - 1 && <Button size="sm" loading={saving} onClick={onNext}>بعدی</Button>}
         </div>
       </div>
