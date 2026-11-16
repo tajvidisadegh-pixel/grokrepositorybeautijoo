@@ -61,6 +61,15 @@ Deploy دوباره از **`main`** (کامیت‌هایی که Dockerfile ری�
 
 ---
 
+## جستجوی عمومی و خطای ۵۰۰ (#83.11)
+
+`GET /api/v1/professionals` (جستجوی عمومی) در کنترلر با `try/catch` محافظت می‌شود: اگر سرویس خطا بدهد، به‌جای **500** پاسخ خالیِ صفحه‌بندی‌شده برمی‌گردد تا UI جستجو نشکند.
+
+- لاگ سمت سرور: `[professionals.search]`
+- اگر نتایج خالی دیدید، لاگ بک‌اند و فیلترهای query را بررسی کنید (نه فقط پیام «Internal server error»).
+
+---
+
 ## استقرار
 
 1. [docs/BRANCH_AND_DEPLOY.md](./docs/BRANCH_AND_DEPLOY.md)
