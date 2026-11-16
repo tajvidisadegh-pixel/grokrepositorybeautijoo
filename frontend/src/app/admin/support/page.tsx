@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/utils';
 
 type TicketListItem = {
   id: string;
+  source?: string;
   subject: string;
   status: string;
   createdAt: string;
@@ -171,7 +172,7 @@ export default function AdminSupportPage() {
                 <button type="button" className="w-full text-right" onClick={() => openTicket(t.id)}>
                   <Card className="hover:border-coral/40 transition-colors space-y-1">
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="font-semibold">{t.subject}</p>
+                      <p className="font-semibold">{t.subject}{/(گزارش تخلف|profile_report)/i.test(t.subject || '') || t.source === 'profile_report' || t.source === 'booking_report' ? ' · تخلف' : ''}</p>
                       <span className="text-xs text-gray">{STATUS_LABEL[t.status] || t.status}</span>
                     </div>
                     <p className="text-sm text-gray">{name} · {accountTypeFa(t.user?.accountType)}</p>

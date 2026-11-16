@@ -12,7 +12,8 @@ import { ServicePortfolioGallery } from '@/components/professionals/service-port
 import { SalonMediaGallery } from '@/components/professionals/salon-media-gallery';
 import type { ProfessionalServiceItem, WorkingHour } from '@/types/public';
 import LocationMapView from '@/components/location/location-map-view'
-import { StickyBookBar } from '@/components/professionals/sticky-book-bar';
+import { StickyBookBar } from '@/components/professionals/sticky-book-bar'
+import { ReportProfileButton } from '@/components/professionals/report-profile-button';
 import { OpenStatusBadge } from '@/components/professionals/open-status-badge';
 
 type Props = {
@@ -458,15 +459,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
 
       <p className="mt-3 text-center text-xs text-gray-muted">شماره تماس زیباگر پس از تأیید رزرو در پنل شما نمایش داده می‌شود.</p>
       <p className="mt-2 text-center text-xs text-gray-muted">رزرو آنلاین مشمول حداقل زمان از قبل و ظرفیت روز زیباگر است؛ اسلات‌های پر قابل انتخاب نیستند.</p>
-      <p className="mt-4 text-center text-xs text-gray-muted">
-        تخلف مشاهده کردید؟{' '}
-        <a
-          href={`mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@beautijoo.ir'}?subject=${encodeURIComponent('گزارش تخلف پروفایل: ' + pro.slug)}`}
-          className="text-coral underline"
-        >
-          گزارش تخلف
-        </a>
-      </p>
+      <ReportProfileButton slug={pro.slug} title={pro.title} />
       <StickyBookBar slug={pro.slug} />
     </div>
   );
