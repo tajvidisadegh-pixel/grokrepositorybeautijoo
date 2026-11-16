@@ -1,0 +1,49 @@
+name: patch-81-wizard
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/patch_issue81_wizard_dash.py'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch wizard gate (inline safe)
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          comp = Path('frontend/src/app/zibagar/profile/complete/page.tsx')
+          t = comp.read_text()
+          old = '<Link href="/zibagar"><Button variant="outline" size="sm">خروج</Button></Link>'
+          new = (
+              "{(isPublished || pro?.status === 'pending_review') ? ("
+              "<Link href=\"/zibagar\"><Button variant=\"outline\" size=\"sm\">ورود به داشبورد</Button></Link>"
+              ") : ("
+              "<span className=\"text-xs text-gray\">برای ورود به داشبورد، مراحل را کامل و برای بررسی ارسال کنید</span>"
+              ")}"
+          )
+          if old in t:
+              comp.write_text(t.replace(old, new, 1))
+              print('complete ok')
+          else:
+              print('complete skip')
+          lay = Path('frontend/src/app/zibagar/layout.tsx')
+          t = lay.read_text()
+          old = "        const needsWizard = status === 'draft' && !complete;"
+          new = "        // #81 — incomplete draft cannot use dashboard\n        const needsWizard = (status === 'draft' || !status) && !complete;"
+          if old in t:
+              lay.write_text(t.replace(old, new, 1))
+              print('layout ok')
+          else:
+              print('layout skip')
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/app/zibagar/profile/complete/page.tsx frontend/src/app/zibagar/layout.tsx
+          git commit -m "fix(#81): gate dashboard until wizard published; clearer CTA" || exit 0
+          git push
