@@ -172,6 +172,20 @@ export class PaymentsService {
     if (booking.status === BookingStatus.expired || booking.status === BookingStatus.cancelled) {
       throw new BadRequestException('این رزرو دیگر قابل تأیید نیست');
     }
+    // #82.2 — already confirmed offline: payment stays non-paid
+    if (
+      booking.payment?.provider === 'offline' &&
+      (booking.status === BookingStatus.confirmed ||
+        booking.payment?.status === PaymentStatus.pending)
+    ) {
+      return {
+        offline: true,
+        status: 'offline_confirmed' as const,
+        bookingId,
+        redirectUrl: null as string | null,
+        providerRef: booking.payment.providerRef ?? 'offline',
+      };
+    }
     if (booking.payment?.status === PaymentStatus.paid) {
       return {
         offline: true,
@@ -193,31 +207,21 @@ export class PaymentsService {
         },
       });
     }
-    let rate = DEFAULT_PLATFORM_COMMISSION_RATE;
-    try {
-      const rateRow = await this.prisma.platformSetting.findUnique({
-        where: { key: PLATFORM_COMMISSION_RATE_KEY },
-      });
-      if (rateRow?.value != null && Number.isFinite(Number(rateRow.value))) {
-        rate = Number(rateRow.value);
-      }
-    } catch {
-      /* optional */
-    }
-    const { commissionAmount, professionalNetAmount } = calculateCommission(booking.totalPrice, rate);
     const ref = 'offline-' + bookingId.replace(/-/g, '').slice(0, 12);
+    // #82.2 — do NOT mark as paid (no bank settlement). Keep pending + offline metadata.
     await this.prisma.payment.update({
       where: { bookingId },
       data: {
-        status: PaymentStatus.paid,
+        status: PaymentStatus.pending,
         provider: 'offline',
         providerRef: ref,
-        paidAt: new Date(),
-        platformCommissionAmount: commissionAmount,
-        professionalNetAmount: professionalNetAmount,
+        paidAt: null,
         metadata: {
           mode: 'offline',
-          note: 'Confirmed without online gateway. Not a bank settlement.', settlementEligible: false, realMoney: false,
+          offline_not_paid: true,
+          note: 'Booking confirmed; payment is in-person. Not a bank settlement.',
+          settlementEligible: false,
+          realMoney: false,
         },
       },
     });
@@ -229,7 +233,7 @@ export class PaymentsService {
     }
     return {
       offline: true,
-      status: 'paid' as const,
+      status: 'offline_confirmed' as const,
       bookingId,
       redirectUrl: null as string | null,
       providerRef: ref,
@@ -354,6 +358,11 @@ export class PaymentsService {
       include: { booking: true },
     });
     if (!payment) throw new NotFoundException('تراکنش یافت نشد');
+
+    // #82.4 — offline rows are not gateway callbacks
+    if ((payment.provider || '').toLowerCase() === 'offline') {
+      throw new BadRequestException('این تراکنش آفلاین است و از درگاه قابل تأیید نیست');
+    }
 
     if (payment.status === PaymentStatus.paid) {
       return { status: 'paid', bookingId: payment.bookingId, refId: providerRef };
