@@ -48,7 +48,7 @@ export class ProfessionalsController {
   @Public()
   @Throttle({ default: { limit: 40, ttl: 60_000 } })
   @Get()
-  search(
+  async search(
     @Query('q') q?: string,
     @Query('city') city?: string,
     @Query('category') category?: string,
@@ -67,7 +67,9 @@ export class ProfessionalsController {
     @Query('verifiedOnly') verifiedOnly?: string,
     @Query('gender') gender?: string,
   ) {
-    return this.service.search({
+    // #83.11 — never leak 500 on public search; return empty page on failure
+    try {
+    return await this.service.search({
       q,
       city,
       category,
@@ -88,6 +90,10 @@ export class ProfessionalsController {
         verifiedOnly === 'yes',
       gender,
     });
+    } catch (err) {
+      console.error("[professionals.search]", err);
+      return { items: [], meta: { page: 1, limit: 20, total: 0, totalPages: 0 } };
+    }
   }
 
   @ApiBearerAuth()
